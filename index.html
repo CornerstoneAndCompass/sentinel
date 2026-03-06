@@ -694,49 +694,36 @@ async function fetchLADD(){feedWait('f5');try{const d=await fetchR(corsUrl('http
 // Only show government/military/CG vessels — no civilian merchant ships
 const AIS_MIL_TYPES=new Set([35,51,55]);
 const AIS_MIL_NAMES=[/NAVY/i,/COAST\s?GUARD/i,/PATROL/i,/RESCUE/i,/POLICE/i,/BORDER/i,/CUSTOMS/i,/USCG/i,/HMCG/i,/MILITARY/i,/WARSHIP/i,/FRIGATE/i,/CORVETTE/i,/DESTROYER/i,/SUBMARINE/i,/MINESWEEP/i,/SURVEY/i,/^KV\s/i,/^FGS\s/i,/^HMS\s/i,/^HNLMS\s/i,/^KNM\s/i,/^HDMS\s/i,/^HSwMS\s/i,/^ORP\s/i,/^TCG\s/i,/^FS\s/i,/^ITS\s/i,/^ESPS\s/i];
-// Finnish AIS — fetch vessel metadata (has shipType + name) then locations
-const aisMetaCache=new Map();
-let aisMetaLoaded=false;
-async function loadAISMeta(){
-  if(aisMetaLoaded)return;
-  try{
-    const d=await fetchR(corsUrl('https://meri.digitraffic.fi/api/ais/v1/vessels'),1,20000);
-    if(Array.isArray(d)){for(const v of d){if(v.mmsi&&v.shipType)aisMetaCache.set(String(v.mmsi),{st:v.shipType,nm:v.name||'',cs:v.callSign||''});}}
-    aisMetaLoaded=true;
-    console.log('AIS metadata loaded:',aisMetaCache.size,'vessels');
-  }catch(e){console.warn('AIS meta load failed:',e);}
-}
+// Finnish AIS — direct fetch, classify by MMSI prefix (no metadata needed)
 async function fetchAIS(){
   feedWait('f6');
   try{
-    await loadAISMeta();
     const d=await fetchR(corsUrl('https://meri.digitraffic.fi/api/ais/v1/locations'),1,15000);
     const f=d.features||[];let n=0;
     for(const ft of f){
       const p=ft.properties||{};const g=ft.geometry?.coordinates;
       if(!g||!g[0]||!g[1])continue;
       const mmsi=String(p.mmsi);
-      // Look up vessel metadata
-      const meta=aisMetaCache.get(mmsi);
-      const st=meta?.st||0;
-      const name=meta?.nm||'';
-      // Classify using ship type
-      const cls=st>0?classifyShipType(st):null;
-      if(cls===null&&st>0)continue; // pleasure craft
-      if(!cls)continue; // unknown type with no metadata — skip to reduce noise
-      let{cat,t:tLabel}=cls;
-      // Override: name patterns for military/govt
-      if(name&&AIS_MIL_NAMES.some(r=>r.test(name))){
-        if(name.match(/COAST|USCG|HMCG|KV\s/i)){cat='coastguard';tLabel='CG VESSEL';}
-        else if(name.match(/POLICE|BORDER|CUSTOMS/i)){cat='police';tLabel='LAW ENF';}
-        else{cat='military';tLabel='NAVAL';}
+      if(mmsi.length<9)continue;
+      // Classify by MMSI MID prefix (first 3 digits = country = vessel type hints)
+      let cat='cargo',tLabel='VESSEL';
+      // Military/govt MMSI patterns
+      if(mmsi.startsWith('111')||mmsi.startsWith('970')||mmsi.startsWith('00')){cat='military';tLabel='NAVAL';}
+      else if(mmsi.startsWith('3669')){cat='coastguard';tLabel='CG VESSEL';}
+      // navStat hints: 1=anchored, 5=moored, 7=fishing, 11=sailing vessel, 14=AIS-SART
+      else if(p.navStat===7){cat='fishing';tLabel='FISHING';}
+      else if(p.navStat===14){cat='sar';tLabel='SAR';}
+      // Speed-based heuristic: very slow likely fishing/anchored, fast likely cargo/tanker
+      else if(p.sog!=null&&p.sog>0){
+        if(p.sog>15){cat='cargo';tLabel='FAST VESSEL';}
+        else if(p.sog>8){cat='cargo';tLabel='CARGO/TANKER';}
+        else if(p.sog<2&&p.sog>0.3){cat='fishing';tLabel='TRAWLING';}
+        else{cat='cargo';tLabel='VESSEL';}
       }
-      if(mmsi.startsWith('3669')){cat='coastguard';tLabel='CG VESSEL';}
-      if(mmsi.startsWith('111')||mmsi.startsWith('970')){cat='military';tLabel='NAVAL';}
       const id='s_'+mmsi;
       const old=state.assets.get(id);
       const trail=old?.trail?[...old.trail.slice(-20),[g[1],g[0]]]:[[g[1],g[0]]];
-      state.assets.set(id,{id,hex:mmsi,cs:name||'MMSI-'+mmsi,type:'ship',cat,country:mmsiCC(mmsi),lat:g[1],lon:g[0],alt:0,gs:p.sog,track:p.cog,t:tLabel,source:'AIS-FI',trail,_lastSeen:Date.now()});
+      state.assets.set(id,{id,hex:mmsi,cs:'MMSI-'+mmsi,type:'ship',cat,country:mmsiCC(mmsi),lat:g[1],lon:g[0],alt:0,gs:p.sog,track:p.cog,t:tLabel,source:'AIS-FI',trail,_lastSeen:Date.now()});
       n++;
     }
     state.sources.ais=n;feedDot('f6',n>0);
