@@ -581,6 +581,8 @@ function svgIcon(type,color,heading,s){
 function makeIcon(a,s){return L.divIcon({html:svgIcon(a.type,markerColor(a),a.track||0,s||22),className:'vehicle-icon',iconSize:[s,s],iconAnchor:[s/2,s/2]});}
 
 // --- RENDER ---
+// Priority categories ALWAYS render regardless of density
+const PRIORITY_CATS=new Set(['military','coastguard','police','government','sar']);
 function shouldShow(a){
   if(!state.filters[a.type])return false;
   if(a.cat&&!state.categories[a.cat])return false;
@@ -588,23 +590,54 @@ function shouldShow(a){
   if(state.searchTerm){const s=state.searchTerm.toUpperCase();const h=(a.cs+' '+a.hex+' '+a.t+' '+a.country+' '+(CN[a.country]||'')).toUpperCase();if(!h.includes(s))return false;}
   return true;
 }
+// LOD: density grid limits per zoom — like FlightRadar24
+// At low zoom, only N civilian vessels per grid cell; military always shows
+function getLODConfig(zoom){
+  if(zoom>=12)return{gridSize:0.02,maxPerCell:100}; // close-in: show almost everything
+  if(zoom>=10)return{gridSize:0.05,maxPerCell:30};
+  if(zoom>=8) return{gridSize:0.2,maxPerCell:12};
+  if(zoom>=6) return{gridSize:0.5,maxPerCell:6};
+  if(zoom>=4) return{gridSize:2,maxPerCell:3};
+  return{gridSize:5,maxPerCell:1}; // strategic: 1 per 5-degree cell
+}
 function renderMarkers(){
   const zoom=map.getZoom(),bounds=map.getBounds(),sz=markerSize(zoom);
-  let vis=0;
+  const lod=getLODConfig(zoom);
+  const densityGrid=new Map(); // grid cell key -> count of civilian vessels placed
+  let vis=0,culled=0;
   for(const[id,a]of state.assets){
-    const show=shouldShow(a)&&bounds.contains([a.lat,a.lon]);
+    if(!shouldShow(a)||!bounds.contains([a.lat,a.lon])){
+      // Hide off-screen or filtered
+      const m=state.markers.get(id);if(m&&map.hasLayer(m))map.removeLayer(m);
+      const rt=state.routes.get(id);if(rt&&map.hasLayer(rt))map.removeLayer(rt);
+      continue;
+    }
+    // Priority assets (military, CG, police, gov, SAR) + selected + aircraft/helis always render
+    const isPriority=PRIORITY_CATS.has(a.cat)||a.type==='aircraft'||a.type==='heli'||a.type==='satellite'||id===state.selectedId;
+    let showOnMap=true;
+    if(!isPriority){
+      // Density-limit civilian vessels per grid cell
+      const cellKey=Math.floor(a.lat/lod.gridSize)+'_'+Math.floor(a.lon/lod.gridSize);
+      const count=densityGrid.get(cellKey)||0;
+      if(count>=lod.maxPerCell){showOnMap=false;culled++;}
+      else{densityGrid.set(cellKey,count+1);}
+    }
     let m=state.markers.get(id);
-    if(show){
+    if(showOnMap){
       vis++;
       if(!m){m=L.marker([a.lat,a.lon],{icon:makeIcon(a,sz)});m.bindTooltip(a.cs||a.hex||'???',{permanent:false,direction:'top',offset:[0,-sz/2],className:'marker-tooltip'});m.on('click',()=>showDetail(id));m.addTo(map);state.markers.set(id,m);}
       else{m.setLatLng([a.lat,a.lon]);m.setIcon(makeIcon(a,id===state.selectedId?34:sz));if(!map.hasLayer(m))m.addTo(map);}
       if(a.trail&&a.trail.length>1&&zoom>=6){let rt=state.routes.get(id);if(!rt){rt=L.polyline(a.trail,{color:markerColor(a),weight:1,opacity:0.3,dashArray:'4 6'}).addTo(map);state.routes.set(id,rt);}else{rt.setLatLngs(a.trail);if(!map.hasLayer(rt))rt.addTo(map);}}
       else{const rt=state.routes.get(id);if(rt&&map.hasLayer(rt))map.removeLayer(rt);}
-    }else{if(m&&map.hasLayer(m))map.removeLayer(m);const rt=state.routes.get(id);if(rt&&map.hasLayer(rt))map.removeLayer(rt);}
+    }else{
+      if(m&&map.hasLayer(m))map.removeLayer(m);
+      const rt=state.routes.get(id);if(rt&&map.hasLayer(rt))map.removeLayer(rt);
+    }
   }
   document.getElementById('sVis').textContent=vis;
   let label=zoom<4?'STRATEGIC':zoom<7?'OPERATIONAL':zoom<10?'TACTICAL':'CLOSE-IN';
-  document.getElementById('zoomBadge').textContent='ZOOM '+zoom+' | '+label+' | '+vis+' VISIBLE';
+  const lodNote=culled>0?' | '+culled+' LOD':'';
+  document.getElementById('zoomBadge').textContent='ZOOM '+zoom+' | '+label+' | '+vis+' VISIBLE'+lodNote;
 }
 
 // --- ASSET LIST ---
