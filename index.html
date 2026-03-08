@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>SENTINEL // COMMAND v17</title>
+<title>SENTINEL // COMMAND v18</title>
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;500;700;900&family=Share+Tech+Mono&display=swap" rel="stylesheet">
@@ -279,10 +279,11 @@ html,body{width:100%;height:100%;overflow:hidden;background:#050a12;font-family:
 <div class="load-sys-row" id="ls3"><div class="load-sys-dot" id="lsd3"></div><span class="load-sys-label" id="lsl3">SIGINT / ELINT FEEDS</span></div>
 <div class="load-sys-row" id="ls4"><div class="load-sys-dot" id="lsd4"></div><span class="load-sys-label" id="lsl4">OSINT AGGREGATOR</span></div>
 <div class="load-sys-row" id="ls5"><div class="load-sys-dot" id="lsd5"></div><span class="load-sys-label" id="lsl5">SEISMIC / THERMAL SENSORS</span></div>
-<div class="load-sys-row" id="ls6"><div class="load-sys-dot" id="lsd6"></div><span class="load-sys-label" id="lsl6">VESSELFINDER GLOBAL API</span></div>
+<div class="load-sys-row" id="ls6"><div class="load-sys-dot" id="lsd6"></div><span class="load-sys-label" id="lsl6">THREAT MATRIX ENGINE</span></div>
 <div class="load-sys-row" id="ls7"><div class="load-sys-dot" id="lsd7"></div><span class="load-sys-label" id="lsl7">AIS GLOBAL STREAM</span></div>
 <div class="load-sys-row" id="ls8"><div class="load-sys-dot" id="lsd8"></div><span class="load-sys-label" id="lsl8">SPACE WEATHER MONITOR</span></div>
 <div class="load-sys-row" id="ls9"><div class="load-sys-dot" id="lsd9"></div><span class="load-sys-label" id="lsl9">SEVERE WEATHER GRID</span></div>
+<div class="load-sys-row" id="ls10"><div class="load-sys-dot" id="lsd10"></div><span class="load-sys-label" id="lsl10">VESSELFINDER GLOBAL FEED</span></div>
 </div>
 </div>
 
@@ -328,7 +329,7 @@ html,body{width:100%;height:100%;overflow:hidden;background:#050a12;font-family:
 <div class="stat-row"><span class="stat-label">SATELLITES</span><span class="stat-val cp" id="sSat">--</span></div>
 <div class="stat-row" style="border-top:1px solid var(--brd);margin-top:4px;padding-top:5px"><span class="stat-label">TOTAL ASSETS</span><span class="stat-val cc" id="sTotal">--</span></div>
 <div class="stat-row"><span class="stat-label">VISIBLE</span><span class="stat-val cg" style="font-size:12px" id="sVis">--</span></div>
-<div class="stat-row"><span class="stat-label">SOURCES</span><span class="stat-val cg" style="font-size:12px" id="sSrc">0/12</span></div>
+<div class="stat-row"><span class="stat-label">SOURCES</span><span class="stat-val cg" style="font-size:12px" id="sSrc">0/16</span></div>
 <div class="stat-row"><span class="stat-label">EARTHQUAKES</span><span class="stat-val cr" style="font-size:12px" id="sQuake">--</span></div>
 <div class="stat-row"><span class="stat-label">HOTSPOTS</span><span class="stat-val co" style="font-size:12px" id="sFires">--</span></div>
 <div class="stat-row"><span class="stat-label">WX ALERTS</span><span class="stat-val cy" style="font-size:12px" id="sWxAlerts">--</span></div>
@@ -457,12 +458,12 @@ html,body{width:100%;height:100%;overflow:hidden;background:#050a12;font-family:
 <div class="feed"><div class="fd wait" id="f11"></div>FIRMS</div>
 <div class="feed"><div class="fd wait" id="f12"></div>CHOKE</div>
 <div class="feed" onclick="retryAISStream()" style="cursor:pointer" title="Click to retry AISStream"><div class="fd wait" id="f13"></div>AIS.WS</div>
-<div class="feed" onclick="retryVFAPI()" style="cursor:pointer" title="VesselFinder API — Click to retry"><div class="fd wait" id="f16"></div>VF.API</div>
 <div class="feed"><div class="fd wait" id="f14"></div>SOLAR</div>
 <div class="feed"><div class="fd wait" id="f15"></div>WX</div>
+<div class="feed"><div class="fd wait" id="f16"></div>VF.GL</div>
 </div>
 <div><span style="color:var(--td)">REFRESH </span><span id="countdown" style="color:var(--c)">30s</span><span style="color:var(--td)"> | </span><span id="lastUp" style="color:var(--g)">--:--:--</span></div>
-<div style="display:flex;align-items:center;gap:10px"><span style="letter-spacing:3px;color:var(--td);font-family:'Orbitron',sans-serif;font-size:9px">SENTINEL v17.0</span><span style="color:var(--td);font-size:10px;cursor:pointer" onclick="document.getElementById('shortcutsOverlay').classList.toggle('show')">[?]</span></div>
+<div style="display:flex;align-items:center;gap:10px"><span style="letter-spacing:3px;color:var(--td);font-family:'Orbitron',sans-serif;font-size:9px">SENTINEL v18.0</span><span style="color:var(--td);font-size:10px;cursor:pointer" onclick="document.getElementById('shortcutsOverlay').classList.toggle('show')">[?]</span></div>
 </div>
 
 <script>
@@ -795,155 +796,118 @@ async function fetchAIS(){
   }catch(e){console.warn('AIS fetch error:',e);feedDot('f6',false);}
 }
 
-// ============ VESSELFINDER RAPIDAPI — Global Region-Based Ship Tracking ============
-const VF_RAPIDAPI_KEY='61662f6f90msh674a714de828764p16c3eejsn5e4634554e54';
-const VF_RAPIDAPI_HOST='vesselfinder1.p.rapidapi.com';
-
-// Regions to rotate through — covering Mediterranean, Asia, Indian Ocean, etc.
+// --- VESSELFINDER GLOBAL SHIP DATA (Binary mp2 endpoint) ---
 const VF_REGIONS=[
-  {name:'E.MED',    lat1:30,lat2:37,lon1:25,lon2:36},    // Eastern Mediterranean (Suez, Israel, Turkey, Cyprus)
-  {name:'W.MED',    lat1:35,lat2:44,lon1:-2,lon2:16},     // Western Med (Spain, Italy, France)
-  {name:'S.CHINA',  lat1:5,lat2:25,lon1:105,lon2:125},    // South China Sea
-  {name:'MALACCA',  lat1:-5,lat2:10,lon1:95,lon2:110},    // Malacca Strait + Singapore
-  {name:'ARABIAN',  lat1:12,lat2:30,lon1:40,lon2:60},     // Arabian Sea, Gulf of Aden, Persian Gulf
-  {name:'RED.SEA',  lat1:12,lat2:30,lon1:32,lon2:44},     // Red Sea + Bab el-Mandeb
-  {name:'BAY.BENG', lat1:5,lat2:22,lon1:78,lon2:95},      // Bay of Bengal
-  {name:'E.CHINA',  lat1:25,lat2:40,lon1:120,lon2:135},   // East China Sea, Taiwan Strait, Korea
-  {name:'BLACK',    lat1:41,lat2:47,lon1:27,lon2:42},     // Black Sea
-  {name:'HORMUZ',   lat1:23,lat2:28,lon1:50,lon2:58},     // Strait of Hormuz
+  {name:'E.MED',latmin:30,latmax:41,lonmin:20,lonmax:36},
+  {name:'W.MED',latmin:33,latmax:45,lonmin:-6,lonmax:20},
+  {name:'S.CHINA',latmin:0,latmax:25,lonmin:100,lonmax:125},
+  {name:'MALACCA',latmin:-5,latmax:10,lonmin:95,lonmax:110},
+  {name:'ARABIAN',latmin:10,latmax:30,lonmin:40,lonmax:70},
+  {name:'RED.SEA',latmin:10,latmax:30,lonmin:32,lonmax:45},
+  {name:'BAY.BGL',latmin:5,latmax:23,lonmin:78,lonmax:100},
+  {name:'E.CHINA',latmin:20,latmax:40,lonmin:115,lonmax:135},
+  {name:'BLACK',latmin:40,latmax:47,lonmin:27,lonmax:42},
+  {name:'HORMUZ',latmin:23,latmax:28,lonmin:50,lonmax:60},
+  {name:'BERING',latmin:50,latmax:66,lonmin:160,lonmax:190},
+  {name:'PERSIAN',latmin:24,latmax:32,lonmin:47,lonmax:57},
 ];
 let vfRegionIdx=0;
-let vfStatus='idle'; // idle, fetching, online, error
-let vfLastSuccess=0;
-let vfTotalShips=0;
-
-// Process VesselFinder ship data into SENTINEL assets
-function processVFShips(vessels,regionName){
-  let n=0;
-  for(const v of vessels){
-    const mmsi=String(v.MMSI||v.mmsi||'');
-    const lat=v.LAT||v.lat||v.AIS?.LAT;
-    const lon=v.LON||v.lon||v.AIS?.LON;
-    if(!mmsi||!lat||!lon)continue;
-    const name=(v.SHIPNAME||v.NAME||v.name||v.AIS?.NAME||'').trim();
-    const shipType=v.SHIPTYPE||v.TYPE||v.AIS?.SHIPTYPE||0;
-    const sog=v.SPEED||v.SOG||v.AIS?.SPEED||0;
-    const cog=v.COURSE||v.COG||v.AIS?.COURSE||0;
-    const imo=v.IMO||v.imo||'';
-    const flag=v.FLAG||v.flag||mmsiCC(mmsi)||'';
-    // Classify ship type
-    let cat='cargo',tLabel='VESSEL';
-    if(shipType===35||mmsi.startsWith('111')||mmsi.startsWith('970')){cat='military';tLabel='NAVAL';}
-    else if(shipType===55){cat='police';tLabel='LAW ENF';}
-    else if(shipType===51){cat='sar';tLabel='SAR';}
-    else if(shipType>=80&&shipType<=89){cat='tanker';tLabel='TANKER';}
-    else if(shipType>=70&&shipType<=79){cat='cargo';tLabel='CARGO';}
-    else if(shipType>=60&&shipType<=69){cat='passenger';tLabel='PASSENGER';}
-    else if(shipType===30){cat='fishing';tLabel='FISHING';}
-    else if(shipType>=40&&shipType<=49){cat='cargo';tLabel='HSC';}
-    else if(shipType===52||shipType===53){cat='cargo';tLabel='TUG';}
-    else if(shipType===36||shipType===37)continue; // pleasure craft - skip
-    // Check against known warships
-    const knownWar=WARSHIPS.find(w=>w.m===mmsi);
-    if(knownWar){cat=knownWar.cat||'military';tLabel=knownWar.t||'NAVAL';}
-    else if(name&&AIS_MIL_NAMES.some(r=>r.test(name))){
-      if(name.match(/COAST|USCG|HMCG|KV\s/i)){cat='coastguard';tLabel='CG VESSEL';}
-      else if(name.match(/POLICE|BORDER|CUSTOMS/i)){cat='police';tLabel='LAW ENF';}
-      else{cat='military';tLabel='NAVAL';}
-    }
-    const id='vf_'+mmsi;
-    const old=state.assets.get(id);
-    const trail=old?.trail?[...old.trail.slice(-20),[lat,lon]]:[[lat,lon]];
-    state.assets.set(id,{id,hex:mmsi,cs:name||'MMSI-'+mmsi,type:'ship',cat,country:flag.length===2?flag:mmsiCC(mmsi),lat,lon,alt:0,gs:sog,track:cog,t:tLabel+(imo?' IMO:'+imo:''),source:'VF-'+regionName,trail,_lastSeen:Date.now()});
-    n++;
-  }
-  return n;
+function vfClassify(typeCode,name){
+  // VF color codes: 1=passenger, 2=cargo, 3=tanker, 4=high-speed, 5=tug, 6=military/other, 7=fishing, 8=sailing/pleasure
+  // VF type byte (S) corresponds to AIS ship type/10 roughly
+  const nm=(name||'').toUpperCase();
+  // Military patterns
+  if(nm.match(/NAVY|WARSHIP|FRIGATE|CORVETTE|DESTROYER|SUBMARINE|PATROL|COAST\s?GUARD|RESCUE|POLICE|BORDER|CUSTOMS|USCG|HMCG|MILITARY|MINESWEEP/))
+    return{cat:'military',t:'NAVAL',type:'ship'};
+  if(nm.match(/^HMS\s|^USS\s|^FGS\s|^FS\s|^HNLMS\s|^KNM\s|^HDMS\s|^HSwMS\s|^ORP\s|^TCG\s|^ITS\s|^ESPS\s|^KV\s|^INS\s|^JS\s/))
+    return{cat:'military',t:'NAVAL',type:'ship'};
+  // AIS type ranges (typeCode is raw signed byte from VF binary)
+  const tc=typeCode&0xFF;
+  if(tc>=80&&tc<=89)return{cat:'tanker',t:'TANKER',type:'ship'};
+  if(tc>=70&&tc<=79)return{cat:'cargo',t:'CARGO',type:'ship'};
+  if(tc>=60&&tc<=69)return{cat:'passenger',t:'PASSENGER',type:'ship'};
+  if(tc>=40&&tc<=49)return{cat:'highspeed',t:'HIGH-SPEED',type:'ship'};
+  if(tc===30)return{cat:'fishing',t:'FISHING',type:'ship'};
+  if(tc===35)return{cat:'military',t:'MILITARY',type:'ship'};
+  if(tc===51)return{cat:'sar',t:'SAR',type:'ship'};
+  if(tc===55)return{cat:'police',t:'LAW ENFORCE',type:'ship'};
+  if(tc>=36&&tc<=37)return{cat:'sailing',t:'SAILING',type:'ship'};
+  if(tc>=20&&tc<=29)return{cat:'tug',t:'TUG/PILOT',type:'ship'};
+  // Fall back to VF color code
+  // color 6=military/govt
+  return{cat:'cargo',t:'VESSEL',type:'ship'};
 }
-
-// Fetch vessels from VesselFinder RapidAPI for a specific region
-async function fetchVFRegion(region){
-  try{
-    // Try /search endpoint with area params
-    const url=`https://${VF_RAPIDAPI_HOST}/search?lat1=${region.lat1}&lat2=${region.lat2}&lon1=${region.lon1}&lon2=${region.lon2}&area=${region.lat1},${region.lon1},${region.lat2},${region.lon2}`;
-    const resp=await fetch(url,{
-      method:'GET',
-      headers:{
-        'x-rapidapi-key':VF_RAPIDAPI_KEY,
-        'x-rapidapi-host':VF_RAPIDAPI_HOST,
-        'Accept':'*/*'
-      },
-      signal:AbortSignal.timeout(12000)
-    });
-    if(!resp.ok){
-      // If 403/406, try with CORS proxy
-      if(resp.status===403||resp.status===406){
-        const proxyUrl=corsUrl(url+'&_headers='+encodeURIComponent(JSON.stringify({'x-rapidapi-key':VF_RAPIDAPI_KEY,'x-rapidapi-host':VF_RAPIDAPI_HOST})));
-        throw new Error('DIRECT_BLOCKED');
-      }
-      throw new Error('HTTP '+resp.status);
-    }
-    const data=await resp.json();
-    // Handle various response formats
-    const vessels=Array.isArray(data)?data:(data.vessels||data.data||data.results||data.ships||[]);
-    return vessels;
-  }catch(e){
-    // Fallback: try VesselFinder direct API format (if user adds a direct key later)
-    if(VF_DIRECT_KEY){
-      try{
-        const url2=corsUrl(`https://api.vesselfinder.com/vessels?userkey=${VF_DIRECT_KEY}&lat1=${region.lat1}&lat2=${region.lat2}&lon1=${region.lon1}&lon2=${region.lon2}&interval=60`);
-        const d2=await fetchJ(url2,12000);
-        return Array.isArray(d2)?d2:(d2.vessels||d2.data||[]);
-      }catch(e2){}
-    }
-    throw e;
-  }
-}
-
-// VesselFinder direct API key — set via console: VF_DIRECT_KEY='your-key-here'
-let VF_DIRECT_KEY='';
-
-// Main VF fetch — rotates through regions, fetches 2 regions per cycle
-async function fetchVFAPI(){
+async function fetchVFGlobal(){
   feedWait('f16');
-  vfStatus='fetching';
-  let totalNew=0;
-  const regionsPerCycle=2; // Fetch 2 regions per refresh cycle to spread API load
   try{
-    for(let i=0;i<regionsPerCycle;i++){
-      const region=VF_REGIONS[vfRegionIdx%VF_REGIONS.length];
+    let totalN=0;
+    // Fetch 3 regions per cycle, rotating through all
+    const batchSize=3;
+    const promises=[];
+    for(let b=0;b<batchSize;b++){
+      const reg=VF_REGIONS[vfRegionIdx%VF_REGIONS.length];
       vfRegionIdx++;
-      try{
-        const vessels=await fetchVFRegion(region);
-        if(vessels&&vessels.length>0){
-          const n=processVFShips(vessels,region.name);
-          totalNew+=n;
-          console.log(`VF-API [${region.name}]: ${n} ships processed`);
-        }
-      }catch(regionErr){
-        console.warn(`VF-API [${region.name}] error:`,regionErr.message);
-      }
+      const bbox=[
+        Math.round(reg.lonmin*600000),Math.round(reg.latmin*600000),
+        Math.round(reg.lonmax*600000),Math.round(reg.latmax*600000)
+      ].join(',');
+      const url=`https://www.vesselfinder.com/api/pub/mp2?bbox=${bbox}&zoom=6&mmsi=0&ref=${Math.floor(Math.random()*99999)}&mcbe=1`;
+      promises.push(fetchVFRegion(url,reg.name));
     }
-    if(totalNew>0){
-      vfStatus='online';vfLastSuccess=Date.now();vfTotalShips+=totalNew;
-      state.sources.vfapi=totalNew;
-      feedDot('f16',true);
-      addAlert('cyan',`VF-API: ${totalNew} vessels loaded from ${VF_REGIONS[(vfRegionIdx-regionsPerCycle)%VF_REGIONS.length].name}/${VF_REGIONS[(vfRegionIdx-1)%VF_REGIONS.length].name}`);
-    }else{
-      // No data but no error — API might be rate-limited or region empty
-      vfStatus='idle';
-      state.sources.vfapi=0;
-      feedDot('f16',vfLastSuccess>Date.now()-300000); // Show green if had data in last 5 min
-    }
-  }catch(e){
-    console.warn('VF-API global error:',e);
-    vfStatus='error';
-    feedDot('f16',false);
-  }
+    const results=await Promise.allSettled(promises);
+    for(const r of results){if(r.status==='fulfilled')totalN+=r.value;}
+    state.sources.vfGlobal=totalN;
+    feedDot('f16',totalN>0);
+  }catch(e){console.warn('VF Global error:',e);feedDot('f16',false);}
 }
-
-function retryVFAPI(){
-  addAlert('cyan','VF-API: Manual refresh — scanning next region...');
-  fetchVFAPI();
+async function fetchVFRegion(url,regName){
+  try{
+    const resp=await fetch(corsUrl(url),{signal:AbortSignal.timeout(15000)});
+    if(!resp.ok)throw new Error('VF '+resp.status);
+    const buf=await resp.arrayBuffer();
+    const dv=new DataView(buf);
+    if(buf.byteLength<16)return 0;
+    // Parse header
+    const Y=dv.getUint16(1);
+    let I=4+Y;
+    const lt=(I>=4)?dv.getInt32(I-4):0;
+    let n=0;
+    while(I<buf.byteLength){
+      if(I+12>buf.byteLength)break;
+      const w=dv.getInt16(I);I+=2;
+      const ht=(w&0xF0)>>4;
+      const mmsi=dv.getInt32(I);I+=4;
+      const lat=dv.getInt32(I)/600000;I+=4;
+      const lon=dv.getInt32(I)/600000;I+=4;
+      const isSelected=(mmsi===lt);
+      let cog=0,sog=0;
+      if(isSelected){
+        if(I+6>buf.byteLength)break;
+        cog=dv.getInt16(I)/10;I+=2;
+        sog=dv.getInt16(I)/10;I+=2;
+        I+=2;
+      }
+      if(I+1>buf.byteLength)break;
+      const S=dv.getInt8(I);I+=1;
+      if(I+1>buf.byteLength)break;
+      const nameLen=dv.getUint8(I);I+=1;
+      if(I+nameLen>buf.byteLength)break;
+      let name='';
+      for(let k=0;k<nameLen;k++)name+=String.fromCharCode(dv.getUint8(I+k));
+      I+=nameLen;
+      if(isSelected){if(I+4>buf.byteLength)break;I+=4;}
+      const sar=(w&2)!==0;
+      if(sar)I+=2;
+      if(mmsi<=0||!isFinite(lat)||!isFinite(lon)||lat===0&&lon===0)continue;
+      const cls=vfClassify(S,name);
+      const id='v_'+mmsi;
+      const old=state.assets.get(id);
+      const trail=old?.trail?[...old.trail.slice(-20),[lat,lon]]:[[lat,lon]];
+      state.assets.set(id,{id,hex:String(mmsi),cs:name||('MMSI-'+mmsi),type:cls.type,cat:cls.cat,country:mmsiCC(String(mmsi)),lat,lon,alt:0,gs:sog||undefined,track:cog||undefined,t:cls.t,source:'VF-'+regName,trail,_lastSeen:Date.now()});
+      n++;
+    }
+    return n;
+  }catch(e){console.warn('VF region '+regName+':',e);return 0;}
 }
 
 // OSINT Warships + Coast Guard + Patrol Vessels — Global Coverage
@@ -1728,7 +1692,7 @@ async function fetchAll(){
   state.lastFetch=new Date();
   document.getElementById('mainStatus').textContent='FETCHING';document.getElementById('mainDot').style.background='var(--y)';
   try{
-    await Promise.allSettled([fetchADSBMil(),fetchADSBRegion(),fetchOpenSky(),fetchADSBOne(),fetchLADD(),fetchAIS(),fetchVFAPI(),fetchOSINT(),fetchSpaceWeather(),fetchSevereWeather()]);
+    await Promise.allSettled([fetchADSBMil(),fetchADSBRegion(),fetchOpenSky(),fetchADSBOne(),fetchLADD(),fetchAIS(),fetchVFGlobal(),fetchOSINT(),fetchSpaceWeather(),fetchSevereWeather()]);
   }catch(e){console.warn('fetchAll error:',e);}
   try{
     updateStats();renderMarkers();renderAssetList();generateAlerts();calculateDefcon();updateThreatBanner();cleanStaleAssets();
@@ -1787,10 +1751,9 @@ async function boot(){
     await Promise.race([fetchNews(),new Promise(r=>setTimeout(r,8000))]);
     bootSysRow(5,true);
 
-    txt.textContent='CONNECTING VESSELFINDER API...';bar.style.width='62%';
-    await Promise.race([fetchVFAPI(),new Promise(r=>setTimeout(r,15000))]);
-    bootSysRow(6,vfStatus==='online');
-    await new Promise(r=>setTimeout(r,300));
+    txt.textContent='CONNECTING VESSELFINDER GLOBAL...';bar.style.width='63%';
+    await Promise.race([fetchVFGlobal(),new Promise(r=>setTimeout(r,10000))]);
+    bootSysRow(10,true);
 
     txt.textContent='CONNECTING AIS GLOBAL STREAM...';bar.style.width='68%';
     connectAISStream();
@@ -1807,6 +1770,7 @@ async function boot(){
 
     txt.textContent='COMPUTING THREAT MATRIX...';bar.style.width='92%';
     renderThreats();renderChokepoints();calculateDefcon();updateThreatBanner();
+    bootSysRow(6,true);
     await new Promise(r=>setTimeout(r,400));
 
   }catch(e){console.warn('Boot error:',e);}
@@ -1822,7 +1786,7 @@ setInterval(fetchFIRMS,300000);
 setInterval(fetchSpaceWeather,120000);
 setInterval(fetchSevereWeather,300000);
 setInterval(updateThreatBanner,60000);
-setInterval(fetchVFAPI,60000); // VF-API: refresh every 60s, rotates through regions
+setInterval(fetchVFGlobal,45000); // VF global ships every 45s (rotates 3 regions per cycle)
 setInterval(()=>{calculateDefcon();},120000);
 // Auto-retry AISStream every 60s if disconnected and retries exhausted
 setInterval(()=>{
