@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>SENTINEL // COMMAND v14</title>
+<title>SENTINEL // COMMAND v17</title>
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;500;700;900&family=Share+Tech+Mono&display=swap" rel="stylesheet">
@@ -66,7 +66,7 @@ html,body{width:100%;height:100%;overflow:hidden;background:#050a12;font-family:
 @keyframes marquee-scroll{0%{transform:translateX(0)}100%{transform:translateX(-50%)}}
 
 /* LEFT PANEL */
-.left-panel{position:fixed;top:72px;left:10px;width:250px;z-index:5000;max-height:calc(100vh - 114px);overflow-y:auto;display:flex;flex-direction:column;gap:5px}
+.left-panel{position:fixed;top:92px;left:10px;width:250px;z-index:5000;max-height:calc(100vh - 134px);overflow-y:auto;display:flex;flex-direction:column;gap:5px}
 .left-panel::-webkit-scrollbar{width:3px}
 .left-panel::-webkit-scrollbar-thumb{background:var(--cd);border-radius:3px}
 .card{background:var(--pnl);border:1px solid var(--brd);border-radius:4px;padding:10px 12px;backdrop-filter:blur(12px)}
@@ -94,7 +94,7 @@ html,body{width:100%;height:100%;overflow:hidden;background:#050a12;font-family:
 .country-sel option{background:var(--pnls);color:var(--c)}
 
 /* RIGHT PANEL */
-.right-panel{position:fixed;top:72px;right:10px;width:340px;z-index:5000;max-height:calc(100vh - 114px);overflow:hidden;display:flex;flex-direction:column;gap:5px}
+.right-panel{position:fixed;top:92px;right:10px;width:340px;z-index:5000;max-height:calc(100vh - 134px);overflow:hidden;display:flex;flex-direction:column;gap:5px}
 .tab-btns{display:flex;gap:0;margin-bottom:0}
 .tab-btn{flex:1;background:transparent;border:1px solid var(--brd);border-bottom:none;color:var(--tm);font-family:'Orbitron',sans-serif;font-size:9px;letter-spacing:1px;padding:7px 0;cursor:pointer;transition:all 0.2s;text-align:center}
 .tab-btn:first-child{border-radius:4px 0 0 0}
@@ -279,15 +279,18 @@ html,body{width:100%;height:100%;overflow:hidden;background:#050a12;font-family:
 <div class="load-sys-row" id="ls3"><div class="load-sys-dot" id="lsd3"></div><span class="load-sys-label" id="lsl3">SIGINT / ELINT FEEDS</span></div>
 <div class="load-sys-row" id="ls4"><div class="load-sys-dot" id="lsd4"></div><span class="load-sys-label" id="lsl4">OSINT AGGREGATOR</span></div>
 <div class="load-sys-row" id="ls5"><div class="load-sys-dot" id="lsd5"></div><span class="load-sys-label" id="lsl5">SEISMIC / THERMAL SENSORS</span></div>
-<div class="load-sys-row" id="ls6"><div class="load-sys-dot" id="lsd6"></div><span class="load-sys-label" id="lsl6">THREAT MATRIX ENGINE</span></div>
+<div class="load-sys-row" id="ls6"><div class="load-sys-dot" id="lsd6"></div><span class="load-sys-label" id="lsl6">VESSELFINDER GLOBAL API</span></div>
 <div class="load-sys-row" id="ls7"><div class="load-sys-dot" id="lsd7"></div><span class="load-sys-label" id="lsl7">AIS GLOBAL STREAM</span></div>
 <div class="load-sys-row" id="ls8"><div class="load-sys-dot" id="lsd8"></div><span class="load-sys-label" id="lsl8">SPACE WEATHER MONITOR</span></div>
 <div class="load-sys-row" id="ls9"><div class="load-sys-dot" id="lsd9"></div><span class="load-sys-label" id="lsl9">SEVERE WEATHER GRID</span></div>
 </div>
 </div>
 
+<!-- AIS STATUS BANNER -->
+<div id="aisStatusBanner" style="display:none;position:fixed;top:40px;left:0;right:0;height:24px;border-bottom:1px solid rgba(255,51,85,0.2);align-items:center;justify-content:center;z-index:5001;gap:8px"></div>
+
 <!-- THREAT BANNER -->
-<div class="threat-banner" id="threatBanner"><div class="marquee-track" id="marqueeTrack"><span class="marquee-text" id="threatMarquee">LOADING GLOBAL THREAT ASSESSMENT...</span><span class="marquee-text" id="threatMarquee2">LOADING GLOBAL THREAT ASSESSMENT...</span></div></div>
+<div class="threat-banner" id="threatBanner" style="top:64px"><div class="marquee-track" id="marqueeTrack"><span class="marquee-text" id="threatMarquee">LOADING GLOBAL THREAT ASSESSMENT...</span><span class="marquee-text" id="threatMarquee2">LOADING GLOBAL THREAT ASSESSMENT...</span></div></div>
 
 <!-- HEADER -->
 <div class="header">
@@ -453,19 +456,20 @@ html,body{width:100%;height:100%;overflow:hidden;background:#050a12;font-family:
 <div class="feed"><div class="fd wait" id="f10"></div>NEWS</div>
 <div class="feed"><div class="fd wait" id="f11"></div>FIRMS</div>
 <div class="feed"><div class="fd wait" id="f12"></div>CHOKE</div>
-<div class="feed"><div class="fd wait" id="f13"></div>AIS.WS</div>
+<div class="feed" onclick="retryAISStream()" style="cursor:pointer" title="Click to retry AISStream"><div class="fd wait" id="f13"></div>AIS.WS</div>
+<div class="feed" onclick="retryVFAPI()" style="cursor:pointer" title="VesselFinder API — Click to retry"><div class="fd wait" id="f16"></div>VF.API</div>
 <div class="feed"><div class="fd wait" id="f14"></div>SOLAR</div>
 <div class="feed"><div class="fd wait" id="f15"></div>WX</div>
 </div>
 <div><span style="color:var(--td)">REFRESH </span><span id="countdown" style="color:var(--c)">30s</span><span style="color:var(--td)"> | </span><span id="lastUp" style="color:var(--g)">--:--:--</span></div>
-<div style="display:flex;align-items:center;gap:10px"><span style="letter-spacing:3px;color:var(--td);font-family:'Orbitron',sans-serif;font-size:9px">SENTINEL v15.0</span><span style="color:var(--td);font-size:10px;cursor:pointer" onclick="document.getElementById('shortcutsOverlay').classList.toggle('show')">[?]</span></div>
+<div style="display:flex;align-items:center;gap:10px"><span style="letter-spacing:3px;color:var(--td);font-family:'Orbitron',sans-serif;font-size:9px">SENTINEL v17.0</span><span style="color:var(--td);font-size:10px;cursor:pointer" onclick="document.getElementById('shortcutsOverlay').classList.toggle('show')">[?]</span></div>
 </div>
 
 <script>
 window.onerror=function(msg,src,line,col,err){console.warn('Global error caught:',msg);return true;};
 window.addEventListener('unhandledrejection',e=>{console.warn('Unhandled rejection:',e.reason);e.preventDefault();});
 // ================================================================
-//  SENTINEL COMMAND v14.0 — Jarvis-Level Intelligence Platform
+//  SENTINEL COMMAND v17.0 — Jarvis-Level Intelligence Platform
 // ================================================================
 const BOOT_START=Date.now();
 
@@ -789,6 +793,157 @@ async function fetchAIS(){
     }
     state.sources.ais=n;feedDot('f6',n>0);
   }catch(e){console.warn('AIS fetch error:',e);feedDot('f6',false);}
+}
+
+// ============ VESSELFINDER RAPIDAPI — Global Region-Based Ship Tracking ============
+const VF_RAPIDAPI_KEY='61662f6f90msh674a714de828764p16c3eejsn5e4634554e54';
+const VF_RAPIDAPI_HOST='vesselfinder1.p.rapidapi.com';
+
+// Regions to rotate through — covering Mediterranean, Asia, Indian Ocean, etc.
+const VF_REGIONS=[
+  {name:'E.MED',    lat1:30,lat2:37,lon1:25,lon2:36},    // Eastern Mediterranean (Suez, Israel, Turkey, Cyprus)
+  {name:'W.MED',    lat1:35,lat2:44,lon1:-2,lon2:16},     // Western Med (Spain, Italy, France)
+  {name:'S.CHINA',  lat1:5,lat2:25,lon1:105,lon2:125},    // South China Sea
+  {name:'MALACCA',  lat1:-5,lat2:10,lon1:95,lon2:110},    // Malacca Strait + Singapore
+  {name:'ARABIAN',  lat1:12,lat2:30,lon1:40,lon2:60},     // Arabian Sea, Gulf of Aden, Persian Gulf
+  {name:'RED.SEA',  lat1:12,lat2:30,lon1:32,lon2:44},     // Red Sea + Bab el-Mandeb
+  {name:'BAY.BENG', lat1:5,lat2:22,lon1:78,lon2:95},      // Bay of Bengal
+  {name:'E.CHINA',  lat1:25,lat2:40,lon1:120,lon2:135},   // East China Sea, Taiwan Strait, Korea
+  {name:'BLACK',    lat1:41,lat2:47,lon1:27,lon2:42},     // Black Sea
+  {name:'HORMUZ',   lat1:23,lat2:28,lon1:50,lon2:58},     // Strait of Hormuz
+];
+let vfRegionIdx=0;
+let vfStatus='idle'; // idle, fetching, online, error
+let vfLastSuccess=0;
+let vfTotalShips=0;
+
+// Process VesselFinder ship data into SENTINEL assets
+function processVFShips(vessels,regionName){
+  let n=0;
+  for(const v of vessels){
+    const mmsi=String(v.MMSI||v.mmsi||'');
+    const lat=v.LAT||v.lat||v.AIS?.LAT;
+    const lon=v.LON||v.lon||v.AIS?.LON;
+    if(!mmsi||!lat||!lon)continue;
+    const name=(v.SHIPNAME||v.NAME||v.name||v.AIS?.NAME||'').trim();
+    const shipType=v.SHIPTYPE||v.TYPE||v.AIS?.SHIPTYPE||0;
+    const sog=v.SPEED||v.SOG||v.AIS?.SPEED||0;
+    const cog=v.COURSE||v.COG||v.AIS?.COURSE||0;
+    const imo=v.IMO||v.imo||'';
+    const flag=v.FLAG||v.flag||mmsiCC(mmsi)||'';
+    // Classify ship type
+    let cat='cargo',tLabel='VESSEL';
+    if(shipType===35||mmsi.startsWith('111')||mmsi.startsWith('970')){cat='military';tLabel='NAVAL';}
+    else if(shipType===55){cat='police';tLabel='LAW ENF';}
+    else if(shipType===51){cat='sar';tLabel='SAR';}
+    else if(shipType>=80&&shipType<=89){cat='tanker';tLabel='TANKER';}
+    else if(shipType>=70&&shipType<=79){cat='cargo';tLabel='CARGO';}
+    else if(shipType>=60&&shipType<=69){cat='passenger';tLabel='PASSENGER';}
+    else if(shipType===30){cat='fishing';tLabel='FISHING';}
+    else if(shipType>=40&&shipType<=49){cat='cargo';tLabel='HSC';}
+    else if(shipType===52||shipType===53){cat='cargo';tLabel='TUG';}
+    else if(shipType===36||shipType===37)continue; // pleasure craft - skip
+    // Check against known warships
+    const knownWar=WARSHIPS.find(w=>w.m===mmsi);
+    if(knownWar){cat=knownWar.cat||'military';tLabel=knownWar.t||'NAVAL';}
+    else if(name&&AIS_MIL_NAMES.some(r=>r.test(name))){
+      if(name.match(/COAST|USCG|HMCG|KV\s/i)){cat='coastguard';tLabel='CG VESSEL';}
+      else if(name.match(/POLICE|BORDER|CUSTOMS/i)){cat='police';tLabel='LAW ENF';}
+      else{cat='military';tLabel='NAVAL';}
+    }
+    const id='vf_'+mmsi;
+    const old=state.assets.get(id);
+    const trail=old?.trail?[...old.trail.slice(-20),[lat,lon]]:[[lat,lon]];
+    state.assets.set(id,{id,hex:mmsi,cs:name||'MMSI-'+mmsi,type:'ship',cat,country:flag.length===2?flag:mmsiCC(mmsi),lat,lon,alt:0,gs:sog,track:cog,t:tLabel+(imo?' IMO:'+imo:''),source:'VF-'+regionName,trail,_lastSeen:Date.now()});
+    n++;
+  }
+  return n;
+}
+
+// Fetch vessels from VesselFinder RapidAPI for a specific region
+async function fetchVFRegion(region){
+  try{
+    // Try /search endpoint with area params
+    const url=`https://${VF_RAPIDAPI_HOST}/search?lat1=${region.lat1}&lat2=${region.lat2}&lon1=${region.lon1}&lon2=${region.lon2}&area=${region.lat1},${region.lon1},${region.lat2},${region.lon2}`;
+    const resp=await fetch(url,{
+      method:'GET',
+      headers:{
+        'x-rapidapi-key':VF_RAPIDAPI_KEY,
+        'x-rapidapi-host':VF_RAPIDAPI_HOST,
+        'Accept':'*/*'
+      },
+      signal:AbortSignal.timeout(12000)
+    });
+    if(!resp.ok){
+      // If 403/406, try with CORS proxy
+      if(resp.status===403||resp.status===406){
+        const proxyUrl=corsUrl(url+'&_headers='+encodeURIComponent(JSON.stringify({'x-rapidapi-key':VF_RAPIDAPI_KEY,'x-rapidapi-host':VF_RAPIDAPI_HOST})));
+        throw new Error('DIRECT_BLOCKED');
+      }
+      throw new Error('HTTP '+resp.status);
+    }
+    const data=await resp.json();
+    // Handle various response formats
+    const vessels=Array.isArray(data)?data:(data.vessels||data.data||data.results||data.ships||[]);
+    return vessels;
+  }catch(e){
+    // Fallback: try VesselFinder direct API format (if user adds a direct key later)
+    if(VF_DIRECT_KEY){
+      try{
+        const url2=corsUrl(`https://api.vesselfinder.com/vessels?userkey=${VF_DIRECT_KEY}&lat1=${region.lat1}&lat2=${region.lat2}&lon1=${region.lon1}&lon2=${region.lon2}&interval=60`);
+        const d2=await fetchJ(url2,12000);
+        return Array.isArray(d2)?d2:(d2.vessels||d2.data||[]);
+      }catch(e2){}
+    }
+    throw e;
+  }
+}
+
+// VesselFinder direct API key — set via console: VF_DIRECT_KEY='your-key-here'
+let VF_DIRECT_KEY='';
+
+// Main VF fetch — rotates through regions, fetches 2 regions per cycle
+async function fetchVFAPI(){
+  feedWait('f16');
+  vfStatus='fetching';
+  let totalNew=0;
+  const regionsPerCycle=2; // Fetch 2 regions per refresh cycle to spread API load
+  try{
+    for(let i=0;i<regionsPerCycle;i++){
+      const region=VF_REGIONS[vfRegionIdx%VF_REGIONS.length];
+      vfRegionIdx++;
+      try{
+        const vessels=await fetchVFRegion(region);
+        if(vessels&&vessels.length>0){
+          const n=processVFShips(vessels,region.name);
+          totalNew+=n;
+          console.log(`VF-API [${region.name}]: ${n} ships processed`);
+        }
+      }catch(regionErr){
+        console.warn(`VF-API [${region.name}] error:`,regionErr.message);
+      }
+    }
+    if(totalNew>0){
+      vfStatus='online';vfLastSuccess=Date.now();vfTotalShips+=totalNew;
+      state.sources.vfapi=totalNew;
+      feedDot('f16',true);
+      addAlert('cyan',`VF-API: ${totalNew} vessels loaded from ${VF_REGIONS[(vfRegionIdx-regionsPerCycle)%VF_REGIONS.length].name}/${VF_REGIONS[(vfRegionIdx-1)%VF_REGIONS.length].name}`);
+    }else{
+      // No data but no error — API might be rate-limited or region empty
+      vfStatus='idle';
+      state.sources.vfapi=0;
+      feedDot('f16',vfLastSuccess>Date.now()-300000); // Show green if had data in last 5 min
+    }
+  }catch(e){
+    console.warn('VF-API global error:',e);
+    vfStatus='error';
+    feedDot('f16',false);
+  }
+}
+
+function retryVFAPI(){
+  addAlert('cyan','VF-API: Manual refresh — scanning next region...');
+  fetchVFAPI();
 }
 
 // OSINT Warships + Coast Guard + Patrol Vessels — Global Coverage
@@ -1253,7 +1408,7 @@ function renderAlerts(){
 
 // --- AISSTREAM.IO GLOBAL AIS (WebSocket) ---
 const AISSTREAM_KEY='85f8e2f8fa1c0b20e691e11dfafcd05657423222';
-let aisWS=null,aisRetry=0;
+let aisWS=null,aisRetry=0,aisMaxRetries=12,aisReconnectTimer=null;
 // Cache ship types: PositionReports have NO ShipType, only ShipStaticData does
 const aisTypeCache=new Map();
 function classifyShipType(st){
@@ -1274,6 +1429,7 @@ function classifyShipType(st){
 }
 function connectAISStream(){
   feedWait('f13');
+  updateAISStatus('connecting');
   try{
     if(aisWS){try{aisWS.close();}catch(e){}}
     aisWS=new WebSocket('wss://stream.aisstream.io/v0/stream');
@@ -1281,9 +1437,9 @@ function connectAISStream(){
       if(aisWS&&aisWS.readyState!==1){
         try{aisWS.close();}catch(e){}
         feedDot('f13',false);
-        addAlert('orange','AIS STREAM: Connection timeout — service may be down');
+        updateAISStatus('offline');
       }
-    },10000);
+    },15000);
     aisWS.onopen=()=>{
       clearTimeout(connTimeout);
       aisWS.send(JSON.stringify({
@@ -1294,13 +1450,13 @@ function connectAISStream(){
       feedDot('f13',true);aisRetry=0;
       addAlert('green','AIS STREAM: Global maritime WebSocket connected');
       state.sources.aisws=1;
+      updateAISStatus('online');
     };
     aisWS.onmessage=(evt)=>{
       try{
         const msg=JSON.parse(evt.data);
         const meta=msg.MetaData;if(!meta)return;
         const mmsi=String(meta.MMSI);
-        // ShipStaticData messages carry ship type — cache it
         if(msg.MessageType==='ShipStaticData'){
           const body=msg.Message?.ShipStaticData;
           const st2=body?.Type||meta.ShipType||0;
@@ -1311,37 +1467,29 @@ function connectAISStream(){
         const lat=meta.latitude;const lon=meta.longitude;
         if(lat==null||lon==null||(lat===0&&lon===0))return;
         const name=(meta.ShipName||aisTypeCache.get('n_'+mmsi)||'').trim();
-        // Get ship type: from this message, from cache, or 0 (unknown)
         const st=meta.ShipType||aisTypeCache.get(mmsi)||0;
-        // Classify by AIS type code
         let cls=st>0?classifyShipType(st):null;
-        if(cls===null&&st>0)return; // pleasure craft
-        // If type unknown, check name/MMSI patterns before accepting
+        if(cls===null&&st>0)return;
         if(!cls){
-          // Check known warships
           const isKnown=WARSHIPS.find(w=>w.m===mmsi);
           if(isKnown){cls={cat:isKnown.cat||'military',t:isKnown.t||'NAVAL'};}
           else if(AIS_MIL_NAMES.some(r=>r.test(name))){cls={cat:'military',t:'NAVAL'};}
           else if(mmsi.startsWith('111')||mmsi.startsWith('970')||mmsi.startsWith('00')){cls={cat:'military',t:'NAVAL'};}
           else if(mmsi.startsWith('3669')){cls={cat:'coastguard',t:'CG VESSEL'};}
-          // Check existing asset — keep its classification
           else{
             const existing=state.assets.get('ais_'+mmsi);
             if(existing)cls={cat:existing.cat,t:existing.t};
-            else cls={cat:'cargo',t:'VESSEL'}; // default to cargo for unknown vessels
+            else cls={cat:'cargo',t:'VESSEL'};
           }
         }
         let{cat,t:tLabel}=cls;
-        // Override: name patterns for military/govt
         if(name&&AIS_MIL_NAMES.some(r=>r.test(name))){
           if(name.match(/COAST|USCG|HMCG|KV\s/i)){cat='coastguard';tLabel='CG VESSEL';}
           else if(name.match(/POLICE|BORDER|CUSTOMS/i)){cat='police';tLabel='LAW ENF';}
           else{cat='military';tLabel='NAVAL';}
         }
-        // MMSI prefix overrides
         if(mmsi.startsWith('3669')){cat='coastguard';tLabel='CG VESSEL';}
         else if(mmsi.startsWith('111')||mmsi.startsWith('970')||mmsi.startsWith('00')){cat='military';tLabel='NAVAL';}
-        // Known warship override
         const isKnown2=WARSHIPS.find(w=>w.m===mmsi);
         if(isKnown2){cat=isKnown2.cat||'military';tLabel=isKnown2.t||'NAVAL';}
         const id='ais_'+mmsi;
@@ -1359,10 +1507,51 @@ function connectAISStream(){
     aisWS.onclose=()=>{
       clearTimeout(connTimeout);
       feedDot('f13',false);
-      if(aisRetry<3){aisRetry++;setTimeout(connectAISStream,10000*aisRetry);}
-      else{addAlert('orange','AIS STREAM: Offline — using Finnish AIS for maritime data');}
+      updateAISStatus('offline');
+      // Exponential backoff: retry up to aisMaxRetries times with increasing delays
+      if(aisRetry<aisMaxRetries){
+        aisRetry++;
+        const delay=Math.min(30000,10000*aisRetry); // max 30s between retries
+        console.log('AIS STREAM: Retry '+aisRetry+'/'+aisMaxRetries+' in '+(delay/1000)+'s');
+        if(aisReconnectTimer)clearTimeout(aisReconnectTimer);
+        aisReconnectTimer=setTimeout(connectAISStream,delay);
+        updateAISStatus('retrying');
+      }else{
+        addAlert('orange','AIS STREAM: Service appears offline — auto-retry paused. Click AIS.WS indicator to retry.');
+        updateAISStatus('offline');
+      }
     };
-  }catch(e){feedDot('f13',false);}
+  }catch(e){feedDot('f13',false);updateAISStatus('offline');}
+}
+// Manual retry for AISStream (bound to feed indicator click)
+function retryAISStream(){
+  aisRetry=0;
+  if(aisReconnectTimer)clearTimeout(aisReconnectTimer);
+  addAlert('cyan','AIS STREAM: Manual reconnect initiated...');
+  connectAISStream();
+}
+// AIS data source status banner
+function updateAISStatus(status){
+  const el=document.getElementById('aisStatusBanner');
+  if(!el)return;
+  if(status==='online'){
+    el.style.display='none';
+  }else if(status==='connecting'){
+    el.style.display='flex';
+    el.style.background='rgba(255,204,0,0.08)';
+    el.style.borderColor='rgba(255,204,0,0.2)';
+    el.innerHTML='<span style="color:#ffcc00;font-family:Orbitron,sans-serif;font-size:10px;letter-spacing:2px">⟳ AIS GLOBAL: CONNECTING TO AISSTREAM.IO...</span>';
+  }else if(status==='retrying'){
+    el.style.display='flex';
+    el.style.background='rgba(255,136,0,0.08)';
+    el.style.borderColor='rgba(255,136,0,0.2)';
+    el.innerHTML='<span style="color:#ff8800;font-family:Orbitron,sans-serif;font-size:10px;letter-spacing:2px">⟳ AIS GLOBAL: RETRYING ('+aisRetry+'/'+aisMaxRetries+') — SHIP DATA LIMITED TO BALTIC</span>';
+  }else{
+    el.style.display='flex';
+    el.style.background='rgba(255,51,85,0.08)';
+    el.style.borderColor='rgba(255,51,85,0.2)';
+    el.innerHTML='<span style="color:#ff6680;font-family:Orbitron,sans-serif;font-size:10px;letter-spacing:2px">✕ AIS GLOBAL: AISSTREAM.IO OFFLINE — SHIP DATA LIMITED TO BALTIC</span><button onclick="retryAISStream()" style="margin-left:12px;background:rgba(0,232,255,0.1);border:1px solid rgba(0,232,255,0.3);color:#00e8ff;font-family:Share Tech Mono,monospace;font-size:10px;padding:2px 10px;cursor:pointer;border-radius:3px">RETRY</button>';
+  }
 }
 
 // --- NOAA SPACE WEATHER ---
@@ -1495,7 +1684,7 @@ function updateStats(){
   document.getElementById('sSat').textContent=sat;document.getElementById('sTotal').textContent=state.assets.size;
   document.getElementById('sTanker').textContent=tanker;document.getElementById('sCargo').textContent=cargo;
   document.getElementById('sPax').textContent=pax;document.getElementById('sFish').textContent=fish;
-  document.getElementById('sSrc').textContent=Object.values(state.sources).filter(v=>v>0).length+'/15';
+  document.getElementById('sSrc').textContent=Object.values(state.sources).filter(v=>v>0).length+'/16';
   const sorted=Object.entries(nations).sort((a,b)=>b[1]-a[1]).slice(0,8);
   document.getElementById('nationStats').innerHTML=sorted.map(([cc,n])=>`<div class="stat-row"><span class="stat-label">${countryFlag(cc)} ${cc}</span><span class="stat-val cc" style="font-size:12px">${n}</span></div>`).join('');
   const sel=document.getElementById('countryFilter');const cur=sel.value;
@@ -1539,7 +1728,7 @@ async function fetchAll(){
   state.lastFetch=new Date();
   document.getElementById('mainStatus').textContent='FETCHING';document.getElementById('mainDot').style.background='var(--y)';
   try{
-    await Promise.allSettled([fetchADSBMil(),fetchADSBRegion(),fetchOpenSky(),fetchADSBOne(),fetchLADD(),fetchAIS(),fetchOSINT(),fetchSpaceWeather(),fetchSevereWeather()]);
+    await Promise.allSettled([fetchADSBMil(),fetchADSBRegion(),fetchOpenSky(),fetchADSBOne(),fetchLADD(),fetchAIS(),fetchVFAPI(),fetchOSINT(),fetchSpaceWeather(),fetchSevereWeather()]);
   }catch(e){console.warn('fetchAll error:',e);}
   try{
     updateStats();renderMarkers();renderAssetList();generateAlerts();calculateDefcon();updateThreatBanner();cleanStaleAssets();
@@ -1598,6 +1787,11 @@ async function boot(){
     await Promise.race([fetchNews(),new Promise(r=>setTimeout(r,8000))]);
     bootSysRow(5,true);
 
+    txt.textContent='CONNECTING VESSELFINDER API...';bar.style.width='62%';
+    await Promise.race([fetchVFAPI(),new Promise(r=>setTimeout(r,15000))]);
+    bootSysRow(6,vfStatus==='online');
+    await new Promise(r=>setTimeout(r,300));
+
     txt.textContent='CONNECTING AIS GLOBAL STREAM...';bar.style.width='68%';
     connectAISStream();
     bootSysRow(7,true);
@@ -1613,7 +1807,6 @@ async function boot(){
 
     txt.textContent='COMPUTING THREAT MATRIX...';bar.style.width='92%';
     renderThreats();renderChokepoints();calculateDefcon();updateThreatBanner();
-    bootSysRow(6,true);
     await new Promise(r=>setTimeout(r,400));
 
   }catch(e){console.warn('Boot error:',e);}
@@ -1629,7 +1822,17 @@ setInterval(fetchFIRMS,300000);
 setInterval(fetchSpaceWeather,120000);
 setInterval(fetchSevereWeather,300000);
 setInterval(updateThreatBanner,60000);
+setInterval(fetchVFAPI,60000); // VF-API: refresh every 60s, rotates through regions
 setInterval(()=>{calculateDefcon();},120000);
+// Auto-retry AISStream every 60s if disconnected and retries exhausted
+setInterval(()=>{
+  if(!aisWS||aisWS.readyState===3){
+    if(aisRetry>=aisMaxRetries){
+      aisRetry=0;console.log('AIS STREAM: Auto-retry cycle restarting...');
+      connectAISStream();
+    }
+  }
+},60000);
 </script>
 </body>
 </html>
