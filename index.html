@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>SENTINEL // COMMAND v18</title>
+<title>SENTINEL // COMMAND v19</title>
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;500;700;900&family=Share+Tech+Mono&display=swap" rel="stylesheet">
@@ -256,7 +256,55 @@ html,body{width:100%;height:100%;overflow:hidden;background:#050a12;font-family:
 .fire-tooltip{background:rgba(30,15,5,0.94)!important;border:1px solid rgba(255,136,0,0.4)!important;color:#ff8800!important;font-family:'Share Tech Mono',monospace!important;font-size:11px!important;padding:4px 10px!important;border-radius:3px!important}
 .choke-tooltip{background:rgba(5,10,20,0.94)!important;border:1px solid rgba(255,204,0,0.4)!important;color:#ffcc00!important;font-family:'Share Tech Mono',monospace!important;font-size:11px!important;padding:4px 10px!important;border-radius:3px!important}
 
-@media(max-width:1200px){.left-panel{width:200px}.right-panel{width:260px}.article-viewer{left:210px;right:270px}}
+/* MAP MODE SWITCHER */
+.map-modes{position:fixed;bottom:42px;left:270px;z-index:5000;display:flex;gap:2px}
+.map-mode-btn{background:var(--pnl);border:1px solid var(--brd);color:var(--td);font-family:'Orbitron',sans-serif;font-size:8px;letter-spacing:1px;padding:4px 8px;cursor:pointer;transition:all 0.2s;border-radius:2px}
+.map-mode-btn:hover{border-color:var(--c);color:var(--c)}
+.map-mode-btn.active{background:var(--cd);border-color:var(--c);color:var(--c)}
+
+/* DARK VESSEL INDICATOR */
+.dark-vessel{animation:dark-blink 1.5s ease-in-out infinite}
+@keyframes dark-blink{0%,100%{opacity:1}50%{opacity:0.3}}
+
+/* SITREP PANEL */
+.sitrep-overlay{position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(5,10,20,0.95);z-index:10000;display:none;align-items:center;justify-content:center;backdrop-filter:blur(8px)}
+.sitrep-overlay.show{display:flex}
+.sitrep-box{background:var(--pnl);border:1px solid var(--c);border-radius:8px;padding:0;max-width:700px;width:90%;max-height:85vh;display:flex;flex-direction:column;box-shadow:0 0 60px var(--cd)}
+.sitrep-header{display:flex;justify-content:space-between;align-items:center;padding:14px 20px;border-bottom:1px solid var(--brd);flex-shrink:0}
+.sitrep-title{font-family:'Orbitron',sans-serif;font-size:13px;letter-spacing:3px;color:var(--c)}
+.sitrep-body{flex:1;overflow-y:auto;padding:20px;font-size:12px;color:var(--th);line-height:1.7;white-space:pre-wrap;font-family:'Share Tech Mono',monospace}
+.sitrep-body::-webkit-scrollbar{width:4px}
+.sitrep-body::-webkit-scrollbar-thumb{background:var(--cd);border-radius:3px}
+.sitrep-section{margin-bottom:16px}
+.sitrep-section-title{font-family:'Orbitron',sans-serif;font-size:11px;letter-spacing:2px;color:var(--c);margin-bottom:8px;padding-bottom:4px;border-bottom:1px solid var(--brd)}
+.sitrep-critical{color:var(--r)}
+.sitrep-warning{color:var(--o)}
+.sitrep-info{color:var(--c)}
+.sitrep-ok{color:var(--g)}
+
+/* GPS JAMMING ZONES */
+.jam-tooltip{background:rgba(30,5,20,0.94)!important;border:1px solid rgba(170,102,255,0.4)!important;color:#aa66ff!important;font-family:'Share Tech Mono',monospace!important;font-size:11px!important;padding:4px 10px!important;border-radius:3px!important}
+.jam-pulse{border-radius:50%;animation:jam-ring 3s ease-out infinite}
+@keyframes jam-ring{0%{box-shadow:0 0 0 0 rgba(170,102,255,0.5)}70%{box-shadow:0 0 0 20px rgba(170,102,255,0)}100%{box-shadow:0 0 0 0 rgba(170,102,255,0)}}
+
+/* GEOFENCE ZONES */
+.geofence-ctrl{position:fixed;bottom:78px;left:270px;z-index:5000;display:flex;gap:2px}
+.geo-btn{background:var(--pnl);border:1px solid var(--brd);color:var(--td);font-family:'Orbitron',sans-serif;font-size:8px;letter-spacing:1px;padding:4px 8px;cursor:pointer;transition:all 0.2s;border-radius:2px}
+.geo-btn:hover{border-color:var(--r);color:var(--r)}
+.geo-btn.drawing{background:var(--rd);border-color:var(--r);color:var(--r);animation:pulse 1s infinite}
+
+/* SANCTIONED VESSEL BADGE */
+.badge-sanctioned{border:1px solid #ff0044;color:#ff0044;background:rgba(255,0,68,0.2);animation:sanctioned-flash 1s ease-in-out infinite}
+@keyframes sanctioned-flash{0%,100%{opacity:1}50%{opacity:0.5}}
+
+/* INCIDENT TIMELINE */
+.timeline-item{padding:6px 10px;border-left:2px solid var(--brd);margin-left:8px;font-size:11px;position:relative}
+.timeline-item::before{content:'';position:absolute;left:-5px;top:10px;width:8px;height:8px;border-radius:50%;background:var(--c);border:1px solid var(--pnl)}
+.timeline-item.critical::before{background:var(--r)}
+.timeline-item.warning::before{background:var(--o)}
+.timeline-item.info::before{background:var(--c)}
+
+@media(max-width:1200px){.left-panel{width:200px}.right-panel{width:260px}.article-viewer{left:210px;right:270px}.map-modes,.geofence-ctrl{left:210px}}
 </style>
 </head>
 <body>
@@ -280,15 +328,16 @@ html,body{width:100%;height:100%;overflow:hidden;background:#050a12;font-family:
 <div class="load-sys-row" id="ls4"><div class="load-sys-dot" id="lsd4"></div><span class="load-sys-label" id="lsl4">OSINT AGGREGATOR</span></div>
 <div class="load-sys-row" id="ls5"><div class="load-sys-dot" id="lsd5"></div><span class="load-sys-label" id="lsl5">SEISMIC / THERMAL SENSORS</span></div>
 <div class="load-sys-row" id="ls6"><div class="load-sys-dot" id="lsd6"></div><span class="load-sys-label" id="lsl6">THREAT MATRIX ENGINE</span></div>
-<div class="load-sys-row" id="ls7"><div class="load-sys-dot" id="lsd7"></div><span class="load-sys-label" id="lsl7">AIS GLOBAL STREAM</span></div>
 <div class="load-sys-row" id="ls8"><div class="load-sys-dot" id="lsd8"></div><span class="load-sys-label" id="lsl8">SPACE WEATHER MONITOR</span></div>
 <div class="load-sys-row" id="ls9"><div class="load-sys-dot" id="lsd9"></div><span class="load-sys-label" id="lsl9">SEVERE WEATHER GRID</span></div>
 <div class="load-sys-row" id="ls10"><div class="load-sys-dot" id="lsd10"></div><span class="load-sys-label" id="lsl10">VESSELFINDER GLOBAL FEED</span></div>
+<div class="load-sys-row" id="ls11"><div class="load-sys-dot" id="lsd11"></div><span class="load-sys-label" id="lsl11">GPS JAMMING DETECTION</span></div>
+<div class="load-sys-row" id="ls12"><div class="load-sys-dot" id="lsd12"></div><span class="load-sys-label" id="lsl12">SANCTIONS CROSS-REF ENGINE</span></div>
+<div class="load-sys-row" id="ls13"><div class="load-sys-dot" id="lsd13"></div><span class="load-sys-label" id="lsl13">DARK VESSEL TRACKER</span></div>
 </div>
 </div>
 
 <!-- AIS STATUS BANNER -->
-<div id="aisStatusBanner" style="display:none;position:fixed;top:40px;left:0;right:0;height:24px;border-bottom:1px solid rgba(255,51,85,0.2);align-items:center;justify-content:center;z-index:5001;gap:8px"></div>
 
 <!-- THREAT BANNER -->
 <div class="threat-banner" id="threatBanner" style="top:64px"><div class="marquee-track" id="marqueeTrack"><span class="marquee-text" id="threatMarquee">LOADING GLOBAL THREAT ASSESSMENT...</span><span class="marquee-text" id="threatMarquee2">LOADING GLOBAL THREAT ASSESSMENT...</span></div></div>
@@ -329,11 +378,15 @@ html,body{width:100%;height:100%;overflow:hidden;background:#050a12;font-family:
 <div class="stat-row"><span class="stat-label">SATELLITES</span><span class="stat-val cp" id="sSat">--</span></div>
 <div class="stat-row" style="border-top:1px solid var(--brd);margin-top:4px;padding-top:5px"><span class="stat-label">TOTAL ASSETS</span><span class="stat-val cc" id="sTotal">--</span></div>
 <div class="stat-row"><span class="stat-label">VISIBLE</span><span class="stat-val cg" style="font-size:12px" id="sVis">--</span></div>
-<div class="stat-row"><span class="stat-label">SOURCES</span><span class="stat-val cg" style="font-size:12px" id="sSrc">0/16</span></div>
+<div class="stat-row"><span class="stat-label">SOURCES</span><span class="stat-val cg" style="font-size:12px" id="sSrc">0/17</span></div>
 <div class="stat-row"><span class="stat-label">EARTHQUAKES</span><span class="stat-val cr" style="font-size:12px" id="sQuake">--</span></div>
 <div class="stat-row"><span class="stat-label">HOTSPOTS</span><span class="stat-val co" style="font-size:12px" id="sFires">--</span></div>
 <div class="stat-row"><span class="stat-label">WX ALERTS</span><span class="stat-val cy" style="font-size:12px" id="sWxAlerts">--</span></div>
 <div class="stat-row"><span class="stat-label">Kp INDEX</span><span class="stat-val cp" style="font-size:12px" id="sKp">--</span></div>
+<div class="stat-row"><span class="stat-label">DARK VESSELS</span><span class="stat-val cr" style="font-size:12px" id="sDark">--</span></div>
+<div class="stat-row"><span class="stat-label">SANCTIONED</span><span class="stat-val" style="font-size:12px;color:#ff0044" id="sSanctioned">--</span></div>
+<div class="stat-row"><span class="stat-label">GPS JAM ZONES</span><span class="stat-val cp" style="font-size:12px" id="sJam">--</span></div>
+<div class="stat-row"><span class="stat-label">GEOFENCES</span><span class="stat-val cy" style="font-size:12px" id="sGeo">0</span></div>
 </div>
 <div class="card">
 <div class="card-title">Filters</div>
@@ -361,6 +414,7 @@ html,body{width:100%;height:100%;overflow:hidden;background:#050a12;font-family:
 <button class="fbtn on-o" id="fFire" onclick="togLayer('fires')">FIRES</button>
 <button class="fbtn on" id="fGdelt" onclick="togLayer('gdelt')">EVENTS</button>
 <button class="fbtn on-y" id="fChoke" onclick="togLayer('chokes')">CHOKES</button>
+<button class="fbtn on-p" id="fJam" onclick="togLayer('jamming')">GPS JAM</button>
 </div>
 <select class="country-sel" id="countryFilter" onchange="applyFilters()"><option value="">ALL COUNTRIES</option></select>
 </div>
@@ -381,6 +435,9 @@ html,body{width:100%;height:100%;overflow:hidden;background:#050a12;font-family:
 <button class="nav-btn" onclick="flyTo(25,55,6)">GULF</button>
 <button class="nav-btn" onclick="flyTo(20,0,2)">GLOBAL</button>
 </div>
+<div style="margin-top:5px;display:flex;flex-wrap:wrap;gap:2px">
+<button class="nav-btn" style="flex:1;border-color:var(--c);color:var(--c)" onclick="generateSitrep()">SITREP [S]</button>
+</div>
 </div>
 <div class="card">
 <div class="card-title">Top Nations</div>
@@ -398,6 +455,7 @@ html,body{width:100%;height:100%;overflow:hidden;background:#050a12;font-family:
 <button class="tab-btn" onclick="switchTab('threats',this)">THREATS</button>
 <button class="tab-btn" onclick="switchTab('events',this)">EVENTS</button>
 <button class="tab-btn" onclick="switchTab('chokes',this)">CHOKES</button>
+<button class="tab-btn" onclick="switchTab('timeline',this)">LOG</button>
 </div>
 <div class="tab-content active" id="tabAssets"></div>
 <div class="tab-content" id="tabAlerts"><div style="padding:12px;color:var(--td);font-size:11px">Monitoring...</div></div>
@@ -405,6 +463,7 @@ html,body{width:100%;height:100%;overflow:hidden;background:#050a12;font-family:
 <div class="tab-content" id="tabThreats"><div style="padding:12px;color:var(--td);font-size:11px">Assessing threats...</div></div>
 <div class="tab-content" id="tabEvents"><div style="padding:12px;color:var(--td);font-size:11px">Loading events...</div></div>
 <div class="tab-content" id="tabChokes"><div style="padding:12px;color:var(--td);font-size:11px">Scanning chokepoints...</div></div>
+<div class="tab-content" id="tabTimeline"><div style="padding:12px;color:var(--td);font-size:11px">Building incident timeline...</div></div>
 </div>
 </div>
 
@@ -433,11 +492,40 @@ html,body{width:100%;height:100%;overflow:hidden;background:#050a12;font-family:
 <div class="shortcut-row"><span class="shortcut-key">?</span><span class="shortcut-desc">Toggle this help</span></div>
 <div class="shortcut-row"><span class="shortcut-key">/</span><span class="shortcut-desc">Focus search</span></div>
 <div class="shortcut-row"><span class="shortcut-key">ESC</span><span class="shortcut-desc">Close panels</span></div>
-<div class="shortcut-row"><span class="shortcut-key">1-6</span><span class="shortcut-desc">Switch tabs (Assets/Alerts/Intel/Threats/Events/Chokes)</span></div>
+<div class="shortcut-row"><span class="shortcut-key">1-7</span><span class="shortcut-desc">Switch tabs (Assets/Alerts/Intel/Threats/Events/Chokes/Log)</span></div>
 <div class="shortcut-row"><span class="shortcut-key">R</span><span class="shortcut-desc">Force refresh all data</span></div>
+<div class="shortcut-row"><span class="shortcut-key">S</span><span class="shortcut-desc">Generate SITREP briefing</span></div>
 <div class="shortcut-row"><span class="shortcut-key">G</span><span class="shortcut-desc">Global view</span></div>
 <div class="shortcut-row"><span class="shortcut-key">F</span><span class="shortcut-desc">Toggle fullscreen</span></div>
 <div class="shortcut-row"><span class="shortcut-key">D</span><span class="shortcut-desc">Cycle DEFCON display</span></div>
+</div>
+</div>
+
+<!-- MAP MODE SWITCHER -->
+<div class="map-modes" id="mapModes">
+<button class="map-mode-btn active" id="mmDark" onclick="setMapMode('dark')">DARK</button>
+<button class="map-mode-btn" id="mmSat" onclick="setMapMode('satellite')">SAT</button>
+<button class="map-mode-btn" id="mmNVG" onclick="setMapMode('nvg')">NVG</button>
+<button class="map-mode-btn" id="mmTopo" onclick="setMapMode('topo')">TOPO</button>
+</div>
+
+<!-- GEOFENCE CONTROLS -->
+<div class="geofence-ctrl" id="geofenceCtrl">
+<button class="geo-btn" id="geoDrawBtn" onclick="toggleGeofenceDraw()">+ GEOFENCE</button>
+<button class="geo-btn" id="geoClearBtn" onclick="clearGeofences()">CLEAR</button>
+</div>
+
+<!-- SITREP OVERLAY -->
+<div class="sitrep-overlay" id="sitrepOverlay" onclick="closeSitrep()">
+<div class="sitrep-box" onclick="event.stopPropagation()">
+<div class="sitrep-header">
+<span class="sitrep-title">INTELLIGENCE SITREP</span>
+<div style="display:flex;gap:8px">
+<button class="article-close" style="border-color:var(--c);color:var(--c)" onclick="copySitrep()">COPY</button>
+<button class="article-close" onclick="closeSitrep()">CLOSE</button>
+</div>
+</div>
+<div class="sitrep-body" id="sitrepBody">Generating...</div>
 </div>
 </div>
 
@@ -457,20 +545,21 @@ html,body{width:100%;height:100%;overflow:hidden;background:#050a12;font-family:
 <div class="feed"><div class="fd wait" id="f10"></div>NEWS</div>
 <div class="feed"><div class="fd wait" id="f11"></div>FIRMS</div>
 <div class="feed"><div class="fd wait" id="f12"></div>CHOKE</div>
-<div class="feed" onclick="retryAISStream()" style="cursor:pointer" title="Click to retry AISStream"><div class="fd wait" id="f13"></div>AIS.WS</div>
 <div class="feed"><div class="fd wait" id="f14"></div>SOLAR</div>
 <div class="feed"><div class="fd wait" id="f15"></div>WX</div>
 <div class="feed"><div class="fd wait" id="f16"></div>VF.GL</div>
+<div class="feed"><div class="fd wait" id="f17"></div>JAM</div>
+<div class="feed"><div class="fd wait" id="f18"></div>SNCT</div>
 </div>
 <div><span style="color:var(--td)">REFRESH </span><span id="countdown" style="color:var(--c)">30s</span><span style="color:var(--td)"> | </span><span id="lastUp" style="color:var(--g)">--:--:--</span></div>
-<div style="display:flex;align-items:center;gap:10px"><span style="letter-spacing:3px;color:var(--td);font-family:'Orbitron',sans-serif;font-size:9px">SENTINEL v18.0</span><span style="color:var(--td);font-size:10px;cursor:pointer" onclick="document.getElementById('shortcutsOverlay').classList.toggle('show')">[?]</span></div>
+<div style="display:flex;align-items:center;gap:10px"><span style="letter-spacing:3px;color:var(--td);font-family:'Orbitron',sans-serif;font-size:9px">SENTINEL v19.0</span><span style="color:var(--td);font-size:10px;cursor:pointer" onclick="document.getElementById('shortcutsOverlay').classList.toggle('show')">[?]</span></div>
 </div>
 
 <script>
 window.onerror=function(msg,src,line,col,err){console.warn('Global error caught:',msg);return true;};
 window.addEventListener('unhandledrejection',e=>{console.warn('Unhandled rejection:',e.reason);e.preventDefault();});
 // ================================================================
-//  SENTINEL COMMAND v17.0 — Jarvis-Level Intelligence Platform
+//  SENTINEL COMMAND v19.0 — Full Spectrum Intelligence Platform
 // ================================================================
 const BOOT_START=Date.now();
 
@@ -810,6 +899,8 @@ const VF_REGIONS=[
   {name:'HORMUZ',latmin:23,latmax:28,lonmin:50,lonmax:60},
   {name:'BERING',latmin:50,latmax:66,lonmin:160,lonmax:190},
   {name:'PERSIAN',latmin:24,latmax:32,lonmin:47,lonmax:57},
+  {name:'AUS.E',latmin:-40,latmax:-10,lonmin:140,lonmax:160},
+  {name:'AUS.W',latmin:-35,latmax:-10,lonmin:110,lonmax:140},
 ];
 let vfRegionIdx=0;
 function vfClassify(typeCode,name){
@@ -1370,153 +1461,6 @@ function renderAlerts(){
 
 // ============ NEW INTEL MODULES v15 ============
 
-// --- AISSTREAM.IO GLOBAL AIS (WebSocket) ---
-const AISSTREAM_KEY='85f8e2f8fa1c0b20e691e11dfafcd05657423222';
-let aisWS=null,aisRetry=0,aisMaxRetries=12,aisReconnectTimer=null;
-// Cache ship types: PositionReports have NO ShipType, only ShipStaticData does
-const aisTypeCache=new Map();
-function classifyShipType(st){
-  if(st===35)return{cat:'military',t:'NAVAL'};
-  if(st===55)return{cat:'police',t:'LAW ENF'};
-  if(st===51)return{cat:'sar',t:'SAR'};
-  if(st===58)return{cat:'sar',t:'MEDICAL'};
-  if(st>=80&&st<=89)return{cat:'tanker',t:'TANKER'};
-  if(st>=70&&st<=79)return{cat:'cargo',t:'CARGO'};
-  if(st>=60&&st<=69)return{cat:'passenger',t:'PASSENGER'};
-  if(st===30)return{cat:'fishing',t:'FISHING'};
-  if(st>=40&&st<=49)return{cat:'cargo',t:'HSC'};
-  if(st===31||st===32)return{cat:'cargo',t:'TOWING'};
-  if(st===33)return{cat:'cargo',t:'DREDGER'};
-  if(st===50||st===52||st===53)return{cat:'cargo',t:'TUG/PILOT'};
-  if(st===36||st===37)return null; // pleasure craft — skip
-  return{cat:'cargo',t:'VESSEL'};
-}
-function connectAISStream(){
-  feedWait('f13');
-  updateAISStatus('connecting');
-  try{
-    if(aisWS){try{aisWS.close();}catch(e){}}
-    aisWS=new WebSocket('wss://stream.aisstream.io/v0/stream');
-    const connTimeout=setTimeout(()=>{
-      if(aisWS&&aisWS.readyState!==1){
-        try{aisWS.close();}catch(e){}
-        feedDot('f13',false);
-        updateAISStatus('offline');
-      }
-    },15000);
-    aisWS.onopen=()=>{
-      clearTimeout(connTimeout);
-      aisWS.send(JSON.stringify({
-        APIKey:AISSTREAM_KEY,
-        BoundingBoxes:[[[-90,-180],[90,180]]],
-        FilterMessageTypes:['PositionReport','ShipStaticData']
-      }));
-      feedDot('f13',true);aisRetry=0;
-      addAlert('green','AIS STREAM: Global maritime WebSocket connected');
-      state.sources.aisws=1;
-      updateAISStatus('online');
-    };
-    aisWS.onmessage=(evt)=>{
-      try{
-        const msg=JSON.parse(evt.data);
-        const meta=msg.MetaData;if(!meta)return;
-        const mmsi=String(meta.MMSI);
-        if(msg.MessageType==='ShipStaticData'){
-          const body=msg.Message?.ShipStaticData;
-          const st2=body?.Type||meta.ShipType||0;
-          if(st2>0)aisTypeCache.set(mmsi,st2);
-          const nm2=(body?.Name||meta.ShipName||'').trim();
-          if(nm2&&nm2.length>1)aisTypeCache.set('n_'+mmsi,nm2);
-        }
-        const lat=meta.latitude;const lon=meta.longitude;
-        if(lat==null||lon==null||(lat===0&&lon===0))return;
-        const name=(meta.ShipName||aisTypeCache.get('n_'+mmsi)||'').trim();
-        const st=meta.ShipType||aisTypeCache.get(mmsi)||0;
-        let cls=st>0?classifyShipType(st):null;
-        if(cls===null&&st>0)return;
-        if(!cls){
-          const isKnown=WARSHIPS.find(w=>w.m===mmsi);
-          if(isKnown){cls={cat:isKnown.cat||'military',t:isKnown.t||'NAVAL'};}
-          else if(AIS_MIL_NAMES.some(r=>r.test(name))){cls={cat:'military',t:'NAVAL'};}
-          else if(mmsi.startsWith('111')||mmsi.startsWith('970')||mmsi.startsWith('00')){cls={cat:'military',t:'NAVAL'};}
-          else if(mmsi.startsWith('3669')){cls={cat:'coastguard',t:'CG VESSEL'};}
-          else{
-            const existing=state.assets.get('ais_'+mmsi);
-            if(existing)cls={cat:existing.cat,t:existing.t};
-            else cls={cat:'cargo',t:'VESSEL'};
-          }
-        }
-        let{cat,t:tLabel}=cls;
-        if(name&&AIS_MIL_NAMES.some(r=>r.test(name))){
-          if(name.match(/COAST|USCG|HMCG|KV\s/i)){cat='coastguard';tLabel='CG VESSEL';}
-          else if(name.match(/POLICE|BORDER|CUSTOMS/i)){cat='police';tLabel='LAW ENF';}
-          else{cat='military';tLabel='NAVAL';}
-        }
-        if(mmsi.startsWith('3669')){cat='coastguard';tLabel='CG VESSEL';}
-        else if(mmsi.startsWith('111')||mmsi.startsWith('970')||mmsi.startsWith('00')){cat='military';tLabel='NAVAL';}
-        const isKnown2=WARSHIPS.find(w=>w.m===mmsi);
-        if(isKnown2){cat=isKnown2.cat||'military';tLabel=isKnown2.t||'NAVAL';}
-        const id='ais_'+mmsi;
-        const old=state.assets.get(id);
-        const trail=old?.trail?[...old.trail.slice(-20),[lat,lon]]:[[lat,lon]];
-        state.assets.set(id,{id,hex:mmsi,cs:name||'MMSI-'+mmsi,type:'ship',cat,country:mmsiCC(mmsi),lat,lon,alt:0,gs:meta.SpeedOverGround??old?.gs,track:meta.CourseOverGround??old?.track,t:tLabel,source:'AIS-GLOBAL',trail,_lastSeen:Date.now()});
-        state.sources.aisws=1;
-      }catch(e){}
-    };
-    aisWS.onerror=(e)=>{
-      clearTimeout(connTimeout);
-      feedDot('f13',false);
-      try{aisWS.close();}catch(ex){}
-    };
-    aisWS.onclose=()=>{
-      clearTimeout(connTimeout);
-      feedDot('f13',false);
-      updateAISStatus('offline');
-      // Exponential backoff: retry up to aisMaxRetries times with increasing delays
-      if(aisRetry<aisMaxRetries){
-        aisRetry++;
-        const delay=Math.min(30000,10000*aisRetry); // max 30s between retries
-        console.log('AIS STREAM: Retry '+aisRetry+'/'+aisMaxRetries+' in '+(delay/1000)+'s');
-        if(aisReconnectTimer)clearTimeout(aisReconnectTimer);
-        aisReconnectTimer=setTimeout(connectAISStream,delay);
-        updateAISStatus('retrying');
-      }else{
-        addAlert('orange','AIS STREAM: Service appears offline — auto-retry paused. Click AIS.WS indicator to retry.');
-        updateAISStatus('offline');
-      }
-    };
-  }catch(e){feedDot('f13',false);updateAISStatus('offline');}
-}
-// Manual retry for AISStream (bound to feed indicator click)
-function retryAISStream(){
-  aisRetry=0;
-  if(aisReconnectTimer)clearTimeout(aisReconnectTimer);
-  addAlert('cyan','AIS STREAM: Manual reconnect initiated...');
-  connectAISStream();
-}
-// AIS data source status banner
-function updateAISStatus(status){
-  const el=document.getElementById('aisStatusBanner');
-  if(!el)return;
-  if(status==='online'){
-    el.style.display='none';
-  }else if(status==='connecting'){
-    el.style.display='flex';
-    el.style.background='rgba(255,204,0,0.08)';
-    el.style.borderColor='rgba(255,204,0,0.2)';
-    el.innerHTML='<span style="color:#ffcc00;font-family:Orbitron,sans-serif;font-size:10px;letter-spacing:2px">⟳ AIS GLOBAL: CONNECTING TO AISSTREAM.IO...</span>';
-  }else if(status==='retrying'){
-    el.style.display='flex';
-    el.style.background='rgba(255,136,0,0.08)';
-    el.style.borderColor='rgba(255,136,0,0.2)';
-    el.innerHTML='<span style="color:#ff8800;font-family:Orbitron,sans-serif;font-size:10px;letter-spacing:2px">⟳ AIS GLOBAL: RETRYING ('+aisRetry+'/'+aisMaxRetries+') — SHIP DATA LIMITED TO BALTIC</span>';
-  }else{
-    el.style.display='flex';
-    el.style.background='rgba(255,51,85,0.08)';
-    el.style.borderColor='rgba(255,51,85,0.2)';
-    el.innerHTML='<span style="color:#ff6680;font-family:Orbitron,sans-serif;font-size:10px;letter-spacing:2px">✕ AIS GLOBAL: AISSTREAM.IO OFFLINE — SHIP DATA LIMITED TO BALTIC</span><button onclick="retryAISStream()" style="margin-left:12px;background:rgba(0,232,255,0.1);border:1px solid rgba(0,232,255,0.3);color:#00e8ff;font-family:Share Tech Mono,monospace;font-size:10px;padding:2px 10px;cursor:pointer;border-radius:3px">RETRY</button>';
-  }
-}
 
 // --- NOAA SPACE WEATHER ---
 state.spaceWeather={kp:0,solarFlares:[],geoStorm:'',radioBlackout:'',solarWind:0};
@@ -1648,7 +1592,7 @@ function updateStats(){
   document.getElementById('sSat').textContent=sat;document.getElementById('sTotal').textContent=state.assets.size;
   document.getElementById('sTanker').textContent=tanker;document.getElementById('sCargo').textContent=cargo;
   document.getElementById('sPax').textContent=pax;document.getElementById('sFish').textContent=fish;
-  document.getElementById('sSrc').textContent=Object.values(state.sources).filter(v=>v>0).length+'/16';
+  document.getElementById('sSrc').textContent=Object.values(state.sources).filter(v=>v>0).length+'/17';
   const sorted=Object.entries(nations).sort((a,b)=>b[1]-a[1]).slice(0,8);
   document.getElementById('nationStats').innerHTML=sorted.map(([cc,n])=>`<div class="stat-row"><span class="stat-label">${countryFlag(cc)} ${cc}</span><span class="stat-val cc" style="font-size:12px">${n}</span></div>`).join('');
   const sel=document.getElementById('countryFilter');const cur=sel.value;
@@ -1659,7 +1603,7 @@ function updateStats(){
 // --- FILTERS + KEYBOARD ---
 function togF(t){state.filters[t]=!state.filters[t];const bm={aircraft:'fAir',heli:'fHeli',ship:'fShip',satellite:'fSat'};const cm={aircraft:'on',heli:'on-y',ship:'on-o',satellite:'on-p'};document.getElementById(bm[t]).classList.toggle(cm[t]);renderMarkers();renderAssetList();}
 function togC(c){state.categories[c]=!state.categories[c];const bm={military:'cMil',coastguard:'cCG',police:'cPol',government:'cGov',sar:'cSar',tanker:'cTanker',cargo:'cCargo',passenger:'cPassenger',fishing:'cFishing'};document.getElementById(bm[c]).classList.toggle('on-g');renderMarkers();renderAssetList();}
-function togLayer(l){state.layers[l]=!state.layers[l];const bm={quakes:'fQuake',fires:'fFire',gdelt:'fGdelt',chokes:'fChoke'};const cm={quakes:'on-r',fires:'on-o',gdelt:'on',chokes:'on-y'};document.getElementById(bm[l]).classList.toggle(cm[l]);if(l==='quakes'){state.quakeMarkers.forEach(m=>{state.layers.quakes?m.addTo(map):map.removeLayer(m);});}if(l==='fires'){state.fireMarkers.forEach(m=>{state.layers.fires?m.addTo(map):map.removeLayer(m);});}if(l==='chokes'){state.chokeMarkers.forEach(m=>{state.layers.chokes?m.addTo(map):map.removeLayer(m);});}}
+function togLayer(l){state.layers[l]=!state.layers[l];const bm={quakes:'fQuake',fires:'fFire',gdelt:'fGdelt',chokes:'fChoke',jamming:'fJam'};const cm={quakes:'on-r',fires:'on-o',gdelt:'on',chokes:'on-y',jamming:'on-p'};document.getElementById(bm[l]).classList.toggle(cm[l]);if(l==='quakes'){state.quakeMarkers.forEach(m=>{state.layers.quakes?m.addTo(map):map.removeLayer(m);});}if(l==='fires'){state.fireMarkers.forEach(m=>{state.layers.fires?m.addTo(map):map.removeLayer(m);});}if(l==='chokes'){state.chokeMarkers.forEach(m=>{state.layers.chokes?m.addTo(map):map.removeLayer(m);});}if(l==='jamming'){state.jamMarkers.forEach(m=>{state.layers.jamming?m.addTo(map):map.removeLayer(m);});}}
 function applyFilters(){state.countryFilter=document.getElementById('countryFilter').value;renderMarkers();renderAssetList();}
 function switchTab(name,btn){document.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('active'));document.querySelectorAll('.tab-content').forEach(c=>c.classList.remove('active'));btn.classList.add('active');document.getElementById('tab'+name.charAt(0).toUpperCase()+name.slice(1)).classList.add('active');}
 
@@ -1670,9 +1614,10 @@ document.addEventListener('keydown',e=>{
   if(e.key==='?')document.getElementById('shortcutsOverlay').classList.toggle('show');
   if(e.key==='/'){e.preventDefault();document.getElementById('searchInput').focus();}
   if(e.key==='r'||e.key==='R'){fetchAll();fetchEarthquakes();fetchGDELT();fetchNews();fetchFIRMS();}
+  if(e.key==='s'||e.key==='S')generateSitrep();
   if(e.key==='g'||e.key==='G')flyTo(20,0,2);
   if(e.key==='f'||e.key==='F'){if(!document.fullscreenElement)document.documentElement.requestFullscreen();else document.exitFullscreen();}
-  if(e.key>='1'&&e.key<='6'){const tabs=['assets','alerts','intel','threats','events','chokes'];const idx=parseInt(e.key)-1;const btns=document.querySelectorAll('.tab-btn');switchTab(tabs[idx],btns[idx]);}
+  if(e.key>='1'&&e.key<='7'){const tabs=['assets','alerts','intel','threats','events','chokes','timeline'];const idx=parseInt(e.key)-1;const btns=document.querySelectorAll('.tab-btn');if(btns[idx])switchTab(tabs[idx],btns[idx]);}
 });
 document.getElementById('searchInput').addEventListener('input',function(){state.searchTerm=this.value.trim();renderMarkers();renderAssetList();});
 map.on('moveend',renderMarkers);map.on('zoomend',renderMarkers);
@@ -1695,6 +1640,7 @@ async function fetchAll(){
     await Promise.allSettled([fetchADSBMil(),fetchADSBRegion(),fetchOpenSky(),fetchADSBOne(),fetchLADD(),fetchAIS(),fetchVFGlobal(),fetchOSINT(),fetchSpaceWeather(),fetchSevereWeather()]);
   }catch(e){console.warn('fetchAll error:',e);}
   try{
+    checkSanctioned();detectDarkVessels();checkGeofences();
     updateStats();renderMarkers();renderAssetList();generateAlerts();calculateDefcon();updateThreatBanner();cleanStaleAssets();
   }catch(e){console.warn('Render error:',e);}
   document.getElementById('mainStatus').textContent='ACTIVE \u2014 '+state.assets.size+' TRACKED';
@@ -1713,6 +1659,322 @@ function cleanStaleAssets(){
 }
 setInterval(()=>{state.countdown--;if(state.countdown<=0){state.countdown=state.refreshInterval;fetchAll();}document.getElementById('countdown').textContent=state.countdown+'s';},1000);
 setInterval(cleanStaleAssets,120000);
+
+// ============ SPY AGENCY MODULES v19 ============
+
+// --- MAP MODE SWITCHER ---
+const MAP_TILES={
+  dark:L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',{maxZoom:19,subdomains:'abcd'}),
+  satellite:L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',{maxZoom:19,attribution:'Esri'}),
+  nvg:L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_nolabels/{z}/{x}/{y}{r}.png',{maxZoom:19,subdomains:'abcd'}),
+  topo:L.tileLayer('https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png',{maxZoom:17,subdomains:'abc'})
+};
+let currentMapMode='dark';
+function setMapMode(mode){
+  if(MAP_TILES[currentMapMode])map.removeLayer(MAP_TILES[currentMapMode]);
+  currentMapMode=mode;
+  MAP_TILES[mode].addTo(map);
+  if(mode==='nvg'){document.getElementById('map').style.filter='hue-rotate(80deg) saturate(2) brightness(0.7)';}
+  else{document.getElementById('map').style.filter='';}
+  document.querySelectorAll('.map-mode-btn').forEach(b=>b.classList.remove('active'));
+  document.getElementById('mm'+mode.charAt(0).toUpperCase()+mode.slice(1)).classList.add('active');
+}
+
+// --- GPS JAMMING ZONES ---
+const GPS_JAM_ZONES=[
+  {name:'Eastern Ukraine/Donbas',lat:48.5,lon:38.0,radius:150000,severity:'SEVERE',desc:'Persistent Russian GPS/GLONASS jamming across front lines. Affects civilian aviation.'},
+  {name:'Kaliningrad',lat:54.7,lon:20.5,radius:100000,severity:'HIGH',desc:'Russian exclave. Persistent jamming affecting Baltic states, Poland, Scandinavia.'},
+  {name:'Eastern Mediterranean',lat:35.0,lon:34.0,radius:120000,severity:'HIGH',desc:'Jamming from Syria/Russian Khmeimim base. Affects Cyprus, Lebanon, Turkey.'},
+  {name:'Persian Gulf',lat:26.5,lon:54.0,radius:80000,severity:'MODERATE',desc:'Iranian GPS spoofing near Strait of Hormuz. Affects maritime navigation.'},
+  {name:'Northern Black Sea',lat:44.5,lon:33.5,radius:100000,severity:'SEVERE',desc:'Russian naval jamming. Crimea-based. Affects Ukraine, Romania, Turkey.'},
+  {name:'Baltic Sea',lat:58.0,lon:22.0,radius:80000,severity:'MODERATE',desc:'Intermittent jamming attributed to Russia. Affects Estonia, Latvia, Finland.'},
+  {name:'Northern Norway/Finland',lat:69.5,lon:28.0,radius:60000,severity:'MODERATE',desc:'Russian border jamming from Kola Peninsula. Affects Scandinavian airspace.'},
+  {name:'South China Sea',lat:16.0,lon:112.0,radius:100000,severity:'MODERATE',desc:'PLA jamming near contested islands. Affects Philippines, Vietnam maritime traffic.'},
+  {name:'Korean DMZ',lat:38.0,lon:127.0,radius:50000,severity:'HIGH',desc:'North Korean GPS jamming operations targeting South Korea.'},
+  {name:'India-Pakistan Border',lat:32.0,lon:74.5,radius:60000,severity:'MODERATE',desc:'Military jamming during tensions. Affects Jammu & Kashmir region.'},
+];
+state.jamMarkers=[];state.layers.jamming=true;
+function renderJammingZones(){
+  feedWait('f17');
+  state.jamMarkers.forEach(m=>map.removeLayer(m));state.jamMarkers=[];
+  if(!state.layers.jamming){feedDot('f17',true);return;}
+  for(const jz of GPS_JAM_ZONES){
+    const color=jz.severity==='SEVERE'?'#ff0044':jz.severity==='HIGH'?'#aa66ff':'#8855cc';
+    const fillOp=jz.severity==='SEVERE'?0.12:jz.severity==='HIGH'?0.08:0.05;
+    const m=L.circle([jz.lat,jz.lon],{radius:jz.radius,color,fillColor:color,fillOpacity:fillOp,weight:1.5,opacity:0.5,dashArray:'6 4',className:'jam-pulse'});
+    m.bindTooltip('\u26a0 GPS JAM: '+jz.name+' ['+jz.severity+']',{className:'jam-tooltip',direction:'top'});
+    m.on('click',()=>{map.setView([jz.lat,jz.lon],7);addAlert('purple',`GPS JAMMING: ${jz.name} — ${jz.desc}`);});
+    m.addTo(map);state.jamMarkers.push(m);
+  }
+  document.getElementById('sJam').textContent=GPS_JAM_ZONES.length;
+  state.sources.jamming=GPS_JAM_ZONES.length;feedDot('f17',true);
+}
+
+// --- SANCTIONED VESSELS (OFAC/EU known sanctioned MMSIs) ---
+const SANCTIONED_MMSI=new Set([
+  // Iran-linked tankers (dark fleet)
+  '256573000','256399000','422207700','422514000','422209000',
+  // Russia sanctions-evading tankers
+  '273210000','273356000','273357000','273358000','273359000',
+  // North Korea linked
+  '445538000','445539000','445078000','445127000','445167000',
+  // Syria linked
+  '468910000','468911000',
+  // Venezuela-linked
+  '775123000','775124000',
+  // Russia shadow fleet
+  '273410000','273411000','273412000','273413000','273414000',
+  '636020429','636020430','636092796','636092797','636018969',
+  '538009420','538009421','538009422','538006620','538006621',
+]);
+state.sanctionedCount=0;
+function checkSanctioned(){
+  feedWait('f18');
+  let count=0;
+  for(const[id,a]of state.assets){
+    const mmsi=a.hex;
+    if(SANCTIONED_MMSI.has(mmsi)){
+      a._sanctioned=true;count++;
+      addAlert('red',`SANCTIONED VESSEL: ${a.cs} (MMSI: ${mmsi}) detected at ${a.lat.toFixed(2)}N, ${a.lon.toFixed(2)}E`);
+      flashAlert();
+    }else{a._sanctioned=false;}
+  }
+  state.sanctionedCount=count;
+  document.getElementById('sSanctioned').textContent=count;
+  feedDot('f18',true);state.sources.sanctions=1;
+}
+
+// --- DARK VESSEL DETECTION ---
+state.darkVessels=new Map(); // mmsi -> {lastSeen, lastLat, lastLon, name}
+state.darkCount=0;
+function detectDarkVessels(){
+  const now=Date.now();
+  const darkThreshold=300000; // 5 minutes — ship went dark if not seen
+  let darkCount=0;
+  // Check all vessels for dark status
+  for(const[id,a]of state.assets){
+    if(a.type!=='ship')continue;
+    const mmsi=a.hex;
+    if(a._lastSeen&&(now-a._lastSeen)>darkThreshold){
+      // Vessel hasn't updated in >5 min = potentially dark
+      if(!state.darkVessels.has(mmsi)){
+        state.darkVessels.set(mmsi,{lastSeen:a._lastSeen,lastLat:a.lat,lastLon:a.lon,name:a.cs,cat:a.cat,source:a.source});
+        // Only alert for interesting vessels (military, tanker, sanctioned)
+        if(a.cat==='military'||a.cat==='coastguard'||a._sanctioned||PRIORITY_CATS.has(a.cat)){
+          addAlert('red',`DARK VESSEL: ${a.cs} went AIS-silent. Last pos: ${a.lat.toFixed(2)}N, ${a.lon.toFixed(2)}E`);
+          flashAlert();
+        }
+      }
+      darkCount++;
+    }else{
+      // Vessel is transmitting again
+      if(state.darkVessels.has(mmsi)){
+        const dv=state.darkVessels.get(mmsi);
+        const darkMins=Math.round((now-dv.lastSeen)/60000);
+        if(darkMins>10){addAlert('orange',`VESSEL REAPPEARED: ${a.cs} back on AIS after ${darkMins}m dark`);}
+        state.darkVessels.delete(mmsi);
+      }
+    }
+  }
+  state.darkCount=darkCount;
+  document.getElementById('sDark').textContent=darkCount;
+}
+
+// --- GEOFENCE ALERT ZONES ---
+state.geofences=[];state.geofenceLayers=[];
+let geofenceDrawing=false,geofencePoints=[];
+function toggleGeofenceDraw(){
+  geofenceDrawing=!geofenceDrawing;
+  document.getElementById('geoDrawBtn').classList.toggle('drawing',geofenceDrawing);
+  if(geofenceDrawing){
+    geofencePoints=[];
+    map.getContainer().style.cursor='crosshair';
+    addAlert('green','GEOFENCE: Click map to place zone points. Click first point to close.');
+  }else{
+    map.getContainer().style.cursor='';
+  }
+}
+map.on('click',function(e){
+  if(!geofenceDrawing)return;
+  if(geofencePoints.length>2){
+    // Check if clicking near first point to close
+    const first=geofencePoints[0];
+    const dist=Math.sqrt(Math.pow(e.latlng.lat-first.lat,2)+Math.pow(e.latlng.lng-first.lng,2));
+    if(dist<0.5){
+      // Close the geofence
+      const poly=L.polygon(geofencePoints,{color:'#ff3355',fillColor:'#ff3355',fillOpacity:0.08,weight:2,dashArray:'8 4'});
+      poly.bindTooltip('GEOFENCE ZONE '+(state.geofences.length+1),{className:'quake-tooltip'});
+      poly.addTo(map);
+      state.geofences.push({points:[...geofencePoints],layer:poly});
+      state.geofenceLayers.push(poly);
+      document.getElementById('sGeo').textContent=state.geofences.length;
+      addAlert('green',`GEOFENCE #${state.geofences.length} created with ${geofencePoints.length} vertices`);
+      geofencePoints=[];geofenceDrawing=false;
+      document.getElementById('geoDrawBtn').classList.remove('drawing');
+      map.getContainer().style.cursor='';
+      return;
+    }
+  }
+  geofencePoints.push(e.latlng);
+});
+function clearGeofences(){
+  state.geofenceLayers.forEach(l=>map.removeLayer(l));
+  state.geofences=[];state.geofenceLayers=[];
+  document.getElementById('sGeo').textContent='0';
+  addAlert('green','All geofences cleared');
+}
+function checkGeofences(){
+  for(let gi=0;gi<state.geofences.length;gi++){
+    const gf=state.geofences[gi];
+    const poly=gf.layer;
+    for(const[id,a]of state.assets){
+      if(!a.lat||!a.lon)continue;
+      if(poly.getBounds().contains([a.lat,a.lon])){
+        // Simple bounding box check (full polygon containment is expensive)
+        if(a.cat==='military'||a._sanctioned){
+          if(!a._geoAlerted){
+            a._geoAlerted=gi;
+            addAlert('red',`GEOFENCE BREACH: ${a.cs} (${a.cat}) entered zone #${gi+1}`);
+            flashAlert();
+          }
+        }
+      }else{
+        if(a._geoAlerted===gi)delete a._geoAlerted;
+      }
+    }
+  }
+}
+
+// --- INCIDENT TIMELINE ---
+state.timeline=[];
+function addTimelineEvent(level,text,lat,lon){
+  state.timeline.unshift({time:new Date().toISOString(),level,text,lat:lat||null,lon:lon||null});
+  if(state.timeline.length>100)state.timeline.length=100;
+  renderTimeline();
+}
+function renderTimeline(){
+  const el=document.getElementById('tabTimeline');
+  if(!state.timeline.length){
+    el.innerHTML='<div style="padding:12px;color:var(--td);font-size:11px;text-align:center">No incidents logged</div>';
+    return;
+  }
+  let html='<div style="padding:8px 12px;border-bottom:1px solid var(--brd);font-size:10px;color:var(--tm);font-family:Orbitron;letter-spacing:2px">INCIDENT LOG — '+state.timeline.length+' EVENTS</div>';
+  for(const ev of state.timeline.slice(0,60)){
+    const t=new Date(ev.time);
+    const ts=t.toISOString().slice(11,19)+'Z';
+    const lvlCls=ev.level==='critical'?'critical':ev.level==='warning'?'warning':'info';
+    const onclick=ev.lat?` onclick="flyTo(${ev.lat},${ev.lon},8)" style="cursor:pointer"`:' style="cursor:default"';
+    html+=`<div class="timeline-item ${lvlCls}"${onclick}><div style="font-family:Orbitron;font-size:9px;color:var(--tm);letter-spacing:1px;margin-bottom:2px">${ts}</div><div style="color:var(--th);font-size:11px;line-height:1.4">${ev.text}</div></div>`;
+  }
+  el.innerHTML=html;
+}
+// Hook into alert system to feed timeline
+const _origAddAlert=addAlert;
+addAlert=function(level,text){
+  _origAddAlert(level,text);
+  const tlLevel=level==='red'?'critical':level==='orange'?'warning':'info';
+  state.timeline.unshift({time:new Date().toISOString(),level:tlLevel,text});
+  if(state.timeline.length>100)state.timeline.length=100;
+};
+
+// --- SITREP GENERATOR ---
+function generateSitrep(){
+  const now=new Date();
+  const ts=now.toISOString().replace('T',' ').slice(0,19)+' UTC';
+  const assets=state.assets.size;
+  const sources=Object.values(state.sources).filter(v=>v>0).length;
+  let sitrep='';
+  sitrep+='═══════════════════════════════════════════\n';
+  sitrep+='  SENTINEL INTELLIGENCE SITREP\n';
+  sitrep+='  Classification: UNCLASSIFIED // OSINT\n';
+  sitrep+='  Generated: '+ts+'\n';
+  sitrep+='  DEFCON: '+state.defcon+' | Threat Score: '+state.threatScore+'\n';
+  sitrep+='═══════════════════════════════════════════\n\n';
+  // FORCE DISPOSITION
+  sitrep+='1. FORCE DISPOSITION\n';
+  sitrep+='───────────────────\n';
+  let mil=0,cg=0,pol=0,ships=0,tankers=0,cargo=0,dark=state.darkCount;
+  for(const a of state.assets.values()){if(a.cat==='military')mil++;if(a.cat==='coastguard')cg++;if(a.cat==='police'||a.cat==='government')pol++;if(a.type==='ship')ships++;if(a.cat==='tanker')tankers++;if(a.cat==='cargo')cargo++;}
+  sitrep+='  Total Assets Tracked: '+assets+' from '+sources+' sources\n';
+  sitrep+='  Military:     '+mil+'\n';
+  sitrep+='  Coast Guard:  '+cg+'\n';
+  sitrep+='  Law Enforce:  '+pol+'\n';
+  sitrep+='  Vessels:      '+ships+' (Tankers: '+tankers+', Cargo: '+cargo+')\n';
+  sitrep+='  Dark Vessels:  '+dark+' (AIS silent >5min)\n';
+  sitrep+='  Sanctioned:    '+state.sanctionedCount+' detected\n\n';
+  // THREAT ASSESSMENT
+  sitrep+='2. THREAT ASSESSMENT\n';
+  sitrep+='────────────────────\n';
+  const criticals=Object.entries(RISK_DATA).filter(([,v])=>v.level==='CRITICAL');
+  const highs=Object.entries(RISK_DATA).filter(([,v])=>v.level==='HIGH');
+  sitrep+='  CRITICAL ZONES ('+criticals.length+'):\n';
+  for(const[cc,v]of criticals)sitrep+='    - '+(CN[cc]||cc)+': '+v.desc+'\n';
+  sitrep+='  HIGH RISK ZONES ('+highs.length+'):\n';
+  for(const[cc,v]of highs)sitrep+='    - '+(CN[cc]||cc)+': '+v.desc+'\n';
+  sitrep+='\n';
+  // MARITIME CHOKEPOINTS
+  sitrep+='3. MARITIME CHOKEPOINTS\n';
+  sitrep+='───────────────────────\n';
+  for(const cp of CHOKEPOINTS){
+    const icon=cp.status==='CRITICAL'?'[!!]':cp.status==='ELEVATED'?'[!]':'[OK]';
+    sitrep+='  '+icon+' '+cp.name+' — '+cp.status+' ('+cp.traffic+')\n';
+  }
+  sitrep+='\n';
+  // SEISMIC/NATURAL EVENTS
+  sitrep+='4. NATURAL EVENTS\n';
+  sitrep+='──────────────────\n';
+  sitrep+='  Earthquakes (M2.5+): '+state.earthquakes.length+'\n';
+  const bigQuakes=state.earthquakes.filter(q=>q.mag>=5);
+  if(bigQuakes.length)for(const q of bigQuakes)sitrep+='    - M'+q.mag.toFixed(1)+' '+q.place+'\n';
+  sitrep+='  Active Wildfires: '+state.fires.length+'\n';
+  sitrep+='  Severe WX Alerts: '+state.wxAlerts.length+'\n\n';
+  // SPACE WEATHER
+  sitrep+='5. SPACE WEATHER\n';
+  sitrep+='─────────────────\n';
+  sitrep+='  Kp Index: '+state.spaceWeather.kp.toFixed(0)+' ('+(state.spaceWeather.kp>=5?'STORM':'NOMINAL')+')\n';
+  sitrep+='  Geo Storm: '+(state.spaceWeather.geoStorm||'G0')+'\n';
+  sitrep+='  Radio Blackout: '+(state.spaceWeather.radioBlackout||'R0')+'\n';
+  sitrep+='  Solar Wind: '+(state.spaceWeather.solarWind||'--')+' km/s\n\n';
+  // GPS JAMMING
+  sitrep+='6. GPS INTERFERENCE\n';
+  sitrep+='────────────────────\n';
+  const severeJam=GPS_JAM_ZONES.filter(j=>j.severity==='SEVERE');
+  const highJam=GPS_JAM_ZONES.filter(j=>j.severity==='HIGH');
+  sitrep+='  Active Zones: '+GPS_JAM_ZONES.length+' ('+severeJam.length+' SEVERE, '+highJam.length+' HIGH)\n';
+  for(const jz of GPS_JAM_ZONES)sitrep+='    ['+jz.severity+'] '+jz.name+'\n';
+  sitrep+='\n';
+  // RECENT ALERTS
+  sitrep+='7. RECENT ALERTS (last 10)\n';
+  sitrep+='──────────────────────────\n';
+  for(const a of state.alerts.slice(0,10))sitrep+='  '+a.time+' | '+a.text+'\n';
+  sitrep+='\n═══════════════════════════════════════════\n';
+  sitrep+='  END SITREP // SENTINEL COMMAND v19\n';
+  sitrep+='═══════════════════════════════════════════\n';
+  document.getElementById('sitrepBody').textContent=sitrep;
+  document.getElementById('sitrepOverlay').classList.add('show');
+}
+function closeSitrep(){document.getElementById('sitrepOverlay').classList.remove('show');}
+function copySitrep(){
+  const text=document.getElementById('sitrepBody').textContent;
+  navigator.clipboard.writeText(text).then(()=>addAlert('green','SITREP copied to clipboard')).catch(()=>{});
+}
+
+// --- ENHANCED DOSSIER (target detail panel) ---
+const _origShowDetail=showDetail;
+showDetail=function(id){
+  _origShowDetail(id);
+  const a=state.assets.get(id);if(!a)return;
+  // Add sanctioned badge to detail panel
+  if(a._sanctioned){
+    const heading=document.querySelector('#detailL .detail-heading');
+    if(heading)heading.innerHTML+=' <span style="font-size:9px;color:#ff0044;border:1px solid #ff0044;padding:2px 6px;border-radius:2px;animation:sanctioned-flash 1s infinite">SANCTIONED</span>';
+  }
+  // Add dark vessel status
+  if(state.darkVessels.has(a.hex)){
+    const heading=document.querySelector('#detailL .detail-heading');
+    if(heading)heading.innerHTML+=' <span style="font-size:9px;color:var(--r);border:1px solid var(--r);padding:2px 6px;border-radius:2px;animation:dark-blink 1.5s infinite">AIS DARK</span>';
+  }
+};
 
 // --- BOOT SEQUENCE ---
 function dismissLoader(){const el=document.getElementById('loader');if(el&&!el.classList.contains('done')){document.getElementById('loadText').textContent='ALL SYSTEMS ONLINE';document.getElementById('loadBar').style.width='100%';setTimeout(()=>el.classList.add('done'),500);}}
@@ -1755,9 +2017,6 @@ async function boot(){
     await Promise.race([fetchVFGlobal(),new Promise(r=>setTimeout(r,10000))]);
     bootSysRow(10,true);
 
-    txt.textContent='CONNECTING AIS GLOBAL STREAM...';bar.style.width='68%';
-    connectAISStream();
-    bootSysRow(7,true);
     await new Promise(r=>setTimeout(r,400));
 
     txt.textContent='SCANNING SPACE WEATHER...';bar.style.width='76%';
@@ -1768,8 +2027,23 @@ async function boot(){
     await Promise.race([fetchSevereWeather(),new Promise(r=>setTimeout(r,8000))]);
     bootSysRow(9,true);
 
-    txt.textContent='COMPUTING THREAT MATRIX...';bar.style.width='92%';
-    renderThreats();renderChokepoints();calculateDefcon();updateThreatBanner();
+    txt.textContent='INITIALIZING GPS JAMMING DETECTION...';bar.style.width='88%';
+    renderJammingZones();
+    bootSysRow(11,true);
+    await new Promise(r=>setTimeout(r,300));
+
+    txt.textContent='LOADING SANCTIONS DATABASE...';bar.style.width='91%';
+    checkSanctioned();
+    bootSysRow(12,true);
+    await new Promise(r=>setTimeout(r,300));
+
+    txt.textContent='ACTIVATING DARK VESSEL TRACKER...';bar.style.width='93%';
+    detectDarkVessels();
+    bootSysRow(13,true);
+    await new Promise(r=>setTimeout(r,300));
+
+    txt.textContent='COMPUTING THREAT MATRIX...';bar.style.width='96%';
+    renderThreats();renderChokepoints();calculateDefcon();updateThreatBanner();renderTimeline();
     bootSysRow(6,true);
     await new Promise(r=>setTimeout(r,400));
 
@@ -1788,15 +2062,10 @@ setInterval(fetchSevereWeather,300000);
 setInterval(updateThreatBanner,60000);
 setInterval(fetchVFGlobal,45000); // VF global ships every 45s (rotates 3 regions per cycle)
 setInterval(()=>{calculateDefcon();},120000);
-// Auto-retry AISStream every 60s if disconnected and retries exhausted
-setInterval(()=>{
-  if(!aisWS||aisWS.readyState===3){
-    if(aisRetry>=aisMaxRetries){
-      aisRetry=0;console.log('AIS STREAM: Auto-retry cycle restarting...');
-      connectAISStream();
-    }
-  }
-},60000);
+setInterval(detectDarkVessels,60000); // Check for dark vessels every minute
+setInterval(checkSanctioned,120000); // Recheck sanctions every 2 min
+setInterval(checkGeofences,30000); // Check geofence breaches every 30s
+setInterval(renderTimeline,60000); // Refresh timeline
 </script>
 </body>
 </html>
