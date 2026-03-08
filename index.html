@@ -565,7 +565,7 @@ const BOOT_START=Date.now();
 
 // --- MAP ---
 const map = L.map('map',{center:[25,20],zoom:3,zoomControl:false,attributionControl:false,preferCanvas:true});
-L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',{maxZoom:19,subdomains:'abcd'}).addTo(map);
+const _baseTile=L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',{maxZoom:19,subdomains:'abcd'}).addTo(map);
 
 // --- STATE ---
 const CORS_PROXIES=[
@@ -1639,10 +1639,8 @@ async function fetchAll(){
   try{
     await Promise.allSettled([fetchADSBMil(),fetchADSBRegion(),fetchOpenSky(),fetchADSBOne(),fetchLADD(),fetchAIS(),fetchVFGlobal(),fetchOSINT(),fetchSpaceWeather(),fetchSevereWeather()]);
   }catch(e){console.warn('fetchAll error:',e);}
-  try{
-    checkSanctioned();detectDarkVessels();checkGeofences();
-    updateStats();renderMarkers();renderAssetList();generateAlerts();calculateDefcon();updateThreatBanner();cleanStaleAssets();
-  }catch(e){console.warn('Render error:',e);}
+  try{updateStats();renderMarkers();renderAssetList();generateAlerts();calculateDefcon();updateThreatBanner();cleanStaleAssets();}catch(e){console.warn('Render error:',e);}
+  try{checkSanctioned();detectDarkVessels();checkGeofences();}catch(e){console.warn('v19 module error:',e);}
   document.getElementById('mainStatus').textContent='ACTIVE \u2014 '+state.assets.size+' TRACKED';
   document.getElementById('mainDot').style.background='var(--g)';document.getElementById('lastUp').textContent=ts();
   state.countdown=state.refreshInterval;
@@ -1664,14 +1662,14 @@ setInterval(cleanStaleAssets,120000);
 
 // --- MAP MODE SWITCHER ---
 const MAP_TILES={
-  dark:L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',{maxZoom:19,subdomains:'abcd'}),
+  dark:_baseTile,
   satellite:L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',{maxZoom:19,attribution:'Esri'}),
   nvg:L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_nolabels/{z}/{x}/{y}{r}.png',{maxZoom:19,subdomains:'abcd'}),
   topo:L.tileLayer('https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png',{maxZoom:17,subdomains:'abc'})
 };
 let currentMapMode='dark';
 function setMapMode(mode){
-  if(MAP_TILES[currentMapMode])map.removeLayer(MAP_TILES[currentMapMode]);
+  if(MAP_TILES[currentMapMode]&&map.hasLayer(MAP_TILES[currentMapMode]))map.removeLayer(MAP_TILES[currentMapMode]);
   currentMapMode=mode;
   MAP_TILES[mode].addTo(map);
   if(mode==='nvg'){document.getElementById('map').style.filter='hue-rotate(80deg) saturate(2) brightness(0.7)';}
@@ -1727,7 +1725,7 @@ const SANCTIONED_MMSI=new Set([
   '636020429','636020430','636092796','636092797','636018969',
   '538009420','538009421','538009422','538006620','538006621',
 ]);
-state.sanctionedCount=0;
+state.sanctionedCount=0;state._sanctionedAlerted=new Set();
 function checkSanctioned(){
   feedWait('f18');
   let count=0;
@@ -1735,8 +1733,11 @@ function checkSanctioned(){
     const mmsi=a.hex;
     if(SANCTIONED_MMSI.has(mmsi)){
       a._sanctioned=true;count++;
-      addAlert('red',`SANCTIONED VESSEL: ${a.cs} (MMSI: ${mmsi}) detected at ${a.lat.toFixed(2)}N, ${a.lon.toFixed(2)}E`);
-      flashAlert();
+      if(!state._sanctionedAlerted.has(mmsi)){
+        state._sanctionedAlerted.add(mmsi);
+        addAlert('red',`SANCTIONED VESSEL: ${a.cs} (MMSI: ${mmsi}) detected at ${a.lat.toFixed(2)}N, ${a.lon.toFixed(2)}E`);
+        flashAlert();
+      }
     }else{a._sanctioned=false;}
   }
   state.sanctionedCount=count;
@@ -1758,9 +1759,10 @@ function detectDarkVessels(){
     if(a._lastSeen&&(now-a._lastSeen)>darkThreshold){
       // Vessel hasn't updated in >5 min = potentially dark
       if(!state.darkVessels.has(mmsi)){
-        state.darkVessels.set(mmsi,{lastSeen:a._lastSeen,lastLat:a.lat,lastLon:a.lon,name:a.cs,cat:a.cat,source:a.source});
-        // Only alert for interesting vessels (military, tanker, sanctioned)
-        if(a.cat==='military'||a.cat==='coastguard'||a._sanctioned||PRIORITY_CATS.has(a.cat)){
+        state.darkVessels.set(mmsi,{lastSeen:a._lastSeen,lastLat:a.lat,lastLon:a.lon,name:a.cs,cat:a.cat,source:a.source,alerted:false});
+        // Only alert for interesting vessels (military, tanker, sanctioned) — ONCE
+        if(!state.darkVessels.get(mmsi).alerted&&(a.cat==='military'||a.cat==='coastguard'||a._sanctioned||PRIORITY_CATS.has(a.cat))){
+          state.darkVessels.get(mmsi).alerted=true;
           addAlert('red',`DARK VESSEL: ${a.cs} went AIS-silent. Last pos: ${a.lat.toFixed(2)}N, ${a.lon.toFixed(2)}E`);
           flashAlert();
         }
@@ -1824,6 +1826,7 @@ function clearGeofences(){
   addAlert('green','All geofences cleared');
 }
 function checkGeofences(){
+  if(!state.geofences.length)return;
   for(let gi=0;gi<state.geofences.length;gi++){
     const gf=state.geofences[gi];
     const poly=gf.layer;
@@ -1875,6 +1878,7 @@ addAlert=function(level,text){
   const tlLevel=level==='red'?'critical':level==='orange'?'warning':'info';
   state.timeline.unshift({time:new Date().toISOString(),level:tlLevel,text});
   if(state.timeline.length>100)state.timeline.length=100;
+  // Timeline renders on its own 60s interval — no DOM rebuild per alert
 };
 
 // --- SITREP GENERATOR ---
@@ -2030,22 +2034,20 @@ async function boot(){
     txt.textContent='INITIALIZING GPS JAMMING DETECTION...';bar.style.width='88%';
     renderJammingZones();
     bootSysRow(11,true);
-    await new Promise(r=>setTimeout(r,300));
+    await new Promise(r=>setTimeout(r,150));
 
     txt.textContent='LOADING SANCTIONS DATABASE...';bar.style.width='91%';
-    checkSanctioned();
     bootSysRow(12,true);
-    await new Promise(r=>setTimeout(r,300));
+    await new Promise(r=>setTimeout(r,150));
 
     txt.textContent='ACTIVATING DARK VESSEL TRACKER...';bar.style.width='93%';
-    detectDarkVessels();
     bootSysRow(13,true);
-    await new Promise(r=>setTimeout(r,300));
+    await new Promise(r=>setTimeout(r,150));
 
     txt.textContent='COMPUTING THREAT MATRIX...';bar.style.width='96%';
-    renderThreats();renderChokepoints();calculateDefcon();updateThreatBanner();renderTimeline();
+    renderThreats();renderChokepoints();calculateDefcon();updateThreatBanner();
     bootSysRow(6,true);
-    await new Promise(r=>setTimeout(r,400));
+    await new Promise(r=>setTimeout(r,200));
 
   }catch(e){console.warn('Boot error:',e);}
   dismissLoader();
@@ -2064,7 +2066,7 @@ setInterval(fetchVFGlobal,45000); // VF global ships every 45s (rotates 3 region
 setInterval(()=>{calculateDefcon();},120000);
 setInterval(detectDarkVessels,60000); // Check for dark vessels every minute
 setInterval(checkSanctioned,120000); // Recheck sanctions every 2 min
-setInterval(checkGeofences,30000); // Check geofence breaches every 30s
+setInterval(checkGeofences,120000); // Check geofence breaches every 2 min
 setInterval(renderTimeline,60000); // Refresh timeline
 </script>
 </body>
