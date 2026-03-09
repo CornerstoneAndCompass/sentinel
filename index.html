@@ -750,8 +750,8 @@ window.addEventListener('unhandledrejection',e=>{console.warn('Unhandled rejecti
 const BOOT_START=Date.now();
 
 // --- MAP ---
-const map = L.map('map',{center:[25,20],zoom:3,zoomControl:false,attributionControl:false,preferCanvas:true,minZoom:2,maxBounds:[[-85,-180],[85,180]],maxBoundsViscosity:1.0,worldCopyJump:false});
-const _baseTile=L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',{maxZoom:19,subdomains:'abcd',noWrap:true,bounds:[[-85,-180],[85,180]]}).addTo(map);
+const map = L.map('map',{center:[25,20],zoom:3,zoomControl:false,attributionControl:false,preferCanvas:true,minZoom:1,worldCopyJump:true,maxBoundsViscosity:0});
+const _baseTile=L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',{maxZoom:19,subdomains:'abcd'}).addTo(map);
 
 // --- STATE ---
 const CORS_PROXIES=[
@@ -2523,9 +2523,9 @@ setInterval(cleanStaleAssets,120000);
 // --- MAP MODE SWITCHER ---
 const MAP_TILES={
   dark:_baseTile,
-  satellite:L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',{maxZoom:19,attribution:'Esri',noWrap:true,bounds:[[-85,-180],[85,180]]}),
-  nvg:L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_nolabels/{z}/{x}/{y}{r}.png',{maxZoom:19,subdomains:'abcd',noWrap:true,bounds:[[-85,-180],[85,180]]}),
-  topo:L.tileLayer('https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png',{maxZoom:17,subdomains:'abc',noWrap:true,bounds:[[-85,-180],[85,180]]})
+  satellite:L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',{maxZoom:19,attribution:'Esri'}),
+  nvg:L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_nolabels/{z}/{x}/{y}{r}.png',{maxZoom:19,subdomains:'abcd'}),
+  topo:L.tileLayer('https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png',{maxZoom:17,subdomains:'abc'})
 };
 let currentMapMode='dark';
 function setMapMode(mode){
