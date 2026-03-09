@@ -81,14 +81,21 @@ html,body{width:100%;height:100%;overflow:hidden;background:#050a12;font-family:
 .co{color:var(--o);text-shadow:0 0 8px var(--od)}
 .cp{color:var(--p);text-shadow:0 0 8px var(--pd)}
 .cr{color:var(--r);text-shadow:0 0 8px var(--rd)}
-.fbtn{background:transparent;border:1px solid var(--brd);color:var(--tm);font-family:'Share Tech Mono',monospace;font-size:11px;padding:5px 9px;cursor:pointer;border-radius:3px;transition:all 0.2s;margin:2px}
-.fbtn:hover{background:rgba(0,232,255,0.06);border-color:var(--c)}
-.fbtn.on{background:var(--cd);border-color:var(--c);color:var(--c)}
-.fbtn.on-y{background:var(--yd);border-color:var(--y);color:var(--y)}
-.fbtn.on-o{background:var(--od);border-color:var(--o);color:var(--o)}
-.fbtn.on-p{background:var(--pd);border-color:var(--p);color:var(--p)}
-.fbtn.on-g{background:var(--gd);border-color:var(--g);color:var(--g)}
-.fbtn.on-r{background:var(--rd);border-color:var(--r);color:var(--r)}
+.fbtn{background:transparent;border:1px solid var(--brd);color:var(--td);font-family:'Share Tech Mono',monospace;font-size:11px;padding:5px 9px;cursor:pointer;border-radius:3px;transition:all 0.2s;margin:2px;position:relative;opacity:0.5}
+.fbtn:hover{background:rgba(0,232,255,0.06);border-color:var(--c);opacity:0.8}
+.fbtn.on{background:var(--cd);border-color:var(--c);color:var(--c);opacity:1}
+.fbtn.on-y{background:var(--yd);border-color:var(--y);color:var(--y);opacity:1}
+.fbtn.on-o{background:var(--od);border-color:var(--o);color:var(--o);opacity:1}
+.fbtn.on-p{background:var(--pd);border-color:var(--p);color:var(--p);opacity:1}
+.fbtn.on-g{background:var(--gd);border-color:var(--g);color:var(--g);opacity:1}
+.fbtn.on-r{background:var(--rd);border-color:var(--r);color:var(--r);opacity:1}
+.fbtn::before{content:'';display:inline-block;width:6px;height:6px;border-radius:50%;background:#333;margin-right:5px;vertical-align:middle;transition:all 0.2s}
+.fbtn.on::before{background:var(--c);box-shadow:0 0 6px var(--c)}
+.fbtn.on-y::before{background:var(--y);box-shadow:0 0 6px var(--y)}
+.fbtn.on-o::before{background:var(--o);box-shadow:0 0 6px var(--o)}
+.fbtn.on-p::before{background:var(--p);box-shadow:0 0 6px var(--p)}
+.fbtn.on-g::before{background:var(--g);box-shadow:0 0 6px var(--g)}
+.fbtn.on-r::before{background:var(--r);box-shadow:0 0 6px var(--r)}
 .nav-btn{background:var(--pnl);border:1px solid var(--brd);color:var(--tm);font-family:'Share Tech Mono',monospace;font-size:11px;padding:5px 8px;cursor:pointer;border-radius:3px;transition:all 0.2s;margin:1px}
 .nav-btn:hover{border-color:var(--c);color:var(--c)}
 .country-sel{background:var(--pnls);border:1px solid var(--brd);color:var(--c);font-family:'Share Tech Mono',monospace;font-size:12px;padding:5px 6px;width:100%;border-radius:3px;outline:none;cursor:pointer}
@@ -2437,18 +2444,37 @@ function updateStats(){
 // --- FILTERS + KEYBOARD ---
 function togF(t){state.filters[t]=!state.filters[t];const bm={aircraft:'fAir',heli:'fHeli',ship:'fShip',satellite:'fSat'};const cm={aircraft:'on',heli:'on-y',ship:'on-o',satellite:'on-p'};document.getElementById(bm[t]).classList.toggle(cm[t]);renderMarkers();renderAssetList();}
 function togC(c){state.categories[c]=!state.categories[c];const bm={military:'cMil',coastguard:'cCG',police:'cPol',government:'cGov',sar:'cSar',tanker:'cTanker',cargo:'cCargo',passenger:'cPassenger',fishing:'cFishing'};document.getElementById(bm[c]).classList.toggle('on-g');renderMarkers();renderAssetList();}
-function togLayer(l){state.layers[l]=!state.layers[l];
-  // Re-render overlay layers
-  if(l==='notams')fetchNOTAMs();
-  if(l==='piracy')renderPiracy();
-  if(l==='volcanoes'){state.volcanoMarkers.forEach(m=>map.removeLayer(m));state.volcanoMarkers=[];if(state.layers.volcanoes)fetchVolcanoes();}
-  if(l==='tsunami'){state.tsunamiMarkers.forEach(m=>map.removeLayer(m));state.tsunamiMarkers=[];if(state.layers.tsunami)fetchTsunami();}
-  if(l==='cyber'){state.cyberMarkers.forEach(m=>map.removeLayer(m));state.cyberMarkers=[];if(state.layers.cyber)renderCyber();}
-  if(l==='cables'){state.cableLines.forEach(m=>map.removeLayer(m));state.cableLines=[];if(state.layers.cables)renderCables();}
-  if(l==='nukes'){state.nukeMarkers.forEach(m=>map.removeLayer(m));state.nukeMarkers=[];if(state.layers.nukes)renderNukes();}
-  if(l==='bases'){state.milbaseMarkers.forEach(m=>map.removeLayer(m));state.milbaseMarkers=[];if(state.layers.bases)renderMilBases();}
-  if(l==='conflict'){state.conflictMarkers.forEach(m=>map.removeLayer(m));state.conflictMarkers=[];if(state.layers.conflict)renderConflicts();}
-const bm={quakes:'fQuake',fires:'fFire',gdelt:'fGdelt',chokes:'fChoke',jamming:'fJam',notams:'fNotam',piracy:'fPiracy',volcanoes:'fVolcano',tsunami:'fTsunami',cyber:'fCyber',cables:'fCables',nukes:'fNuke',bases:'fBases',conflict:'fConflict'};const cm={quakes:'on-r',fires:'on-o',gdelt:'on',chokes:'on-y',jamming:'on-p',notams:'on-y',piracy:'on-r',volcanoes:'on-o',tsunami:'on-r',cyber:'on-p',cables:'on',nukes:'on-o',bases:'on',conflict:'on-r'};if(bm[l])document.getElementById(bm[l]).classList.toggle(cm[l]);if(l==='quakes'){state.quakeMarkers.forEach(m=>{state.layers.quakes?m.addTo(map):map.removeLayer(m);});}if(l==='fires'){state.fireMarkers.forEach(m=>{state.layers.fires?m.addTo(map):map.removeLayer(m);});}if(l==='chokes'){state.chokeMarkers.forEach(m=>{state.layers.chokes?m.addTo(map):map.removeLayer(m);});}if(l==='jamming'){state.jamMarkers.forEach(m=>{state.layers.jamming?m.addTo(map):map.removeLayer(m);});}}
+function togLayer(l){
+  state.layers[l]=!state.layers[l];
+  const on=state.layers[l];
+  // Button ID + color class map
+  const bm={quakes:'fQuake',fires:'fFire',gdelt:'fGdelt',chokes:'fChoke',jamming:'fJam',notams:'fNotam',piracy:'fPiracy',volcanoes:'fVolcano',tsunami:'fTsunami',cyber:'fCyber',cables:'fCables',nukes:'fNuke',bases:'fBases',conflict:'fConflict'};
+  const cm={quakes:'on-r',fires:'on-o',gdelt:'on',chokes:'on-y',jamming:'on-p',notams:'on-y',piracy:'on-r',volcanoes:'on-o',tsunami:'on-r',cyber:'on-p',cables:'on',nukes:'on-o',bases:'on',conflict:'on-r'};
+  // Sync button visual to state (not toggle — prevents desync)
+  if(bm[l]){const btn=document.getElementById(bm[l]);if(btn){if(on)btn.classList.add(cm[l]);else btn.classList.remove(cm[l]);}}
+  // Handle overlay marker layers
+  const overlayMap={
+    notams:{markers:'notamMarkers',render:on?fetchNOTAMs:null},
+    piracy:{markers:'piracyMarkers',render:on?renderPiracy:null},
+    volcanoes:{markers:'volcanoMarkers',render:on?fetchVolcanoes:null},
+    tsunami:{markers:'tsunamiMarkers',render:on?fetchTsunami:null},
+    cyber:{markers:'cyberMarkers',render:on?renderCyber:null},
+    cables:{markers:'cableLines',render:on?renderCables:null},
+    nukes:{markers:'nukeMarkers',render:on?renderNukes:null},
+    bases:{markers:'milbaseMarkers',render:on?renderMilBases:null},
+    conflict:{markers:'conflictMarkers',render:on?renderConflicts:null},
+  };
+  if(overlayMap[l]){
+    const key=overlayMap[l].markers;
+    if(state[key]){state[key].forEach(m=>map.removeLayer(m));state[key]=[];}
+    if(overlayMap[l].render)overlayMap[l].render();
+  }
+  // Original overlay layers (quakes, fires, chokes, jamming)
+  if(l==='quakes')state.quakeMarkers.forEach(m=>{on?m.addTo(map):map.removeLayer(m);});
+  if(l==='fires')state.fireMarkers.forEach(m=>{on?m.addTo(map):map.removeLayer(m);});
+  if(l==='chokes')state.chokeMarkers.forEach(m=>{on?m.addTo(map):map.removeLayer(m);});
+  if(l==='jamming'&&state.jamMarkers)state.jamMarkers.forEach(m=>{on?m.addTo(map):map.removeLayer(m);});
+}
 function applyFilters(){state.countryFilter=document.getElementById('countryFilter').value;renderMarkers();renderAssetList();}
 function switchTab(name,btn){document.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('active'));document.querySelectorAll('.tab-content').forEach(c=>c.classList.remove('active'));btn.classList.add('active');document.getElementById('tab'+name.charAt(0).toUpperCase()+name.slice(1)).classList.add('active');}
 
