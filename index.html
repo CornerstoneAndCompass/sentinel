@@ -422,6 +422,15 @@ html,body{width:100%;height:100%;overflow:hidden;background:#050a12;font-family:
   .stat-val{font-size:12px}
   .mob-btn{width:40px;height:40px;font-size:10px}
 }
+
+/* SPACE VIEW MODE */
+.space-bg{position:fixed;top:0;left:0;width:100%;height:100%;z-index:399;pointer-events:none;opacity:0;transition:opacity 1.5s ease}
+.space-bg.active{opacity:1}
+.space-bg canvas{width:100%;height:100%}
+.space-mode .leaflet-tile-pane{opacity:0.15!important;filter:brightness(0.3) saturate(0)}
+.space-mode .leaflet-container{background:#000!important}
+.space-label{position:fixed;top:60px;left:50%;transform:translateX(-50%);z-index:500;font-family:Orbitron,monospace;font-size:10px;letter-spacing:6px;color:rgba(170,102,255,0.8);text-shadow:0 0 20px rgba(170,102,255,0.4);pointer-events:none;opacity:0;transition:opacity 1s ease}
+.space-label.active{opacity:1}
 </style>
 </head>
 <body>
@@ -570,6 +579,9 @@ html,body{width:100%;height:100%;overflow:hidden;background:#050a12;font-family:
 <button class="fbtn" id="fNuke" onclick="togLayer('nukes')">NUKES</button>
 <button class="fbtn" id="fBases" onclick="togLayer('bases')">BASES</button>
 <button class="fbtn on-r" id="fConflict" onclick="togLayer('conflict')">ACLED</button>
+<button class="fbtn on-p" id="fRF" onclick="togLayer('rf')">RF/SIG</button>
+<button class="fbtn on-o" id="fDrone" onclick="togLayer('drones')">DRONES</button>
+<button class="fbtn on-y" id="fRefugee" onclick="togLayer('refugees')">REFUG</button>
 </div>
 <select class="country-sel" id="countryFilter" onchange="applyFilters()"><option value="">ALL COUNTRIES</option></select>
 </div>
@@ -731,7 +743,7 @@ html,body{width:100%;height:100%;overflow:hidden;background:#050a12;font-family:
 <div class="feed"><div class="fd wait" id="f33"></div>TSUN</div>
 </div>
 <div><span style="color:var(--td)">REFRESH </span><span id="countdown" style="color:var(--c)">30s</span><span style="color:var(--td)"> | </span><span id="lastUp" style="color:var(--g)">--:--:--</span></div>
-<div style="display:flex;align-items:center;gap:10px"><span style="letter-spacing:3px;color:var(--td);font-family:'Orbitron',sans-serif;font-size:9px">SENTINEL v20.0</span><span style="color:var(--td);font-size:10px;cursor:pointer" onclick="document.getElementById('shortcutsOverlay').classList.toggle('show')">[?]</span></div>
+<div style="display:flex;align-items:center;gap:10px"><span style="letter-spacing:3px;color:var(--td);font-family:'Orbitron',sans-serif;font-size:9px">SENTINEL v20.1</span><span style="color:var(--td);font-size:10px;cursor:pointer" onclick="document.getElementById('shortcutsOverlay').classList.toggle('show')">[?]</span></div>
 </div>
 
 <script>
@@ -743,8 +755,8 @@ window.addEventListener('unhandledrejection',e=>{console.warn('Unhandled rejecti
 const BOOT_START=Date.now();
 
 // --- MAP ---
-const map = L.map('map',{center:[25,20],zoom:3,zoomControl:false,attributionControl:false,preferCanvas:true});
-const _baseTile=L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',{maxZoom:19,subdomains:'abcd'}).addTo(map);
+const map = L.map('map',{center:[25,20],zoom:3,zoomControl:false,attributionControl:false,preferCanvas:true,minZoom:2,maxBounds:[[-85,-180],[85,180]],maxBoundsViscosity:1.0,worldCopyJump:false});
+const _baseTile=L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',{maxZoom:19,subdomains:'abcd',noWrap:true,bounds:[[-85,-180],[85,180]]}).addTo(map);
 
 // --- STATE ---
 const CORS_PROXIES=[
@@ -760,7 +772,7 @@ const state={
   quakeMarkers:[],gdeltMarkers:[],fireMarkers:[],chokeMarkers:[],
   filters:{aircraft:true,heli:true,ship:true,satellite:true},
   categories:{military:true,coastguard:true,police:true,government:true,sar:true,tanker:false,cargo:false,passenger:false,fishing:false},
-  layers:{quakes:true,fires:true,gdelt:true,chokes:true,notams:true,piracy:true,volcanoes:true,tsunami:true,cyber:true,cables:false,nukes:false,bases:false,conflict:true},
+  layers:{quakes:true,fires:true,gdelt:true,chokes:true,notams:true,piracy:true,volcanoes:true,tsunami:true,cyber:true,cables:false,nukes:false,bases:false,conflict:true,rf:true,drones:true,refugees:true},
   countryFilter:'',searchTerm:'',selectedId:null,
   alerts:[],news:[],gdeltEvents:[],earthquakes:[],fires:[],notamMarkers:[],cableLines:[],nukeMarkers:[],piracyMarkers:[],wildfireMarkers:[],cyberMarkers:[],refugeeMarkers:[],milbaseMarkers:[],rfMarkers:[],droneMarkers:[],ntestMarkers:[],conflictMarkers:[],volcanoMarkers:[],tsunamiMarkers:[],
   threats:{},defcon:4,threatScore:0,
@@ -1305,117 +1317,115 @@ async function fetchOSINT(){feedWait('f7');let n=0;
 // ============ SPACE TRACKING ============
 // ISS, Tiangong, Hubble, and known military/intel satellites
 // Satellite tracking via CelesTrak TLE + satellite.js SGP4 propagation
-const SAT_GROUPS=[
-  {url:'https://celestrak.org/NORAD/elements/gp.php?GROUP=stations&FORMAT=JSON',label:'STATIONS'},
-  {url:'https://celestrak.org/NORAD/elements/gp.php?GROUP=active&FORMAT=JSON&LIMIT=0',label:'ACTIVE'},
+const SAT_GROUPS_TLE=[
+  'https://celestrak.org/NORAD/elements/gp.php?GROUP=stations&FORMAT=TLE',
+  'https://celestrak.org/NORAD/elements/gp.php?GROUP=active&FORMAT=TLE',
+  'https://celestrak.org/NORAD/elements/gp.php?GROUP=visual&FORMAT=TLE',
+  'https://celestrak.org/NORAD/elements/gp.php?GROUP=weather&FORMAT=TLE',
+  'https://celestrak.org/NORAD/elements/gp.php?GROUP=resource&FORMAT=TLE',
 ];
-// Priority satellites to always track (NORAD IDs)
-const PRIORITY_SATS=new Set([25544,48274,20580,43013,39232,28654,33591,27424,44832]);
-const SAT_NAMES={'25544':'ISS','48274':'TIANGONG','20580':'HUBBLE','43013':'NROL-47','39232':'NROL-65','28654':'NOAA-18','33591':'NOAA-19','27424':'LACROSSE-5','44832':'GPS III SV02'};
-state.tleCache=new Map(); // NORAD_ID -> TLE record
-state.satOrbits=[];state.sources.sats=0;
+// Priority: always show these even when group is huge
+const PRIORITY_SATS=new Set([25544,48274,20580,43013,39232,28654,33591,27424,44832,28884,37849,40258,25338,36516,43226,29155,33053,40069,43689,49044,54216,56173]);
+const SAT_NAMES={'25544':'ISS','48274':'TIANGONG','20580':'HUBBLE','43013':'NROL-47','39232':'NROL-65','28654':'NOAA-18','33591':'NOAA-19','27424':'LACROSSE-5','44832':'GPS III SV02','28884':'ALOS','37849':'GOES-15','40258':'GOES-16','25338':'NOAA-15','36516':'SDO','43226':'GOES-17','29155':'TERRA','33053':'AQUA','40069':'LANDSAT-8','43689':'ICESat-2','49044':'JWST','54216':'STARLINK','56173':'ONEWEB'};
+state.tleCache=new Map();state.satOrbits=[];state.sources.sats=0;
 
-function propagateTLE(tle){
-  // Convert CelesTrak GP JSON to satellite.js satrec
-  try{
-    // Build TLE lines from GP elements
-    const satrec=satellite.twoline2satrec(tle.line1,tle.line2);
-    const now=new Date();
-    const posVel=satellite.propagate(satrec,now);
-    if(!posVel.position)return null;
-    const gmst=satellite.gstime(now);
-    const geo=satellite.eciToGeodetic(posVel.position,gmst);
-    const lat=satellite.degreesLat(geo.latitude);
-    const lon=satellite.degreesLong(geo.longitude);
-    const alt=geo.height; // km
-    const vel=Math.sqrt(posVel.velocity.x**2+posVel.velocity.y**2+posVel.velocity.z**2);
-    return{lat,lon,alt,vel};
-  }catch(e){return null;}
-}
-
-function gpToTLE(gp){
-  // Convert CelesTrak GP JSON to TLE line1/line2 format
-  try{
-    const id=gp.NORAD_CAT_ID;
-    const epoch=gp.EPOCH;
-    const yr=epoch.substring(2,4);
-    const dt=new Date(epoch);
-    const jan1=new Date(dt.getFullYear(),0,1);
-    const dayOfYear=((dt-jan1)/86400000)+1;
-    const dayStr=dayOfYear.toFixed(8).padStart(12,'0');
-    const mm1=gp.MEAN_MOTION_DOT>=0?' ':'-';
-    const bstar=gp.BSTAR;
-    // Simplified TLE construction — use satellite.js sgp4init directly
-    const tleLine1='1 '+String(id).padStart(5,'0')+'U '+gp.OBJECT_ID.padEnd(8)+' '+yr+dayStr+' '+
-      (gp.MEAN_MOTION_DOT>=0?' ':'')+gp.MEAN_MOTION_DOT.toFixed(8).replace('0.','.')+' '+
-      ' 00000+0 '+(bstar>=0?' ':'-')+Math.abs(bstar).toExponential(4).replace(/e([+-])(\d)$/,'$10$2').replace('.','').replace('e','').substring(0,5)+
-      (bstar>=0?'+':'-')+'0 0  999';
-    const tleLine2='2 '+String(id).padStart(5,'0')+' '+
-      gp.INCLINATION.toFixed(4).padStart(8)+' '+
-      gp.RA_OF_ASC_NODE.toFixed(4).padStart(8)+' '+
-      gp.ECCENTRICITY.toFixed(7).replace('0.','').padStart(7,'0')+' '+
-      gp.ARG_OF_PERICENTER.toFixed(4).padStart(8)+' '+
-      gp.MEAN_ANOMALY.toFixed(4).padStart(8)+' '+
-      gp.MEAN_MOTION.toFixed(8).padStart(11)+String(gp.REV_AT_EPOCH).padStart(5);
-    return{line1:tleLine1,line2:tleLine2};
-  }catch(e){return null;}
+function parseTLEText(text){
+  // Parse 3-line TLE format: name\nline1\nline2
+  const lines=text.trim().split('\n').map(l=>l.trim()).filter(l=>l.length>0);
+  const results=[];
+  for(let i=0;i<lines.length-2;i++){
+    if(lines[i+1].startsWith('1 ')&&lines[i+2].startsWith('2 ')){
+      const name=lines[i];
+      const line1=lines[i+1];
+      const line2=lines[i+2];
+      const noradMatch=line1.match(/^1\s+(\d+)/);
+      if(noradMatch){
+        results.push({name,line1,line2,norad:parseInt(noradMatch[1])});
+      }
+      i+=2;
+    }
+  }
+  return results;
 }
 
 async function fetchSats(){
   feedWait('f19');
   let n=0;
   try{
-    // Fetch station TLEs from CelesTrak (includes ISS + Tiangong)
-    const stationData=await fetchJ('https://celestrak.org/NORAD/elements/gp.php?GROUP=stations&FORMAT=JSON',8000).catch(()=>[]);
-    // Also fetch specific military/science sats by NORAD ID
-    const extras=await Promise.allSettled(
-      [20580,43013,39232,28654,33591,27424,44832].map(id=>
-        fetchJ('https://celestrak.org/NORAD/elements/gp.php?CATNR='+id+'&FORMAT=JSON',5000).catch(()=>[])
+    // Fetch TLE text from multiple groups in parallel
+    const responses=await Promise.allSettled(
+      SAT_GROUPS_TLE.map(url=>
+        fetch(corsUrl(url),{signal:AbortSignal.timeout(12000)}).then(r=>r.ok?r.text():'').catch(()=>'')
       )
     );
-    // Combine all GP data
-    const allGP=[...(Array.isArray(stationData)?stationData:[])];
-    extras.forEach(r=>{if(r.status==='fulfilled'&&Array.isArray(r.value))allGP.push(...r.value);});
-
-    // Propagate each satellite position using satellite.js
+    const allTLEs=[];
     const seen=new Set();
-    for(const gp of allGP){
-      if(!gp||!gp.NORAD_CAT_ID||!gp.MEAN_MOTION)continue;
-      const norad=gp.NORAD_CAT_ID;
-      if(seen.has(norad))continue;
-      seen.add(norad);
-
-      // Only track priority sats + space stations
-      const isStation=gp.OBJECT_NAME&&(gp.OBJECT_NAME.includes('ISS')||gp.OBJECT_NAME.includes('CSS')||gp.OBJECT_NAME.includes('TIANHE'));
-      if(!PRIORITY_SATS.has(norad)&&!isStation)continue;
-
+    for(const r of responses){
+      if(r.status==='fulfilled'&&r.value){
+        const parsed=parseTLEText(r.value);
+        for(const t of parsed){
+          if(!seen.has(t.norad)){seen.add(t.norad);allTLEs.push(t);}
+        }
+      }
+    }
+    // Also try direct CelesTrak for specific priority sats
+    if(allTLEs.length===0){
+      // Fallback: fetch station group only via allorigins
       try{
-        // Use satellite.js SGP4 propagation
-        const tleLine1=buildTLELine1(gp);
-        const tleLine2=buildTLELine2(gp);
-        const satrec=satellite.twoline2satrec(tleLine1,tleLine2);
-        const now=new Date();
+        const fallback=await fetch('https://api.allorigins.win/raw?url='+encodeURIComponent('https://celestrak.org/NORAD/elements/gp.php?GROUP=stations&FORMAT=TLE'),{signal:AbortSignal.timeout(10000)}).then(r=>r.text()).catch(()=>'');
+        if(fallback){parseTLEText(fallback).forEach(t=>{if(!seen.has(t.norad)){seen.add(t.norad);allTLEs.push(t);}});}
+      }catch(e){}
+    }
+
+    // Propagate each satellite
+    const now=new Date();
+    const gmst=satellite.gstime(now);
+    // Limit: show priority sats always, plus up to 200 others (biggest/most interesting)
+    const MAX_SATS=200;
+    let otherCount=0;
+    for(const tle of allTLEs){
+      const isPriority=PRIORITY_SATS.has(tle.norad);
+      if(!isPriority){
+        otherCount++;
+        if(otherCount>MAX_SATS)continue;
+      }
+      try{
+        const satrec=satellite.twoline2satrec(tle.line1,tle.line2);
+        if(!satrec||satrec.error!==0)continue;
         const pv=satellite.propagate(satrec,now);
-        if(!pv||!pv.position)continue;
-        const gmst=satellite.gstime(now);
+        if(!pv||!pv.position||typeof pv.position.x!=='number')continue;
         const geo=satellite.eciToGeodetic(pv.position,gmst);
         const lat=satellite.degreesLat(geo.latitude);
         const lon=satellite.degreesLong(geo.longitude);
         const altKm=geo.height;
+        if(isNaN(lat)||isNaN(lon)||Math.abs(lat)>90)continue;
         const velKms=Math.sqrt(pv.velocity.x**2+pv.velocity.y**2+pv.velocity.z**2);
 
-        const sid='sat_'+norad;
+        const sid='sat_'+tle.norad;
         const old=state.assets.get(sid);
         const trail=old?.trail?[...old.trail.slice(-60),[lat,lon]]:[[lat,lon]];
-        const name=SAT_NAMES[String(norad)]||gp.OBJECT_NAME||('SAT-'+norad);
-        const cat=isStation?'government':(norad===43013||norad===39232||norad===27424||norad===44832)?'military':'government';
-        const stype=isStation?'SPACE STATION':(norad===20580)?'TELESCOPE':(norad===27424)?'RADAR SAT':'SAT';
-        const country=gp.OBJECT_ID?gp.OBJECT_ID.substring(0,2).replace('98','INTL').replace('21','CN').replace('90','US'):'??';
+        const name=SAT_NAMES[String(tle.norad)]||tle.name||('SAT-'+tle.norad);
+        const nameLower=name.toLowerCase();
+        // Categorize
+        let cat='government';
+        if(nameLower.includes('starlink')||nameLower.includes('oneweb')||nameLower.includes('iridium'))cat='passenger'; // commercial constellation
+        if(nameLower.includes('nrol')||nameLower.includes('lacrosse')||nameLower.includes('usa '))cat='military';
+        let stype='SAT';
+        if(nameLower.includes('iss')||nameLower.includes('zarya')||nameLower.includes('css')||nameLower.includes('tianhe')||nameLower.includes('tiangong'))stype='SPACE STATION';
+        else if(nameLower.includes('hubble')||nameLower.includes('jwst')||nameLower.includes('sdo'))stype='TELESCOPE';
+        else if(nameLower.includes('noaa')||nameLower.includes('goes')||nameLower.includes('meteo'))stype='WEATHER';
+        else if(nameLower.includes('gps')||nameLower.includes('galileo')||nameLower.includes('glonass')||nameLower.includes('beidou'))stype='GNSS';
+        else if(nameLower.includes('landsat')||nameLower.includes('sentinel')||nameLower.includes('alos'))stype='EARTH OBS';
+        else if(nameLower.includes('starlink'))stype='COMMS';
+        else if(nameLower.includes('nrol')||nameLower.includes('lacrosse'))stype='RECON';
+        let country='INTL';
+        if(nameLower.includes('noaa')||nameLower.includes('goes')||nameLower.includes('gps')||nameLower.includes('landsat')||nameLower.includes('nrol'))country='US';
+        else if(nameLower.includes('tiangong')||nameLower.includes('css')||nameLower.includes('beidou'))country='CN';
+        else if(nameLower.includes('glonass'))country='RU';
 
         state.assets.set(sid,{
-          id:sid,hex:String(norad),cs:name,type:'satellite',cat,
-          country:country==='19'?'US':country,
-          lat,lon,alt:Math.round(altKm*3280.84),
+          id:sid,hex:String(tle.norad),cs:name,type:'satellite',cat,
+          country,lat,lon,alt:Math.round(altKm*3280.84),
           gs:Math.round(velKms*2236.94),track:0,
           t:stype,source:'SPACE',trail,
           _lastSeen:Date.now(),_orbit:true,_satrec:satrec
@@ -1425,7 +1435,7 @@ async function fetchSats(){
     }
   }catch(e){console.warn('Sat fetch error:',e);}
 
-  // Fallback: if satellite.js failed, at least get ISS from wheretheiss
+  // Fallback: if everything failed, at least get ISS from wheretheiss
   if(n===0){
     try{
       const iss=await fetchJ('https://api.wheretheiss.at/v1/satellites/25544',5000);
@@ -1443,43 +1453,6 @@ async function fetchSats(){
   document.getElementById('sSat').textContent=n;
   feedDot('f19',n>0);
 }
-
-// TLE line builders for satellite.js
-function buildTLELine1(gp){
-  const id=String(gp.NORAD_CAT_ID).padStart(5,'0');
-  const intl=(gp.OBJECT_ID||'00000A').padEnd(8);
-  const epoch=gp.EPOCH||'2026-01-01T00:00:00';
-  const dt=new Date(epoch);
-  const yr=String(dt.getUTCFullYear()).slice(-2);
-  const jan1=new Date(Date.UTC(dt.getUTCFullYear(),0,1));
-  const doy=(dt-jan1)/86400000+1;
-  const epochDay=doy.toFixed(8).padStart(12,'0');
-  const ndot=gp.MEAN_MOTION_DOT||0;
-  const ndotStr=(ndot>=0?' ':'')+ndot.toFixed(8);
-  const bstar=gp.BSTAR||0;
-  let bstarStr;
-  if(bstar===0){bstarStr=' 00000-0';}
-  else{
-    const exp=Math.floor(Math.log10(Math.abs(bstar)));
-    const man=Math.round(bstar/Math.pow(10,exp)*100000);
-    bstarStr=(bstar>=0?' ':'-')+String(Math.abs(man)).padStart(5,'0')+(exp>=0?'+':'-')+Math.abs(exp);
-  }
-  const line='1 '+id+'U '+intl+yr+epochDay+ndotStr.substring(0,10)+' 00000+0 '+bstarStr+' 0  999';
-  return line.padEnd(69);
-}
-function buildTLELine2(gp){
-  const id=String(gp.NORAD_CAT_ID).padStart(5,'0');
-  const inc=(gp.INCLINATION||0).toFixed(4).padStart(8);
-  const raan=(gp.RA_OF_ASC_NODE||0).toFixed(4).padStart(8);
-  const ecc=String((gp.ECCENTRICITY||0).toFixed(7)).replace('0.','').padStart(7,'0');
-  const argp=(gp.ARG_OF_PERICENTER||0).toFixed(4).padStart(8);
-  const ma=(gp.MEAN_ANOMALY||0).toFixed(4).padStart(8);
-  const mm=(gp.MEAN_MOTION||15).toFixed(8).padStart(11);
-  const rev=String(gp.REV_AT_EPOCH||0).padStart(5);
-  const line='2 '+id+' '+inc+' '+raan+' '+ecc+' '+argp+' '+ma+' '+mm+rev;
-  return line.padEnd(69);
-}
-
 
 // ============ EXTENDED INTELLIGENCE FEEDS v20 ============
 
@@ -1772,6 +1745,7 @@ const RF_STATIONS=[
 function renderRF(){
   feedWait('f28');
   state.rfMarkers.forEach(m=>map.removeLayer(m));state.rfMarkers=[];
+  if(!state.layers.rf){feedDot('f28',false);return;}
   RF_STATIONS.forEach(s=>{
     const color=s.type.includes('JAMMER')?'#ff3355':s.type.includes('SIGINT')?'#aa66ff':s.type.includes('OTH')?'#ff8800':'#00e8ff';
     const m=L.circleMarker([s.lat,s.lon],{radius:6,color,fillColor:color,fillOpacity:0.3,weight:2}).addTo(map);
@@ -1797,6 +1771,7 @@ const DRONE_HOTSPOTS=[
 function renderDrones(){
   feedWait('f29');
   state.droneMarkers.forEach(m=>map.removeLayer(m));state.droneMarkers=[];
+  if(!state.layers.drones){feedDot('f29',false);return;}
   DRONE_HOTSPOTS.forEach(d=>{
     const color=d.density==='EXTREME'?'#ff0044':d.density==='HIGH'?'#ff3355':'#ff8800';
     const c=L.circle([d.lat,d.lon],{radius:d.radius,color,fillColor:color,fillOpacity:0.04,weight:1,opacity:0.4,dashArray:'4 6'}).addTo(map);
@@ -2442,14 +2417,14 @@ function updateStats(){
 }
 
 // --- FILTERS + KEYBOARD ---
-function togF(t){state.filters[t]=!state.filters[t];const bm={aircraft:'fAir',heli:'fHeli',ship:'fShip',satellite:'fSat'};const cm={aircraft:'on',heli:'on-y',ship:'on-o',satellite:'on-p'};document.getElementById(bm[t]).classList.toggle(cm[t]);renderMarkers();renderAssetList();}
-function togC(c){state.categories[c]=!state.categories[c];const bm={military:'cMil',coastguard:'cCG',police:'cPol',government:'cGov',sar:'cSar',tanker:'cTanker',cargo:'cCargo',passenger:'cPassenger',fishing:'cFishing'};document.getElementById(bm[c]).classList.toggle('on-g');renderMarkers();renderAssetList();}
+function togF(t){state.filters[t]=!state.filters[t];const on=state.filters[t];const bm={aircraft:'fAir',heli:'fHeli',ship:'fShip',satellite:'fSat'};const cm={aircraft:'on',heli:'on-y',ship:'on-o',satellite:'on-p'};const btn=document.getElementById(bm[t]);if(btn){if(on)btn.classList.add(cm[t]);else btn.classList.remove(cm[t]);}renderMarkers();renderAssetList();}
+function togC(c){state.categories[c]=!state.categories[c];const on=state.categories[c];const bm={military:'cMil',coastguard:'cCG',police:'cPol',government:'cGov',sar:'cSar',tanker:'cTanker',cargo:'cCargo',passenger:'cPassenger',fishing:'cFishing'};const btn=document.getElementById(bm[c]);if(btn){if(on)btn.classList.add('on-g');else btn.classList.remove('on-g');}renderMarkers();renderAssetList();}
 function togLayer(l){
   state.layers[l]=!state.layers[l];
   const on=state.layers[l];
   // Button ID + color class map
-  const bm={quakes:'fQuake',fires:'fFire',gdelt:'fGdelt',chokes:'fChoke',jamming:'fJam',notams:'fNotam',piracy:'fPiracy',volcanoes:'fVolcano',tsunami:'fTsunami',cyber:'fCyber',cables:'fCables',nukes:'fNuke',bases:'fBases',conflict:'fConflict'};
-  const cm={quakes:'on-r',fires:'on-o',gdelt:'on',chokes:'on-y',jamming:'on-p',notams:'on-y',piracy:'on-r',volcanoes:'on-o',tsunami:'on-r',cyber:'on-p',cables:'on',nukes:'on-o',bases:'on',conflict:'on-r'};
+  const bm={quakes:'fQuake',fires:'fFire',gdelt:'fGdelt',chokes:'fChoke',jamming:'fJam',notams:'fNotam',piracy:'fPiracy',volcanoes:'fVolcano',tsunami:'fTsunami',cyber:'fCyber',cables:'fCables',nukes:'fNuke',bases:'fBases',conflict:'fConflict',rf:'fRF',drones:'fDrone',refugees:'fRefugee'};
+  const cm={quakes:'on-r',fires:'on-o',gdelt:'on',chokes:'on-y',jamming:'on-p',notams:'on-y',piracy:'on-r',volcanoes:'on-o',tsunami:'on-r',cyber:'on-p',cables:'on',nukes:'on-o',bases:'on',conflict:'on-r',rf:'on-p',drones:'on-o',refugees:'on-y'};
   // Sync button visual to state (not toggle — prevents desync)
   if(bm[l]){const btn=document.getElementById(bm[l]);if(btn){if(on)btn.classList.add(cm[l]);else btn.classList.remove(cm[l]);}}
   // Handle overlay marker layers
@@ -2463,6 +2438,9 @@ function togLayer(l){
     nukes:{markers:'nukeMarkers',render:on?renderNukes:null},
     bases:{markers:'milbaseMarkers',render:on?renderMilBases:null},
     conflict:{markers:'conflictMarkers',render:on?renderConflicts:null},
+      rf:{markers:'rfMarkers',render:on?renderRF:null},
+      drones:{markers:'droneMarkers',render:on?renderDrones:null},
+      refugees:{markers:'refugeeMarkers',render:on?function(){try{fetchRefugees();}catch(e){}}:null},
   };
   if(overlayMap[l]){
     const key=overlayMap[l].markers;
@@ -2507,7 +2485,16 @@ setInterval(()=>{
 
 // Render static intelligence overlays
 function renderStaticOverlays(){
-  try{renderCables();renderNukes();renderPiracy();renderCyber();renderMilBases();renderRF();renderDrones();renderConflicts();}catch(e){console.warn('Static overlay error:',e);}
+  try{
+    if(state.layers.cables)renderCables();
+    if(state.layers.nukes)renderNukes();
+    if(state.layers.piracy)renderPiracy();
+    if(state.layers.cyber)renderCyber();
+    if(state.layers.bases)renderMilBases();
+    if(state.layers.rf)renderRF();
+    if(state.layers.drones)renderDrones();
+    if(state.layers.conflict)renderConflicts();
+  }catch(e){console.warn('Static overlay error:',e);}
 }
 function renderAll(){
   try{updateStats();renderMarkers();renderAssetList();generateAlerts();calculateDefcon();updateThreatBanner();}catch(e){console.warn('Render error:',e);}
@@ -2554,9 +2541,9 @@ setInterval(cleanStaleAssets,120000);
 // --- MAP MODE SWITCHER ---
 const MAP_TILES={
   dark:_baseTile,
-  satellite:L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',{maxZoom:19,attribution:'Esri'}),
-  nvg:L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_nolabels/{z}/{x}/{y}{r}.png',{maxZoom:19,subdomains:'abcd'}),
-  topo:L.tileLayer('https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png',{maxZoom:17,subdomains:'abc'})
+  satellite:L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',{maxZoom:19,attribution:'Esri',noWrap:true,bounds:[[-85,-180],[85,180]]}),
+  nvg:L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_nolabels/{z}/{x}/{y}{r}.png',{maxZoom:19,subdomains:'abcd',noWrap:true,bounds:[[-85,-180],[85,180]]}),
+  topo:L.tileLayer('https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png',{maxZoom:17,subdomains:'abc',noWrap:true,bounds:[[-85,-180],[85,180]]})
 };
 let currentMapMode='dark';
 function setMapMode(mode){
@@ -2742,92 +2729,202 @@ function checkGeofences(){
 // --- SPACE VIEW + ORBIT DISPLAY ---
 state.orbitLines=[];state.showOrbits=true;
 state._spaceViewActive=false;
+
+// Star field canvas for space view
+function createStarField(){
+  let el=document.getElementById('spaceBG');
+  if(!el){
+    el=document.createElement('div');
+    el.id='spaceBG';el.className='space-bg';
+    const cv=document.createElement('canvas');
+    el.appendChild(cv);
+    document.body.appendChild(el);
+    // Star label
+    const lb=document.createElement('div');
+    lb.id='spaceLabel';lb.className='space-label';
+    lb.textContent='◈ ORBITAL SURVEILLANCE MODE ◈';
+    document.body.appendChild(lb);
+  }
+  const cv=el.querySelector('canvas');
+  cv.width=window.innerWidth;cv.height=window.innerHeight;
+  const ctx=cv.getContext('2d');
+  ctx.fillStyle='#000';ctx.fillRect(0,0,cv.width,cv.height);
+  // Draw stars — multiple layers for depth
+  for(let i=0;i<600;i++){
+    const x=Math.random()*cv.width;const y=Math.random()*cv.height;
+    const r=Math.random()*1.5;
+    const b=Math.random()*0.6+0.2;
+    const hue=Math.random()>0.8?210+Math.random()*60:0; // some blue stars
+    ctx.beginPath();ctx.arc(x,y,r,0,Math.PI*2);
+    if(hue>0)ctx.fillStyle=`hsla(${hue},60%,80%,${b})`;
+    else ctx.fillStyle=`rgba(255,255,255,${b})`;
+    ctx.fill();
+  }
+  // Subtle nebula glow
+  const grd=ctx.createRadialGradient(cv.width*0.3,cv.height*0.4,50,cv.width*0.3,cv.height*0.4,cv.width*0.5);
+  grd.addColorStop(0,'rgba(100,50,180,0.03)');grd.addColorStop(1,'rgba(0,0,0,0)');
+  ctx.fillStyle=grd;ctx.fillRect(0,0,cv.width,cv.height);
+  return el;
+}
+
 function spaceView(){
   state._spaceViewActive=!state._spaceViewActive;
+  const mapEl=document.getElementById('map');
   if(state._spaceViewActive){
-    // SPACE VIEW ON — show ONLY satellites, hide everything else
-    setMapMode('dark');
+    // === ENTER SPACE MODE ===
+    // Create star background
+    const bg=createStarField();
+    bg.classList.add('active');
+    document.getElementById('spaceLabel').classList.add('active');
+    mapEl.classList.add('space-mode');
+
+    // Zoom to global view
     map.setView([20,0],2,{animate:true,duration:1.5});
-    // Store previous filter state and disable all non-satellite filters
-    state._preSpaceFilters={...state.filters};
-    state._preSpaceCats={...state.categories};
-    state._preSpaceLayers={...state.layers};
+
+    // Save ALL current state
+    state._preSpaceFilters=JSON.parse(JSON.stringify(state.filters));
+    state._preSpaceCats=JSON.parse(JSON.stringify(state.categories));
+    state._preSpaceLayers=JSON.parse(JSON.stringify(state.layers));
+
+    // Turn OFF everything except satellites
     state.filters={aircraft:false,heli:false,ship:false,satellite:true};
-    state.categories={military:false,coastguard:false,police:false,government:true,sar:false,tanker:false,cargo:false,passenger:false,fishing:false};
-    // Hide non-space overlays
+    state.categories={military:true,coastguard:false,police:false,government:true,sar:false,tanker:false,cargo:false,passenger:true,fishing:false};
+
+    // Disable ALL overlay layers
     Object.keys(state.layers).forEach(k=>{state.layers[k]=false;});
-    // Remove non-space overlay markers
-    state.quakeMarkers.forEach(m=>map.removeLayer(m));
-    state.fireMarkers.forEach(m=>map.removeLayer(m));
-    state.chokeMarkers.forEach(m=>map.removeLayer(m));
-    state.gdeltMarkers.forEach(m=>map.removeLayer(m));
-    state.notamMarkers.forEach(m=>map.removeLayer(m));
-    state.piracyMarkers.forEach(m=>map.removeLayer(m));
-    state.volcanoMarkers.forEach(m=>map.removeLayer(m));
-    state.tsunamiMarkers.forEach(m=>map.removeLayer(m));
-    state.cyberMarkers.forEach(m=>map.removeLayer(m));
-    state.cableLines.forEach(m=>map.removeLayer(m));
-    state.nukeMarkers.forEach(m=>map.removeLayer(m));
-    state.milbaseMarkers.forEach(m=>map.removeLayer(m));
-    state.conflictMarkers.forEach(m=>map.removeLayer(m));
-    if(state.jamMarkers)state.jamMarkers.forEach(m=>map.removeLayer(m));
-    // Update filter button visuals
-    document.getElementById('fSat').classList.add('on-p');
-    document.getElementById('fAir').classList.remove('on');
-    document.getElementById('fHeli').classList.remove('on-y');
-    document.getElementById('fShip').classList.remove('on-o');
+
+    // Remove ALL overlay markers from map
+    const overlayArrays=['quakeMarkers','fireMarkers','chokeMarkers','gdeltMarkers','notamMarkers','piracyMarkers','volcanoMarkers','tsunamiMarkers','cyberMarkers','cableLines','nukeMarkers','milbaseMarkers','conflictMarkers','rfMarkers','droneMarkers','refugeeMarkers','ntestMarkers','wildfireMarkers'];
+    overlayArrays.forEach(key=>{
+      if(state[key]&&Array.isArray(state[key])){
+        state[key].forEach(m=>{try{map.removeLayer(m);}catch(e){}});
+      }
+    });
+    if(state.jamMarkers)state.jamMarkers.forEach(m=>{try{map.removeLayer(m);}catch(e){}});
+
+    // Remove ALL non-satellite asset markers from map
+    for(const[id,a]of state.assets){
+      if(a.type!=='satellite'){
+        const mk=state.markers.get(id);
+        if(mk){try{map.removeLayer(mk);}catch(e){}}
+        const rt=state.routes.get(id);
+        if(rt){try{map.removeLayer(rt);}catch(e){}}
+      }
+    }
+
+    // Update ALL filter button visuals
+    document.querySelectorAll('.fbtn').forEach(btn=>{
+      // Remove all on-* classes
+      ['on','on-r','on-o','on-y','on-p','on-g'].forEach(cls=>btn.classList.remove(cls));
+    });
+    // Only SAT + ORBITS should be on
+    const fSat=document.getElementById('fSat');if(fSat)fSat.classList.add('on-p');
+    const fOrbit=document.getElementById('fOrbit');if(fOrbit)fOrbit.classList.add('on-p');
+    // Turn off type buttons
+    ['fAir','fHeli','fShip'].forEach(id=>{const b=document.getElementById(id);if(b){['on','on-y','on-o','on-p'].forEach(c=>b.classList.remove(c));}});
+    // Turn off category buttons
+    document.querySelectorAll('[id^="c"]').forEach(btn=>{btn.classList.remove('on-g');});
+    const cGov=document.getElementById('cGov');if(cGov)cGov.classList.add('on-g');
+    const cMil=document.getElementById('cMil');if(cMil)cMil.classList.add('on-g');
+
     // Show orbits
     state.showOrbits=true;
     renderMarkers();renderAssetList();renderOrbits();
-    addAlert('green','SPACE VIEW ACTIVE: Showing '+state.sources.sats+' satellites only — press SPACE again to exit');
+
+    // Highlight SPACE button
+    const spBtn=document.querySelector('[onclick="spaceView()"]');
+    if(spBtn){spBtn.style.background='rgba(170,102,255,0.2)';spBtn.style.borderColor='#aa66ff';spBtn.style.color='#aa66ff';spBtn.style.boxShadow='0 0 15px rgba(170,102,255,0.3)';}
+
+    addAlert('green','◈ ORBITAL SURVEILLANCE MODE — tracking '+state.sources.sats+' space assets');
   }else{
-    // SPACE VIEW OFF — restore previous state
-    if(state._preSpaceFilters)state.filters={...state._preSpaceFilters};
-    if(state._preSpaceCats)state.categories={...state._preSpaceCats};
-    if(state._preSpaceLayers)state.layers={...state._preSpaceLayers};
+    // === EXIT SPACE MODE ===
+    const bg=document.getElementById('spaceBG');if(bg)bg.classList.remove('active');
+    const lb=document.getElementById('spaceLabel');if(lb)lb.classList.remove('active');
+    mapEl.classList.remove('space-mode');
+
+    // Restore ALL saved state
+    if(state._preSpaceFilters)state.filters=JSON.parse(JSON.stringify(state._preSpaceFilters));
+    if(state._preSpaceCats)state.categories=JSON.parse(JSON.stringify(state._preSpaceCats));
+    if(state._preSpaceLayers)state.layers=JSON.parse(JSON.stringify(state._preSpaceLayers));
+
+    // Restore ALL button visuals from state
+    const filterBtnMap={aircraft:'fAir',heli:'fHeli',ship:'fShip',satellite:'fSat'};
+    const filterClsMap={aircraft:'on',heli:'on-y',ship:'on-o',satellite:'on-p'};
+    Object.keys(filterBtnMap).forEach(k=>{
+      const btn=document.getElementById(filterBtnMap[k]);
+      if(btn){if(state.filters[k])btn.classList.add(filterClsMap[k]);else btn.classList.remove(filterClsMap[k]);}
+    });
+    const catBtnMap={military:'cMil',coastguard:'cCG',police:'cPol',government:'cGov',sar:'cSar',tanker:'cTanker',cargo:'cCargo',passenger:'cPassenger',fishing:'cFishing'};
+    Object.keys(catBtnMap).forEach(k=>{
+      const btn=document.getElementById(catBtnMap[k]);
+      if(btn){if(state.categories[k])btn.classList.add('on-g');else btn.classList.remove('on-g');}
+    });
+    const layerBtnMap={quakes:'fQuake',fires:'fFire',gdelt:'fGdelt',chokes:'fChoke',jamming:'fJam',notams:'fNotam',piracy:'fPiracy',volcanoes:'fVolcano',tsunami:'fTsunami',cyber:'fCyber',cables:'fCables',nukes:'fNuke',bases:'fBases',conflict:'fConflict',rf:'fRF',drones:'fDrone',refugees:'fRefugee'};
+    const layerClsMap={quakes:'on-r',fires:'on-o',gdelt:'on',chokes:'on-y',jamming:'on-p',notams:'on-y',piracy:'on-r',volcanoes:'on-o',tsunami:'on-r',cyber:'on-p',cables:'on',nukes:'on-o',bases:'on',conflict:'on-r',rf:'on-p',drones:'on-o',refugees:'on-y'};
+    Object.keys(layerBtnMap).forEach(k=>{
+      const btn=document.getElementById(layerBtnMap[k]);
+      if(btn){if(state.layers[k])btn.classList.add(layerClsMap[k]);else btn.classList.remove(layerClsMap[k]);}
+    });
+
     // Re-render everything
     renderMarkers();renderAssetList();
-    // Re-show overlay layers
+    // Re-show active overlay layers
     try{renderStaticOverlays();}catch(e){}
     try{
-      state.quakeMarkers.forEach(m=>{if(state.layers.quakes)m.addTo(map);});
-      state.fireMarkers.forEach(m=>{if(state.layers.fires)m.addTo(map);});
-      state.chokeMarkers.forEach(m=>{if(state.layers.chokes)m.addTo(map);});
+      if(state.layers.quakes)state.quakeMarkers.forEach(m=>m.addTo(map));
+      if(state.layers.fires)state.fireMarkers.forEach(m=>m.addTo(map));
+      if(state.layers.chokes)state.chokeMarkers.forEach(m=>m.addTo(map));
       if(state.layers.jamming&&state.jamMarkers)state.jamMarkers.forEach(m=>m.addTo(map));
     }catch(e){}
-    // Restore button visuals
-    document.getElementById('fAir').classList.toggle('on',state.filters.aircraft);
-    document.getElementById('fHeli').classList.toggle('on-y',state.filters.heli);
-    document.getElementById('fShip').classList.toggle('on-o',state.filters.ship);
-    addAlert('green','SPACE VIEW DEACTIVATED — all layers restored');
+
+    // Reset SPACE button
+    const spBtn=document.querySelector('[onclick="spaceView()"]');
+    if(spBtn){spBtn.style.background='';spBtn.style.borderColor='';spBtn.style.color='';spBtn.style.boxShadow='';}
+
+    addAlert('green','ORBITAL VIEW DEACTIVATED — all layers restored');
   }
 }
 function renderOrbits(){
-  // Clear old orbit lines
   state.orbitLines.forEach(l=>map.removeLayer(l));state.orbitLines=[];
   if(!state.showOrbits)return;
+  const now=new Date();
+  const gmst=satellite.gstime(now);
   for(const[id,a]of state.assets){
-    if(a.type!=='satellite'||!a._orbit||!a.trail||a.trail.length<2)continue;
+    if(a.type!=='satellite'||!a._orbit)continue;
     const color=a.cat==='military'?'#ff3355':a.cat==='government'?'#aa66ff':'#55aaff';
-    // Draw existing trail as ground track
-    const line=L.polyline(a.trail,{color,weight:1.5,opacity:0.4,dashArray:'6 4',className:'orbit-track'});
-    line.addTo(map);state.orbitLines.push(line);
-    // Add predicted future path (simple great-circle extrapolation)
-    if(a.trail.length>=2){
-      const last=a.trail[a.trail.length-1];
-      const prev=a.trail[a.trail.length-2];
-      const dlat=last[0]-prev[0];const dlon=last[1]-prev[1];
-      const future=[];
-      for(let i=1;i<=30;i++){
-        let fLat=last[0]+dlat*i;let fLon=last[1]+dlon*i;
-        if(fLat>85)fLat=170-fLat;if(fLat<-85)fLat=-170-fLat;
-        if(fLon>180)fLon-=360;if(fLon<-180)fLon+=360;
-        future.push([fLat,fLon]);
+    // If we have a satrec, compute full orbit path
+    if(a._satrec){
+      const pts=[];
+      for(let m=-45;m<=45;m+=1){
+        try{
+          const future=new Date(now.getTime()+m*60000);
+          const pv=satellite.propagate(a._satrec,future);
+          if(pv&&pv.position){
+            const g=satellite.eciToGeodetic(pv.position,satellite.gstime(future));
+            pts.push([satellite.degreesLat(g.latitude),satellite.degreesLong(g.longitude)]);
+          }
+        }catch(e){}
       }
-      if(future.length>1){
-        const pred=L.polyline([last,...future],{color,weight:1,opacity:0.2,dashArray:'3 6'});
-        pred.addTo(map);state.orbitLines.push(pred);
+      // Split at antimeridian
+      if(pts.length>2){
+        const segments=[];let seg=[pts[0]];
+        for(let i=1;i<pts.length;i++){
+          if(Math.abs(pts[i][1]-pts[i-1][1])>180){
+            segments.push(seg);seg=[pts[i]];
+          }else{seg.push(pts[i]);}
+        }
+        segments.push(seg);
+        segments.forEach(s=>{
+          if(s.length>1){
+            const line=L.polyline(s,{color,weight:1.5,opacity:0.3,dashArray:'6 4',className:'orbit-track'});
+            line.addTo(map);state.orbitLines.push(line);
+          }
+        });
       }
+    }else if(a.trail&&a.trail.length>1){
+      // Fallback: use trail
+      const line=L.polyline(a.trail,{color,weight:1.5,opacity:0.4,dashArray:'6 4',className:'orbit-track'});
+      line.addTo(map);state.orbitLines.push(line);
     }
   }
 }
