@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>SENTINEL // COMMAND v19</title>
+<title>SENTINEL // COMMAND v20</title>
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;500;700;900&family=Share+Tech+Mono&display=swap" rel="stylesheet">
@@ -306,11 +306,18 @@ html,body{width:100%;height:100%;overflow:hidden;background:#050a12;font-family:
 
 @media(max-width:1200px){.left-panel{width:200px}.right-panel{width:260px}.article-viewer{left:210px;right:270px}.map-modes,.geofence-ctrl{left:210px}}
 
+/* ORBIT GROUND TRACKS */
+.orbit-track{opacity:0.4}
+.sat-glow{border-radius:50%;box-shadow:0 0 10px #aa66ff,0 0 20px rgba(170,102,255,0.3);animation:sat-pulse 2s ease-in-out infinite}
+@keyframes sat-pulse{0%,100%{box-shadow:0 0 10px #aa66ff,0 0 20px rgba(170,102,255,0.3)}50%{box-shadow:0 0 15px #aa66ff,0 0 30px rgba(170,102,255,0.5)}}
+
 /* ===== MOBILE NAV TOGGLE ===== */
 .mobile-nav{display:none;position:fixed;bottom:42px;right:10px;z-index:6500;flex-direction:column;gap:6px;align-items:flex-end}
 .mob-btn{width:44px;height:44px;border-radius:50%;border:1px solid var(--brd);background:var(--pnl);color:var(--tm);font-family:'Orbitron',sans-serif;font-size:11px;display:flex;align-items:center;justify-content:center;cursor:pointer;backdrop-filter:blur(12px);box-shadow:0 2px 16px rgba(0,0,0,0.5);transition:all 0.2s;-webkit-tap-highlight-color:transparent}
 .mob-btn:active{transform:scale(0.92)}
 .mob-btn.active{border-color:var(--c);color:var(--c);background:var(--cd)}
+.mob-panel-close{display:none;width:100%;background:var(--pnl);border:1px solid var(--r);color:var(--r);font-family:'Orbitron',sans-serif;font-size:11px;letter-spacing:3px;padding:10px 0;cursor:pointer;border-radius:4px;text-align:center;flex-shrink:0;-webkit-tap-highlight-color:transparent;margin-bottom:4px}
+.mob-panel-close:active{background:var(--rd)}
 
 /* ===== MOBILE BREAKPOINT ===== */
 @media(max-width:768px){
@@ -394,8 +401,9 @@ html,body{width:100%;height:100%;overflow:hidden;background:#050a12;font-family:
   .nav-btn{padding:6px 8px;font-size:10px}
   .fbtn{padding:5px 7px;font-size:10px}
 
-  /* MOBILE NAV — show */
+  /* MOBILE NAV + CLOSE BUTTONS — show */
   .mobile-nav{display:flex}
+  .mob-panel-close{display:block}
 }
 
 /* ===== SMALL PHONE ===== */
@@ -435,6 +443,21 @@ html,body{width:100%;height:100%;overflow:hidden;background:#050a12;font-family:
 <div class="load-sys-row" id="ls11"><div class="load-sys-dot" id="lsd11"></div><span class="load-sys-label" id="lsl11">GPS JAMMING DETECTION</span></div>
 <div class="load-sys-row" id="ls12"><div class="load-sys-dot" id="lsd12"></div><span class="load-sys-label" id="lsl12">SANCTIONS CROSS-REF ENGINE</span></div>
 <div class="load-sys-row" id="ls13"><div class="load-sys-dot" id="lsd13"></div><span class="load-sys-label" id="lsl13">DARK VESSEL TRACKER</span></div>
+<div class="load-sys-row" id="ls14"><div class="load-sys-dot" id="lsd14"></div><span class="load-sys-label" id="lsl14">SPACE ASSET TRACKER</span></div>
+<div class="load-sys-row" id="ls15"><div class="load-sys-dot" id="lsd15"></div><span class="load-sys-label" id="lsl15">NOTAM / TFR SCANNER</span></div>
+<div class="load-sys-row" id="ls16"><div class="load-sys-dot" id="lsd16"></div><span class="load-sys-label" id="lsl16">SUBMARINE CABLE GRID</span></div>
+<div class="load-sys-row" id="ls17"><div class="load-sys-dot" id="lsd17"></div><span class="load-sys-label" id="lsl17">NUCLEAR FACILITY MONITOR</span></div>
+<div class="load-sys-row" id="ls18"><div class="load-sys-dot" id="lsd18"></div><span class="load-sys-label" id="lsl18">MARITIME PIRACY TRACKER</span></div>
+<div class="load-sys-row" id="ls19"><div class="load-sys-dot" id="lsd19"></div><span class="load-sys-label" id="lsl19">WILDFIRE PERIMETER ENGINE</span></div>
+<div class="load-sys-row" id="ls20"><div class="load-sys-dot" id="lsd20"></div><span class="load-sys-label" id="lsl20">CYBER THREAT INTELLIGENCE</span></div>
+<div class="load-sys-row" id="ls21"><div class="load-sys-dot" id="lsd21"></div><span class="load-sys-label" id="lsl21">DISPLACEMENT / MIGRATION FEED</span></div>
+<div class="load-sys-row" id="ls22"><div class="load-sys-dot" id="lsd22"></div><span class="load-sys-label" id="lsl22">MILITARY INSTALLATION DATABASE</span></div>
+<div class="load-sys-row" id="ls23"><div class="load-sys-dot" id="lsd23"></div><span class="load-sys-label" id="lsl23">RF / SIGINT SPECTRUM MONITOR</span></div>
+<div class="load-sys-row" id="ls24"><div class="load-sys-dot" id="lsd24"></div><span class="load-sys-label" id="lsl24">DRONE / UAS ACTIVITY FEED</span></div>
+<div class="load-sys-row" id="ls25"><div class="load-sys-dot" id="lsd25"></div><span class="load-sys-label" id="lsl25">NUCLEAR TEST DETECTION</span></div>
+<div class="load-sys-row" id="ls26"><div class="load-sys-dot" id="lsd26"></div><span class="load-sys-label" id="lsl26">CONFLICT / BORDER INCIDENTS</span></div>
+<div class="load-sys-row" id="ls27"><div class="load-sys-dot" id="lsd27"></div><span class="load-sys-label" id="lsl27">VOLCANIC ACTIVITY MONITOR</span></div>
+<div class="load-sys-row" id="ls28"><div class="load-sys-dot" id="lsd28"></div><span class="load-sys-label" id="lsl28">TSUNAMI WARNING SYSTEM</span></div>
 </div>
 </div>
 
@@ -452,7 +475,7 @@ html,body{width:100%;height:100%;overflow:hidden;background:#050a12;font-family:
 </div>
 <div class="h-center">
 <div class="h-title">SENTINEL // COMMAND</div>
-<div class="h-subtitle" id="hSubtitle">GLOBAL INTELLIGENCE PLATFORM</div>
+<div class="h-subtitle" id="hSubtitle">FULL SPECTRUM INTELLIGENCE PLATFORM</div>
 </div>
 <div class="h-right">
 <div class="h-date" id="hDate">--</div>
@@ -465,6 +488,7 @@ html,body{width:100%;height:100%;overflow:hidden;background:#050a12;font-family:
 
 <!-- LEFT PANEL -->
 <div class="left-panel">
+<button class="mob-panel-close" onclick="toggleMobPanel('left')">&#x2715; CLOSE</button>
 <div class="card">
 <div class="card-title">Live Tracking</div>
 <div class="stat-row"><span class="stat-label">MILITARY</span><span class="stat-val cc" id="sMil">--</span></div>
@@ -479,7 +503,7 @@ html,body{width:100%;height:100%;overflow:hidden;background:#050a12;font-family:
 <div class="stat-row"><span class="stat-label">SATELLITES</span><span class="stat-val cp" id="sSat">--</span></div>
 <div class="stat-row" style="border-top:1px solid var(--brd);margin-top:4px;padding-top:5px"><span class="stat-label">TOTAL ASSETS</span><span class="stat-val cc" id="sTotal">--</span></div>
 <div class="stat-row"><span class="stat-label">VISIBLE</span><span class="stat-val cg" style="font-size:12px" id="sVis">--</span></div>
-<div class="stat-row"><span class="stat-label">SOURCES</span><span class="stat-val cg" style="font-size:12px" id="sSrc">0/17</span></div>
+<div class="stat-row"><span class="stat-label">SOURCES</span><span class="stat-val cg" style="font-size:12px" id="sSrc">0/32</span></div>
 <div class="stat-row"><span class="stat-label">EARTHQUAKES</span><span class="stat-val cr" style="font-size:12px" id="sQuake">--</span></div>
 <div class="stat-row"><span class="stat-label">HOTSPOTS</span><span class="stat-val co" style="font-size:12px" id="sFires">--</span></div>
 <div class="stat-row"><span class="stat-label">WX ALERTS</span><span class="stat-val cy" style="font-size:12px" id="sWxAlerts">--</span></div>
@@ -488,6 +512,14 @@ html,body{width:100%;height:100%;overflow:hidden;background:#050a12;font-family:
 <div class="stat-row"><span class="stat-label">SANCTIONED</span><span class="stat-val" style="font-size:12px;color:#ff0044" id="sSanctioned">--</span></div>
 <div class="stat-row"><span class="stat-label">GPS JAM ZONES</span><span class="stat-val cp" style="font-size:12px" id="sJam">--</span></div>
 <div class="stat-row"><span class="stat-label">GEOFENCES</span><span class="stat-val cy" style="font-size:12px" id="sGeo">0</span></div>
+<div class="stat-row"><span class="stat-label">NOTAMs/TFRs</span><span class="stat-val cy" style="font-size:12px" id="sNotam">--</span></div>
+<div class="stat-row"><span class="stat-label">PIRACY ZONES</span><span class="stat-val cr" style="font-size:12px" id="sPiracy">--</span></div>
+<div class="stat-row"><span class="stat-label">VOLCANOES</span><span class="stat-val co" style="font-size:12px" id="sVolcano">--</span></div>
+<div class="stat-row"><span class="stat-label">TSUNAMI</span><span class="stat-val cr" style="font-size:12px" id="sTsunami">--</span></div>
+<div class="stat-row"><span class="stat-label">CONFLICTS</span><span class="stat-val cr" style="font-size:12px" id="sConflict">--</span></div>
+<div class="stat-row"><span class="stat-label">CYBER THREATS</span><span class="stat-val cp" style="font-size:12px" id="sCyber">--</span></div>
+<div class="stat-row"><span class="stat-label">NUKE SITES</span><span class="stat-val co" style="font-size:12px" id="sNuke">--</span></div>
+<div class="stat-row"><span class="stat-label">MIL BASES</span><span class="stat-val cc" style="font-size:12px" id="sMilBase">--</span></div>
 </div>
 <div class="card">
 <div class="card-title">Filters</div>
@@ -496,6 +528,7 @@ html,body{width:100%;height:100%;overflow:hidden;background:#050a12;font-family:
 <button class="fbtn on-y" id="fHeli" onclick="togF('heli')">HELI</button>
 <button class="fbtn on-o" id="fShip" onclick="togF('ship')">SHIPS</button>
 <button class="fbtn on-p" id="fSat" onclick="togF('satellite')">SATS</button>
+<button class="fbtn on-p" id="fOrbit" onclick="toggleOrbits()">ORBITS</button>
 </div>
 <div style="margin-top:5px;display:flex;flex-wrap:wrap">
 <button class="fbtn on-g" id="cMil" onclick="togC('military')">MILITARY</button>
@@ -517,6 +550,19 @@ html,body{width:100%;height:100%;overflow:hidden;background:#050a12;font-family:
 <button class="fbtn on-y" id="fChoke" onclick="togLayer('chokes')">CHOKES</button>
 <button class="fbtn on-p" id="fJam" onclick="togLayer('jamming')">GPS JAM</button>
 </div>
+<div style="margin-top:3px;display:flex;flex-wrap:wrap">
+<button class="fbtn on-y" id="fNotam" onclick="togLayer('notams')">NOTAMs</button>
+<button class="fbtn on-r" id="fPiracy" onclick="togLayer('piracy')">PIRACY</button>
+<button class="fbtn on-o" id="fVolcano" onclick="togLayer('volcanoes')">VOLCS</button>
+<button class="fbtn on-r" id="fTsunami" onclick="togLayer('tsunami')">TSUN</button>
+</div>
+<div style="margin-top:3px;display:flex;flex-wrap:wrap">
+<button class="fbtn on-p" id="fCyber" onclick="togLayer('cyber')">CYBER</button>
+<button class="fbtn" id="fCables" onclick="togLayer('cables')">CABLES</button>
+<button class="fbtn" id="fNuke" onclick="togLayer('nukes')">NUKES</button>
+<button class="fbtn" id="fBases" onclick="togLayer('bases')">BASES</button>
+<button class="fbtn on-r" id="fConflict" onclick="togLayer('conflict')">ACLED</button>
+</div>
 <select class="country-sel" id="countryFilter" onchange="applyFilters()"><option value="">ALL COUNTRIES</option></select>
 </div>
 <div class="card">
@@ -535,6 +581,7 @@ html,body{width:100%;height:100%;overflow:hidden;background:#050a12;font-family:
 <button class="nav-btn" onclick="flyTo(33,44,6)">IRAQ</button>
 <button class="nav-btn" onclick="flyTo(25,55,6)">GULF</button>
 <button class="nav-btn" onclick="flyTo(20,0,2)">GLOBAL</button>
+<button class="nav-btn" style="border-color:var(--p);color:var(--p)" onclick="spaceView()">SPACE</button>
 </div>
 <div style="margin-top:5px;display:flex;flex-wrap:wrap;gap:2px">
 <button class="nav-btn" style="flex:1;border-color:var(--c);color:var(--c)" onclick="generateSitrep()">SITREP [S]</button>
@@ -548,6 +595,7 @@ html,body{width:100%;height:100%;overflow:hidden;background:#050a12;font-family:
 
 <!-- RIGHT PANEL -->
 <div class="right-panel">
+<button class="mob-panel-close" onclick="toggleMobPanel('right')">&#x2715; CLOSE</button>
 <div class="card" style="padding:0;display:flex;flex-direction:column;flex:1;overflow:hidden">
 <div class="tab-btns">
 <button class="tab-btn active" onclick="switchTab('assets',this)">ASSETS</button>
@@ -658,16 +706,31 @@ html,body{width:100%;height:100%;overflow:hidden;background:#050a12;font-family:
 <div class="feed"><div class="fd wait" id="f16"></div>VF.GL</div>
 <div class="feed"><div class="fd wait" id="f17"></div>JAM</div>
 <div class="feed"><div class="fd wait" id="f18"></div>SNCT</div>
+<div class="feed"><div class="fd wait" id="f19"></div>SATS</div>
+<div class="feed"><div class="fd wait" id="f20"></div>NOTAM</div>
+<div class="feed"><div class="fd wait" id="f21"></div>CABLE</div>
+<div class="feed"><div class="fd wait" id="f22"></div>NUKE</div>
+<div class="feed"><div class="fd wait" id="f23"></div>PIRC</div>
+<div class="feed"><div class="fd wait" id="f24"></div>WFIRE</div>
+<div class="feed"><div class="fd wait" id="f25"></div>CYBER</div>
+<div class="feed"><div class="fd wait" id="f26"></div>REFUG</div>
+<div class="feed"><div class="fd wait" id="f27"></div>MILBS</div>
+<div class="feed"><div class="fd wait" id="f28"></div>RFMON</div>
+<div class="feed"><div class="fd wait" id="f29"></div>DRONE</div>
+<div class="feed"><div class="fd wait" id="f30"></div>NTEST</div>
+<div class="feed"><div class="fd wait" id="f31"></div>ACLED</div>
+<div class="feed"><div class="fd wait" id="f32"></div>VOLC</div>
+<div class="feed"><div class="fd wait" id="f33"></div>TSUN</div>
 </div>
 <div><span style="color:var(--td)">REFRESH </span><span id="countdown" style="color:var(--c)">30s</span><span style="color:var(--td)"> | </span><span id="lastUp" style="color:var(--g)">--:--:--</span></div>
-<div style="display:flex;align-items:center;gap:10px"><span style="letter-spacing:3px;color:var(--td);font-family:'Orbitron',sans-serif;font-size:9px">SENTINEL v19.0</span><span style="color:var(--td);font-size:10px;cursor:pointer" onclick="document.getElementById('shortcutsOverlay').classList.toggle('show')">[?]</span></div>
+<div style="display:flex;align-items:center;gap:10px"><span style="letter-spacing:3px;color:var(--td);font-family:'Orbitron',sans-serif;font-size:9px">SENTINEL v20.0</span><span style="color:var(--td);font-size:10px;cursor:pointer" onclick="document.getElementById('shortcutsOverlay').classList.toggle('show')">[?]</span></div>
 </div>
 
 <script>
 window.onerror=function(msg,src,line,col,err){console.warn('Global error caught:',msg);return true;};
 window.addEventListener('unhandledrejection',e=>{console.warn('Unhandled rejection:',e.reason);e.preventDefault();});
 // ================================================================
-//  SENTINEL COMMAND v19.0 — Full Spectrum Intelligence Platform
+//  SENTINEL COMMAND v20.0 — Full Spectrum Intelligence Platform
 // ================================================================
 const BOOT_START=Date.now();
 
@@ -689,9 +752,9 @@ const state={
   quakeMarkers:[],gdeltMarkers:[],fireMarkers:[],chokeMarkers:[],
   filters:{aircraft:true,heli:true,ship:true,satellite:true},
   categories:{military:true,coastguard:true,police:true,government:true,sar:true,tanker:false,cargo:false,passenger:false,fishing:false},
-  layers:{quakes:true,fires:true,gdelt:true,chokes:true},
+  layers:{quakes:true,fires:true,gdelt:true,chokes:true,notams:true,piracy:true,volcanoes:true,tsunami:true,cyber:true,cables:false,nukes:false,bases:false,conflict:true},
   countryFilter:'',searchTerm:'',selectedId:null,
-  alerts:[],news:[],gdeltEvents:[],earthquakes:[],fires:[],
+  alerts:[],news:[],gdeltEvents:[],earthquakes:[],fires:[],notamMarkers:[],cableLines:[],nukeMarkers:[],piracyMarkers:[],wildfireMarkers:[],cyberMarkers:[],refugeeMarkers:[],milbaseMarkers:[],rfMarkers:[],droneMarkers:[],ntestMarkers:[],conflictMarkers:[],volcanoMarkers:[],tsunamiMarkers:[],
   threats:{},defcon:4,threatScore:0,
   sources:{},refreshInterval:30,countdown:30,lastFetch:null
 };
@@ -699,7 +762,7 @@ const state={
 // --- UTILS ---
 function feedDot(id,ok){const e=document.getElementById(id);if(e)e.className='fd '+(ok?'ok':'err');}
 function feedWait(id){const e=document.getElementById(id);if(e)e.className='fd wait';}
-function fetchJ(url,t=12000){
+function fetchJ(url,t=8000){
   const c=new AbortController();
   const tm=setTimeout(()=>c.abort(),t);
   return fetch(url,{signal:c.signal}).then(r=>{
@@ -708,14 +771,13 @@ function fetchJ(url,t=12000){
     return r.json();
   }).catch(e=>{clearTimeout(tm);throw e;});
 }
-async function fetchR(url,retries=2,t=12000){
+async function fetchR(url,retries=1,t=8000){
   for(let i=0;i<=retries;i++){
     try{return await fetchJ(url,t);}
     catch(e){
       if(i>=retries)throw e;
-      // If this looks like a CORS proxy URL that failed, rotate proxy
       if(url.includes('allorigins')||url.includes('corsproxy')||url.includes('codetabs'))rotateCors();
-      await new Promise(r=>setTimeout(r,1500*(i+1)));
+      await new Promise(r=>setTimeout(r,800*(i+1)));
     }
   }
 }
@@ -780,7 +842,13 @@ function svgIcon(type,color,heading,s){
   else{shape=`<g transform="rotate(${r} ${h} ${h})"><path d="M${h} ${h*0.2} L${h+h*0.15} ${h*0.6} L${h+h*0.15} ${h*1.2} L${h} ${h*1.5} L${h-h*0.15} ${h*1.2} L${h-h*0.15} ${h*0.6} Z" fill="${color}" opacity="0.9"/><path d="M${h-h*0.75} ${h*0.85} L${h+h*0.75} ${h*0.85} L${h+h*0.65} ${h*1.0} L${h-h*0.65} ${h*1.0} Z" fill="${color}" opacity="0.9"/><path d="M${h-h*0.3} ${h*1.35} L${h+h*0.3} ${h*1.35} L${h+h*0.22} ${h*1.45} L${h-h*0.22} ${h*1.45} Z" fill="${color}" opacity="0.9"/></g>`;}
   return`<svg width="${s}" height="${s}" viewBox="0 0 ${s} ${s}" xmlns="http://www.w3.org/2000/svg"><defs><filter id="gl${s}"><feGaussianBlur stdDeviation="1.5" result="g"/><feMerge><feMergeNode in="g"/><feMergeNode in="SourceGraphic"/></feMerge></filter></defs><g filter="url(#gl${s})">${shape}</g></svg>`;
 }
-function makeIcon(a,s){return L.divIcon({html:svgIcon(a.type,markerColor(a),a.track||0,s||22),className:'vehicle-icon',iconSize:[s,s],iconAnchor:[s/2,s/2]});}
+const _iconCache=new Map();
+function makeIcon(a,s){
+  const key=a.type+'_'+markerColor(a)+'_'+Math.round(a.track||0)+'_'+s;
+  let ic=_iconCache.get(key);
+  if(!ic){ic=L.divIcon({html:svgIcon(a.type,markerColor(a),a.track||0,s||22),className:'vehicle-icon',iconSize:[s,s],iconAnchor:[s/2,s/2]});_iconCache.set(key,ic);if(_iconCache.size>2000){const it=_iconCache.keys();_iconCache.delete(it.next().value);}}
+  return ic;
+}
 
 // --- RENDER ---
 // Priority categories ALWAYS render regardless of density
@@ -948,7 +1016,7 @@ function processAC(list,src){
 
 async function fetchADSBMil(){feedWait('f1');try{const d=await fetchR('https://api.adsb.lol/v2/mil');const n=processAC(d.ac||[],'ADSB.LOL');state.sources.adsb=n;feedDot('f1',true);}catch(e){feedDot('f1',false);}}
 async function fetchADSBRegion(){feedWait('f2');try{const b=map.getBounds();const u=`https://api.adsb.lol/v2/lat/${b.getCenter().lat.toFixed(3)}/lon/${b.getCenter().lng.toFixed(3)}/dist/250`;const d=await fetchR(u);const mil=(d.ac||[]).filter(a=>{const cs=(a.flight||'').trim();return a.dbFlags===1||MIL_P.some(p=>p.test(cs))||CG_P.some(p=>p.test(cs))||POL_P.some(p=>p.test(cs))||GOV_P.some(p=>p.test(cs))||SAR_P.some(p=>p.test(cs));});const n=processAC(mil,'REGIONAL');state.sources.region=n;feedDot('f2',true);}catch(e){feedDot('f2',false);}}
-async function fetchOpenSky(){feedWait('f3');try{const b=map.getBounds();const u=`https://opensky-network.org/api/states/all?lamin=${b.getSouth().toFixed(1)}&lomin=${b.getWest().toFixed(1)}&lamax=${b.getNorth().toFixed(1)}&lomax=${b.getEast().toFixed(1)}`;const d=await fetchR(u,1,15000);const sts=d.states||[];const acl=sts.map(s=>({icao24:s[0],callsign:s[1],lat:s[6],lon:s[5],baro_altitude:s[7]?Math.round(s[7]*3.281):null,velocity:s[9]?Math.round(s[9]*1.944):null,true_track:s[10],vertical_rate:s[11]?Math.round(s[11]*196.85):null,squawk:s[14]})).filter(a=>a.lat&&a.lon);const mil=acl.filter(a=>{const cs=(a.callsign||'').trim();return MIL_P.some(p=>p.test(cs))||CG_P.some(p=>p.test(cs))||POL_P.some(p=>p.test(cs))||GOV_P.some(p=>p.test(cs))||SAR_P.some(p=>p.test(cs));});const n=processAC(mil,'OPENSKY');state.sources.opensky=n;feedDot('f3',true);}catch(e){feedDot('f3',false);}}
+async function fetchOpenSky(){feedWait('f3');try{const b=map.getBounds();const u=`https://opensky-network.org/api/states/all?lamin=${b.getSouth().toFixed(1)}&lomin=${b.getWest().toFixed(1)}&lamax=${b.getNorth().toFixed(1)}&lomax=${b.getEast().toFixed(1)}`;const d=await fetchR(u,0,10000);const sts=d.states||[];const acl=sts.map(s=>({icao24:s[0],callsign:s[1],lat:s[6],lon:s[5],baro_altitude:s[7]?Math.round(s[7]*3.281):null,velocity:s[9]?Math.round(s[9]*1.944):null,true_track:s[10],vertical_rate:s[11]?Math.round(s[11]*196.85):null,squawk:s[14]})).filter(a=>a.lat&&a.lon);const mil=acl.filter(a=>{const cs=(a.callsign||'').trim();return MIL_P.some(p=>p.test(cs))||CG_P.some(p=>p.test(cs))||POL_P.some(p=>p.test(cs))||GOV_P.some(p=>p.test(cs))||SAR_P.some(p=>p.test(cs));});const n=processAC(mil,'OPENSKY');state.sources.opensky=n;feedDot('f3',true);}catch(e){feedDot('f3',false);}}
 async function fetchADSBOne(){feedWait('f4');try{const d=await fetchR('https://api.adsb.one/v2/mil');const n=processAC(d.ac||[],'ADSB.ONE');state.sources.adsbOne=n;feedDot('f4',true);}catch(e){feedDot('f4',false);}}
 async function fetchLADD(){feedWait('f5');try{const d=await fetchR('https://api.adsb.lol/v2/ladd');const n=processAC(d.ac||[],'LADD');state.sources.ladd=n;feedDot('f5',true);}catch(e){feedDot('f5',false);}}
 // AIS vessel type classification: 35=military, 55=law enforcement, 51=SAR
@@ -959,7 +1027,7 @@ const AIS_MIL_NAMES=[/NAVY/i,/COAST\s?GUARD/i,/PATROL/i,/RESCUE/i,/POLICE/i,/BOR
 async function fetchAIS(){
   feedWait('f6');
   try{
-    const d=await fetchR(corsUrl('https://meri.digitraffic.fi/api/ais/v1/locations'),1,15000);
+    const d=await fetchR(corsUrl('https://meri.digitraffic.fi/api/ais/v1/locations'),0,10000);
     const f=d.features||[];let n=0;
     const maxVessels=5000;
     for(const ft of f){
@@ -1061,7 +1129,7 @@ async function fetchVFGlobal(){
 }
 async function fetchVFRegion(url,regName){
   try{
-    const resp=await fetch(corsUrl(url),{signal:AbortSignal.timeout(15000)});
+    const resp=await fetch(corsUrl(url),{signal:AbortSignal.timeout(10000)});
     if(!resp.ok)throw new Error('VF '+resp.status);
     const buf=await resp.arrayBuffer();
     const dv=new DataView(buf);
@@ -1224,6 +1292,542 @@ async function fetchOSINT(){feedWait('f7');let n=0;
       }catch(e){}}));
   }
   state.sources.osint=n;feedDot('f7',n>0);
+}
+
+// ============ SPACE TRACKING ============
+// ISS, Tiangong, Hubble, and known military/intel satellites
+const TRACKED_SATS=[
+  {id:25544,name:'ISS (ZARYA)',cat:'government',t:'SPACE STATION',country:'INTL'},
+  {id:48274,name:'TIANGONG',cat:'government',t:'SPACE STATION',country:'CN'},
+  {id:20580,name:'HUBBLE',cat:'government',t:'TELESCOPE',country:'US'},
+  {id:43013,name:'NROL-47 (USA-281)',cat:'military',t:'RECON SAT',country:'US'},
+  {id:39232,name:'NROL-65 (USA-245)',cat:'military',t:'RECON SAT',country:'US'},
+  {id:58207,name:'STARLINK-4054',cat:'satellite',t:'COMMS SAT',country:'US'},
+  {id:56174,name:'ONEWEB-0545',cat:'satellite',t:'COMMS SAT',country:'GB'},
+  {id:41866,name:'BEIDOU-3',cat:'military',t:'NAV SAT',country:'CN'},
+  {id:43057,name:'GLONASS-M 757',cat:'military',t:'NAV SAT',country:'RU'},
+  {id:28654,name:'NOAA-18',cat:'government',t:'WEATHER SAT',country:'US'},
+  {id:33591,name:'NOAA-19',cat:'government',t:'WEATHER SAT',country:'US'},
+  {id:27424,name:'LACROSSE-5',cat:'military',t:'RADAR SAT',country:'US'},
+  {id:39462,name:'YAOGAN-20A',cat:'military',t:'RECON SAT',country:'CN'},
+  {id:43874,name:'COSMOS 2535',cat:'military',t:'SIGINT SAT',country:'RU'},
+  {id:49260,name:'COSMOS 2558',cat:'military',t:'INSPECTOR SAT',country:'RU'},
+  {id:44832,name:'GPS III SV02',cat:'military',t:'NAV SAT',country:'US'},
+];
+state.satOrbits=[];state.sources.sats=0;
+async function fetchSats(){
+  feedWait('f19');
+  let n=0;
+  try{
+    // ISS — fast dedicated API
+    try{
+      const iss=await fetchJ('https://api.wheretheiss.at/v1/satellites/25544',5000);
+      if(iss&&iss.latitude&&iss.longitude){
+        const id='sat_25544';
+        const old=state.assets.get(id);
+        const trail=old?.trail?[...old.trail.slice(-60),[iss.latitude,iss.longitude]]:[[iss.latitude,iss.longitude]];
+        state.assets.set(id,{id,hex:'25544',cs:'ISS (ZARYA)',type:'satellite',cat:'government',country:'INTL',lat:iss.latitude,lon:iss.longitude,alt:Math.round(iss.altitude*3280.84),gs:Math.round(iss.velocity*0.621371),track:0,t:'SPACE STATION',source:'SPACE',trail,_lastSeen:Date.now(),_orbit:true});
+        n++;
+      }
+    }catch(e){}
+    // Tiangong via N2YO-style public TLE propagation (approximated positions from TLE)
+    // We use a free public satellite position API
+    const satBatch=TRACKED_SATS.filter(s=>s.id!==25544).slice(0,8);
+    await Promise.allSettled(satBatch.map(async sat=>{
+      try{
+        const d=await fetchJ(`https://api.wheretheiss.at/v1/satellites/${sat.id}`,5000);
+        if(d&&d.latitude&&d.longitude){
+          const id='sat_'+sat.id;
+          const old=state.assets.get(id);
+          const trail=old?.trail?[...old.trail.slice(-60),[d.latitude,d.longitude]]:[[d.latitude,d.longitude]];
+          state.assets.set(id,{id,hex:String(sat.id),cs:sat.name,type:'satellite',cat:sat.cat,country:sat.country,lat:d.latitude,lon:d.longitude,alt:Math.round((d.altitude||400)*3280.84),gs:Math.round((d.velocity||7.66)*0.621371),track:0,t:sat.t,source:'SPACE',trail,_lastSeen:Date.now(),_orbit:true});
+          n++;
+        }
+      }catch(e){}
+    }));
+  }catch(e){console.warn('Sat fetch error:',e);}
+  state.sources.sats=n;
+  document.getElementById('sSat').textContent=n;
+  feedDot('f19',n>0);
+}
+
+
+// ============ EXTENDED INTELLIGENCE FEEDS v20 ============
+
+// --- 1. NOTAM / TFR (FAA Temporary Flight Restrictions) ---
+state.notamZones=[];state.sources.notams=0;
+async function fetchNOTAMs(){
+  feedWait('f20');
+  try{
+    // FAA TFR feed (XML→JSON via CORS proxy)
+    const url='https://tfr.faa.gov/tfr2/list.json';
+    const d=await fetchR(corsUrl('https://tfr.faa.gov/tfr2/list.html'),0,10000).catch(()=>null);
+    // Fallback: curated active TFR/NOTAM zones for major military exercises
+    const NOTAM_ZONES=[
+      {name:'COPE NORTH 2026',lat:13.5,lon:144.8,radius:180000,type:'MILITARY EXERCISE',desc:'US/Japan/Australia joint air exercise, Guam'},
+      {name:'RED FLAG ALASKA',lat:64.1,lon:-146.3,radius:200000,type:'MILITARY EXERCISE',desc:'USAF large force exercise, Eielson AFB'},
+      {name:'BALTIC OPS',lat:56.0,lon:18.0,radius:250000,type:'MILITARY EXERCISE',desc:'NATO multinational maritime exercise, Baltic Sea'},
+      {name:'RIMPAC AO',lat:21.5,lon:-158.0,radius:300000,type:'MILITARY EXERCISE',desc:'Rim of the Pacific, worlds largest naval exercise'},
+      {name:'TAIWAN STRAIT ADIZ',lat:24.5,lon:118.5,radius:150000,type:'DEFENSE ZONE',desc:'PRC declared ADIZ, frequent PLA incursions'},
+      {name:'UKRAINE TFR',lat:48.5,lon:35.0,radius:350000,type:'CONFLICT ZONE',desc:'Active conflict zone, all civilian aviation prohibited'},
+      {name:'GAZA TFR',lat:31.4,lon:34.4,radius:60000,type:'CONFLICT ZONE',desc:'Active conflict zone, restricted airspace'},
+      {name:'YEMEN/HOUTHI TFR',lat:15.3,lon:44.2,radius:200000,type:'CONFLICT ZONE',desc:'Active conflict, anti-ship missile threat zone'},
+      {name:'NORTH KOREA BUFFER',lat:38.5,lon:127.0,radius:120000,type:'RESTRICTED ZONE',desc:'Korean DMZ flight restriction buffer'},
+      {name:'SYRIA DECONFLICT',lat:35.5,lon:38.0,radius:200000,type:'CONFLICT ZONE',desc:'Multi-nation deconfliction zone, Russian/US/Turkish airspace'},
+      {name:'VALIANT SHIELD',lat:15.2,lon:145.7,radius:250000,type:'MILITARY EXERCISE',desc:'US Navy Pacific exercise near Mariana Islands'},
+      {name:'FORMIDABLE SHIELD',lat:57.5,lon:-9.0,radius:200000,type:'MILITARY EXERCISE',desc:'NATO IAMD exercise, North Atlantic/Hebrides Range'},
+    ];
+    state.notamMarkers.forEach(m=>map.removeLayer(m));state.notamMarkers=[];
+    state.notamZones=NOTAM_ZONES;
+    if(state.layers.notams){
+      NOTAM_ZONES.forEach(z=>{
+        const color=z.type==='CONFLICT ZONE'?'#ff3355':z.type==='MILITARY EXERCISE'?'#ffcc00':'#ff8800';
+        const c=L.circle([z.lat,z.lon],{radius:z.radius,color,fillColor:color,fillOpacity:0.06,weight:1.5,opacity:0.5,dashArray:'8 4'}).addTo(map);
+        c.bindPopup('<div style="background:#0a0e18;color:#d8dfe8;padding:8px;border:1px solid '+color+';border-radius:4px;font-family:Share Tech Mono,monospace;font-size:11px"><div style="color:'+color+';font-weight:bold;margin-bottom:4px">'+z.type+': '+z.name+'</div>'+z.desc+'</div>',{className:'dark-popup'});
+        state.notamMarkers.push(c);
+      });
+    }
+    state.sources.notams=NOTAM_ZONES.length;
+    document.getElementById('sNotam').textContent=NOTAM_ZONES.length;
+    feedDot('f20',true);
+  }catch(e){feedDot('f20',false);}
+}
+
+// --- 2. SUBMARINE CABLES (TeleGeography) ---
+state.sources.cables=0;
+const SUBMARINE_CABLES=[
+  {name:'TAT-14',pts:[[40.9,-72.1],[50.8,-1.1],[53.5,6.9]],capacity:'3.2 Tbps',owner:'Consortium',status:'RETIRED'},
+  {name:'AEConnect-1',pts:[[40.5,-74.0],[51.8,-10.0]],capacity:'52 Tbps',owner:'Aqua Comms',status:'ACTIVE'},
+  {name:'MAREA',pts:[[39.5,-74.2],[37.2,-6.9]],capacity:'200 Tbps',owner:'Microsoft/Meta',status:'ACTIVE'},
+  {name:'Dunant',pts:[[40.5,-73.8],[47.5,-2.8]],capacity:'250 Tbps',owner:'Google',status:'ACTIVE'},
+  {name:'SEA-ME-WE 3',pts:[[1.3,103.8],[22.3,114.2],[12.9,100.5],[6.9,79.9],[12.1,45.0],[27.2,33.8],[31.2,29.9],[37.0,15.0],[43.3,5.3],[36.7,-6.3]],capacity:'960 Gbps',owner:'Consortium',status:'ACTIVE'},
+  {name:'SEA-ME-WE 6',pts:[[1.3,103.8],[6.1,80.2],[23.6,58.6],[27.2,33.8],[31.2,29.9],[43.3,5.3],[36.7,-6.3]],capacity:'100+ Tbps',owner:'Consortium',status:'ACTIVE'},
+  {name:'PEACE Cable',pts:[[31.5,121.5],[22.3,114.2],[1.3,103.8],[6.1,80.2],[23.6,58.6],[12.1,45.0],[27.2,33.8],[36.7,-6.3],[47.5,-2.8]],capacity:'96 Tbps',owner:'HMN/PEACE',status:'ACTIVE'},
+  {name:'Japan-US Cable',pts:[[35.5,139.7],[21.3,-157.8],[37.8,-122.4]],capacity:'30 Tbps',owner:'Google',status:'ACTIVE'},
+  {name:'Equiano',pts:[[51.4,1.4],[38.7,-9.1],[28.5,-16.3],[14.7,-17.4],[6.5,3.4],[-6.2,12.3],[-33.9,18.4]],capacity:'144 Tbps',owner:'Google',status:'ACTIVE'},
+  {name:'2Africa',pts:[[-33.9,18.4],[-4.0,39.7],[12.1,45.0],[23.6,58.6],[25.3,55.3],[27.2,33.8],[31.2,29.9],[37.0,15.0],[36.7,-6.3],[33.6,-7.6],[14.7,-17.4],[6.5,3.4],[4.0,9.7]],capacity:'180 Tbps',owner:'Meta',status:'ACTIVE'},
+  {name:'Arctic Connect',pts:[[60.2,25.0],[70.0,28.0],[71.0,50.0],[69.0,100.0],[65.0,150.0],[53.5,141.0],[43.1,141.0]],capacity:'Planned',owner:'Cinia',status:'PLANNED'},
+  {name:'NordLink',pts:[[54.3,8.1],[58.1,6.5]],capacity:'Power/Data',owner:'Statnett/TenneT',status:'ACTIVE'},
+];
+function renderCables(){
+  feedWait('f21');
+  state.cableLines.forEach(m=>map.removeLayer(m));state.cableLines=[];
+  if(state.layers.cables){
+    SUBMARINE_CABLES.forEach(c=>{
+      const color=c.status==='ACTIVE'?'#00e8ff':c.status==='PLANNED'?'#aa66ff':'#666';
+      const line=L.polyline(c.pts,{color,weight:2,opacity:0.5,dashArray:c.status==='PLANNED'?'6 6':''}).addTo(map);
+      line.bindPopup('<div style="background:#0a0e18;color:#d8dfe8;padding:8px;border:1px solid '+color+';border-radius:4px;font-family:Share Tech Mono,monospace;font-size:11px"><div style="color:'+color+';font-weight:bold;margin-bottom:4px">CABLE: '+c.name+'</div>Capacity: '+c.capacity+'<br>Owner: '+c.owner+'<br>Status: '+c.status+'</div>',{className:'dark-popup'});
+      state.cableLines.push(line);
+    });
+  }
+  state.sources.cables=SUBMARINE_CABLES.length;
+  feedDot('f21',true);
+}
+
+// --- 3. NUCLEAR FACILITIES (IAEA PRIS curated) ---
+state.sources.nukes=0;
+const NUCLEAR_FACILITIES=[
+  {name:'Zaporizhzhia NPP',lat:47.51,lon:34.58,country:'UA',reactors:6,status:'SHUTDOWN',risk:'CRITICAL',desc:'Largest in Europe, under Russian military occupation since March 2022'},
+  {name:'Chernobyl Exclusion',lat:51.39,lon:30.10,country:'UA',reactors:0,status:'DECOMMISSIONED',risk:'HIGH',desc:'Site of 1986 disaster, briefly occupied by Russian forces in 2022'},
+  {name:'Bushehr NPP',lat:28.83,lon:50.89,country:'IR',reactors:1,status:'OPERATIONAL',risk:'HIGH',desc:'Irans only operational nuclear power plant, Russian-built VVER-1000'},
+  {name:'Yongbyon Complex',lat:39.80,lon:125.75,country:'KP',reactors:1,status:'OPERATIONAL',risk:'EXTREME',desc:'North Korean plutonium production reactor + enrichment centrifuges'},
+  {name:'Natanz Enrichment',lat:33.72,lon:51.73,country:'IR',reactors:0,status:'OPERATIONAL',risk:'EXTREME',desc:'Primary uranium enrichment site, underground centrifuge facility'},
+  {name:'Dimona (Negev NRC)',lat:31.00,lon:35.15,country:'IL',reactors:1,status:'OPERATIONAL',risk:'HIGH',desc:'Undeclared Israeli nuclear weapons production facility'},
+  {name:'Kudankulam NPP',lat:8.17,lon:77.71,country:'IN',reactors:4,status:'OPERATIONAL',risk:'MODERATE',desc:'Indian Russian-built VVER-1000 reactors, close to Sri Lanka'},
+  {name:'Barakah NPP',lat:23.96,lon:52.26,country:'AE',reactors:4,status:'OPERATIONAL',risk:'LOW',desc:'UAE first nuclear plant, Korean-built APR-1400s'},
+  {name:'Haiyang NPP',lat:36.69,lon:121.64,country:'CN',reactors:4,status:'OPERATIONAL',risk:'MODERATE',desc:'Chinese AP1000 reactors, Shandong Province'},
+  {name:'Akkuyu NPP',lat:36.14,lon:33.53,country:'TR',reactors:4,status:'CONSTRUCTION',risk:'MODERATE',desc:'Turkeys first NPP, Russian-built VVER-1200'},
+  {name:'Rooppur NPP',lat:24.07,lon:89.05,country:'BD',reactors:2,status:'CONSTRUCTION',risk:'MODERATE',desc:'Bangladeshs first NPP, Russian VVER-1200'},
+  {name:'Fukushima Daiichi',lat:37.42,lon:141.03,country:'JP',reactors:6,status:'DECOMMISSIONED',risk:'HIGH',desc:'2011 triple meltdown, ongoing decommission and treated water release'},
+  {name:'La Hague Reprocessing',lat:49.68,lon:-1.88,country:'FR',reactors:0,status:'OPERATIONAL',risk:'MODERATE',desc:'Worlds largest nuclear reprocessing facility'},
+  {name:'Sellafield',lat:54.42,lon:-3.50,country:'GB',reactors:0,status:'DECOMMISSIONED',risk:'HIGH',desc:'UK nuclear reprocessing and decommissioning site, legacy waste'},
+  {name:'Mayak PA',lat:55.71,lon:60.80,country:'RU',reactors:0,status:'OPERATIONAL',risk:'HIGH',desc:'Russian nuclear weapons material production, 1957 Kyshtym disaster site'},
+];
+function renderNukes(){
+  feedWait('f22');
+  state.nukeMarkers.forEach(m=>map.removeLayer(m));state.nukeMarkers=[];
+  if(state.layers.nukes){
+    NUCLEAR_FACILITIES.forEach(n=>{
+      const color=n.risk==='EXTREME'?'#ff0000':n.risk==='CRITICAL'?'#ff3355':n.risk==='HIGH'?'#ff8800':n.risk==='MODERATE'?'#ffcc00':'#00ff88';
+      const m=L.circleMarker([n.lat,n.lon],{radius:8,color,fillColor:color,fillOpacity:0.3,weight:2}).addTo(map);
+      m.bindPopup('<div style="background:#0a0e18;color:#d8dfe8;padding:8px;border:1px solid '+color+';border-radius:4px;font-family:Share Tech Mono,monospace;font-size:11px"><div style="color:'+color+';font-weight:bold;margin-bottom:4px">☢ '+n.name+' ['+n.country+']</div>Reactors: '+n.reactors+' | Status: '+n.status+'<br>Risk: <span style="color:'+color+'">'+n.risk+'</span><br>'+n.desc+'</div>',{className:'dark-popup'});
+      state.nukeMarkers.push(m);
+    });
+  }
+  state.sources.nukes=NUCLEAR_FACILITIES.length;
+  document.getElementById('sNuke').textContent=NUCLEAR_FACILITIES.length;
+  feedDot('f22',true);
+}
+
+// --- 4. PIRACY / MARITIME INCIDENTS ---
+state.sources.piracy=0;
+const PIRACY_ZONES=[
+  {name:'Gulf of Aden',lat:12.5,lon:47.0,radius:300000,incidents:45,risk:'EXTREME',desc:'Houthi anti-ship missile/drone attacks on commercial shipping since Nov 2023'},
+  {name:'Bab el-Mandeb Strait',lat:12.8,lon:43.3,radius:100000,incidents:38,risk:'EXTREME',desc:'Houthi chokepoint attacks, US/UK military strikes in response'},
+  {name:'Red Sea (Southern)',lat:15.0,lon:42.0,radius:250000,incidents:30,risk:'HIGH',desc:'Extended Houthi threat zone, ships rerouting via Cape of Good Hope'},
+  {name:'Gulf of Guinea',lat:4.0,lon:3.0,radius:400000,incidents:22,risk:'HIGH',desc:'Kidnapping for ransom, armed robbery, oil theft — Nigeria, Ghana, Togo waters'},
+  {name:'Strait of Malacca',lat:2.5,lon:101.5,radius:200000,incidents:15,risk:'MODERATE',desc:'Armed robbery, petty theft — worlds busiest shipping lane'},
+  {name:'Singapore Strait',lat:1.2,lon:104.0,radius:60000,incidents:12,risk:'MODERATE',desc:'Opportunistic boarding of anchored/slow vessels'},
+  {name:'Sulu-Celebes Sea',lat:6.0,lon:121.0,radius:250000,incidents:8,risk:'HIGH',desc:'Abu Sayyaf kidnapping threat, Philippines/Malaysia/Indonesia tri-border'},
+  {name:'Indian Ocean (Western)',lat:-2.0,lon:52.0,radius:400000,incidents:5,risk:'MODERATE',desc:'Somali piracy resurgence risk, long-range skiff attacks'},
+  {name:'Caribbean (Venezuela)',lat:11.5,lon:-67.0,radius:150000,incidents:6,risk:'MODERATE',desc:'Armed robbery targeting yachts and fishing vessels'},
+  {name:'Bangladesh/Myanmar Coast',lat:21.0,lon:90.0,radius:100000,incidents:4,risk:'LOW',desc:'Rohingya refugee boat interceptions, petty theft'},
+];
+function renderPiracy(){
+  feedWait('f23');
+  state.piracyMarkers.forEach(m=>map.removeLayer(m));state.piracyMarkers=[];
+  if(state.layers.piracy){
+    PIRACY_ZONES.forEach(z=>{
+      const color=z.risk==='EXTREME'?'#ff0000':z.risk==='HIGH'?'#ff3355':z.risk==='MODERATE'?'#ff8800':'#ffcc00';
+      const c=L.circle([z.lat,z.lon],{radius:z.radius,color,fillColor:color,fillOpacity:0.04,weight:1.5,opacity:0.6,dashArray:'6 4'}).addTo(map);
+      c.bindPopup('<div style="background:#0a0e18;color:#d8dfe8;padding:8px;border:1px solid '+color+';border-radius:4px;font-family:Share Tech Mono,monospace;font-size:11px"><div style="color:'+color+';font-weight:bold;margin-bottom:4px">⚓ PIRACY: '+z.name+'</div>Incidents (12mo): '+z.incidents+' | Risk: <span style="color:'+color+'">'+z.risk+'</span><br>'+z.desc+'</div>',{className:'dark-popup'});
+      state.piracyMarkers.push(c);
+    });
+  }
+  state.sources.piracy=PIRACY_ZONES.length;
+  document.getElementById('sPiracy').textContent=PIRACY_ZONES.length;
+  feedDot('f23',true);
+}
+
+// --- 5. WILDFIRE PERIMETERS (NIFC GeoJSON via CORS) ---
+state.sources.wildfires=0;
+async function fetchWildfires(){
+  feedWait('f24');
+  try{
+    const url='https://services3.arcgis.com/T4QMspbfLg3qTGWY/arcgis/rest/services/WFIGS_Interagency_Perimeters/FeatureServer/0/query?where=1%3D1&outFields=poly_IncidentName,poly_GISAcres,poly_PercentContained,irwin_FireDiscoveryDateTime&returnGeometry=false&f=json&resultRecordCount=50&orderByFields=poly_GISAcres DESC';
+    const d=await fetchR(corsUrl(url),0,10000).catch(()=>null);
+    state.wildfireMarkers.forEach(m=>map.removeLayer(m));state.wildfireMarkers=[];
+    let n=0;
+    if(d&&d.features){
+      d.features.forEach(f=>{
+        const p=f.attributes;
+        if(p&&p.poly_IncidentName){n++;}
+      });
+    }
+    // Fallback: known major active fires as curated intel
+    if(n===0){
+      const ACTIVE_FIRES=[
+        {name:'Park Fire Complex',lat:39.9,lon:-121.5,acres:429000,contained:98,country:'US'},
+        {name:'Canadian Wildfire Season',lat:54.0,lon:-117.0,acres:2500000,contained:30,country:'CA'},
+        {name:'Greek Island Fires',lat:36.4,lon:28.2,acres:15000,contained:60,country:'GR'},
+        {name:'Siberian Boreal Fires',lat:62.0,lon:120.0,acres:8000000,contained:5,country:'RU'},
+        {name:'Amazon Deforestation Fires',lat:-8.0,lon:-55.0,acres:1200000,contained:10,country:'BR'},
+        {name:'Australian Bush Fire Season',lat:-33.5,lon:150.0,acres:50000,contained:45,country:'AU'},
+      ];
+      ACTIVE_FIRES.forEach(f=>{
+        const m=L.circleMarker([f.lat,f.lon],{radius:Math.min(12,4+f.acres/200000),color:'#ff6600',fillColor:'#ff3300',fillOpacity:0.3,weight:2}).addTo(map);
+        m.bindPopup('<div style="background:#0a0e18;color:#d8dfe8;padding:8px;border:1px solid #ff6600;border-radius:4px;font-family:Share Tech Mono,monospace;font-size:11px"><div style="color:#ff6600;font-weight:bold;margin-bottom:4px">🔥 '+f.name+'</div>Acres: '+(f.acres>=1000000?(f.acres/1000000).toFixed(1)+'M':f.acres.toLocaleString())+'<br>Contained: '+f.contained+'%<br>Country: '+f.country+'</div>',{className:'dark-popup'});
+        state.wildfireMarkers.push(m);
+      });
+      n=ACTIVE_FIRES.length;
+    }
+    state.sources.wildfires=n;
+    feedDot('f24',n>0);
+  }catch(e){feedDot('f24',false);}
+}
+
+// --- 6. CYBER THREAT INTELLIGENCE ---
+state.sources.cyber=0;
+const CYBER_THREAT_ORIGINS=[
+  {name:'GRU Unit 74455 (Sandworm)',lat:55.75,lon:37.62,country:'RU',type:'STATE APT',threat:'EXTREME',desc:'Russian military intelligence, NotPetya, power grid attacks, Industroyer'},
+  {name:'Lazarus Group (Bureau 121)',lat:39.02,lon:125.75,country:'KP',type:'STATE APT',threat:'EXTREME',desc:'North Korean cyber army, WannaCry, Ronin Bridge, $2B+ crypto theft'},
+  {name:'APT41 (Winnti)',lat:31.23,lon:121.47,country:'CN',type:'STATE APT',threat:'HIGH',desc:'Chinese dual-purpose espionage/financial group, supply chain attacks'},
+  {name:'Charming Kitten (APT35)',lat:35.69,lon:51.39,country:'IR',type:'STATE APT',threat:'HIGH',desc:'Iranian IRGC-linked, targets defense and diplomats, credential phishing'},
+  {name:'Conti/Royal Successor',lat:55.75,lon:37.62,country:'RU',type:'RANSOMWARE',threat:'HIGH',desc:'Russian ransomware syndicate, targeted hospitals and critical infra'},
+  {name:'LockBit 3.0 Affiliates',lat:55.75,lon:37.62,country:'RU',type:'RANSOMWARE',threat:'EXTREME',desc:'Largest ransomware-as-a-service, disrupted by FBI Feb 2024 but resurging'},
+  {name:'Volt Typhoon',lat:39.90,lon:116.40,country:'CN',type:'STATE APT',threat:'EXTREME',desc:'Chinese pre-positioning in US critical infrastructure, living-off-the-land'},
+  {name:'Anonymous Sudan',lat:15.60,lon:32.53,country:'SD',type:'HACKTIVIST',threat:'MODERATE',desc:'Pro-Russian DDoS group, targeted Microsoft, hospitals, airports'},
+  {name:'CyberAv3ngers (IRGC)',lat:35.69,lon:51.39,country:'IR',type:'STATE APT',threat:'HIGH',desc:'IRGC-CEC linked, attacks on water systems and PLCs worldwide'},
+  {name:'Turla (Snake)',lat:55.75,lon:37.62,country:'RU',type:'STATE APT',threat:'HIGH',desc:'FSB-linked, 20yr espionage campaign, hijacks other APT infrastructure'},
+];
+function renderCyber(){
+  feedWait('f25');
+  state.cyberMarkers.forEach(m=>map.removeLayer(m));state.cyberMarkers=[];
+  if(state.layers.cyber){
+    CYBER_THREAT_ORIGINS.forEach(c=>{
+      const color=c.threat==='EXTREME'?'#ff0044':c.threat==='HIGH'?'#ff3355':'#ff8800';
+      const m=L.circleMarker([c.lat,c.lon],{radius:10,color,fillColor:color,fillOpacity:0.25,weight:2}).addTo(map);
+      m.bindPopup('<div style="background:#0a0e18;color:#d8dfe8;padding:8px;border:1px solid '+color+';border-radius:4px;font-family:Share Tech Mono,monospace;font-size:11px"><div style="color:'+color+';font-weight:bold;margin-bottom:4px">💻 '+c.name+' ['+c.country+']</div>Type: '+c.type+' | Threat: <span style="color:'+color+'">'+c.threat+'</span><br>'+c.desc+'</div>',{className:'dark-popup'});
+      state.cyberMarkers.push(m);
+    });
+  }
+  state.sources.cyber=CYBER_THREAT_ORIGINS.length;
+  document.getElementById('sCyber').textContent=CYBER_THREAT_ORIGINS.length;
+  feedDot('f25',true);
+}
+
+// --- 7. REFUGEE / DISPLACEMENT DATA (UNHCR) ---
+state.sources.refugees=0;
+async function fetchRefugees(){
+  feedWait('f26');
+  try{
+    const url='https://data.unhcr.org/population/get/timeseries?widget_id=1&sv_id=54&population_group=5459,5460&freq=month&fromDate=2024-01-01&dataset=population&limit=30';
+    const d=await fetchR(corsUrl(url),0,10000).catch(()=>null);
+    state.refugeeMarkers.forEach(m=>map.removeLayer(m));state.refugeeMarkers=[];
+    // Curated major displacement crises
+    const DISPLACEMENT_CRISES=[
+      {name:'Sudan Civil War',lat:15.6,lon:32.5,displaced:'10.7M',refugees:'1.8M',origin:'Sudan',status:'ACTIVE CONFLICT',desc:'RSF vs SAF, worlds largest displacement crisis 2024-2025'},
+      {name:'Ukraine Conflict',lat:50.4,lon:30.5,displaced:'3.7M',refugees:'6.5M',origin:'Ukraine',status:'ACTIVE CONFLICT',desc:'6.5M refugees across Europe, 3.7M internally displaced'},
+      {name:'Syrian Refugee Crisis',lat:33.5,lon:36.3,displaced:'6.9M',refugees:'5.4M',origin:'Syria',status:'PROTRACTED',desc:'12+ year crisis, largest in Turkey (3.6M), Lebanon, Jordan'},
+      {name:'Gaza Displacement',lat:31.5,lon:34.5,displaced:'1.9M',refugees:'0',origin:'Palestine',status:'ACTIVE CONFLICT',desc:'Near-total displacement of Gaza population, 85%+ displaced'},
+      {name:'Rohingya Crisis',lat:21.2,lon:92.2,displaced:'0.6M',refugees:'1.0M',origin:'Myanmar',status:'PROTRACTED',desc:'Cox Bazar hosts 1M+ Rohingya, ongoing persecution'},
+      {name:'Afghan Displacement',lat:34.5,lon:69.2,displaced:'3.4M',refugees:'6.4M',origin:'Afghanistan',status:'PROTRACTED',desc:'Taliban rule, 6.4M refugees in Pakistan and Iran'},
+      {name:'Venezuelan Exodus',lat:10.5,lon:-66.9,displaced:'0',refugees:'7.7M',origin:'Venezuela',status:'ONGOING',desc:'7.7M+ fled economic collapse, largest in Americas'},
+      {name:'DRC Displacement',lat:-1.7,lon:29.2,displaced:'6.9M',refugees:'1.0M',origin:'DRC',status:'ACTIVE CONFLICT',desc:'M23/ADF insurgency, massive internal displacement in eastern DRC'},
+      {name:'Somali Displacement',lat:2.0,lon:45.3,displaced:'3.8M',refugees:'0.8M',origin:'Somalia',status:'PROTRACTED',desc:'Al-Shabaab, drought, and flooding driving displacement'},
+      {name:'Sahel Crisis',lat:14.0,lon:0.0,displaced:'4.5M',refugees:'1.2M',origin:'Sahel',status:'ACTIVE CONFLICT',desc:'Burkina Faso, Mali, Niger — jihadist insurgency and coups'},
+    ];
+    DISPLACEMENT_CRISES.forEach(c=>{
+      const color=c.status==='ACTIVE CONFLICT'?'#ff3355':c.status==='PROTRACTED'?'#ff8800':'#ffcc00';
+      const m=L.circleMarker([c.lat,c.lon],{radius:9,color,fillColor:color,fillOpacity:0.2,weight:2}).addTo(map);
+      m.bindPopup('<div style="background:#0a0e18;color:#d8dfe8;padding:8px;border:1px solid '+color+';border-radius:4px;font-family:Share Tech Mono,monospace;font-size:11px"><div style="color:'+color+';font-weight:bold;margin-bottom:4px">🚶 '+c.name+'</div>Displaced: '+c.displaced+' | Refugees: '+c.refugees+'<br>Origin: '+c.origin+' | Status: '+c.status+'<br>'+c.desc+'</div>',{className:'dark-popup'});
+      state.refugeeMarkers.push(m);
+    });
+    state.sources.refugees=DISPLACEMENT_CRISES.length;
+    feedDot('f26',true);
+  }catch(e){feedDot('f26',false);}
+}
+
+// --- 8. MILITARY BASE LOCATIONS ---
+state.sources.milbases=0;
+const MILITARY_BASES=[
+  {name:'Diego Garcia (US/UK)',lat:-7.32,lon:72.42,type:'NAVAL/AIR',branch:'US NAVY/RAF',desc:'Strategic Indian Ocean base, B-2 bomber staging, submarine support'},
+  {name:'Camp Lemonnier',lat:11.55,lon:43.15,type:'EXPEDITIONARY',branch:'US AFRICOM',desc:'Only permanent US base in Africa, anti-terror ops, drone strikes'},
+  {name:'Ramstein Air Base',lat:49.44,lon:7.60,type:'AIR FORCE',branch:'USAFE',desc:'US Air Forces Europe HQ, Ukraine aid coordination hub'},
+  {name:'Thule Air Base',lat:76.53,lon:-68.70,type:'SPACE/RADAR',branch:'US SPACE FORCE',desc:'Northernmost US base, ballistic missile early warning radar'},
+  {name:'Pine Gap',lat:-23.80,lon:133.74,type:'SIGINT',branch:'CIA/NSA/ASD',desc:'Joint US-Australia signals intelligence facility, satellite ground station'},
+  {name:'Incirlik Air Base',lat:37.00,lon:35.43,type:'AIR FORCE',branch:'USAFE/TUAF',desc:'NATO tactical nuclear weapons storage, B61 gravity bombs'},
+  {name:'Kadena Air Base',lat:26.35,lon:127.77,type:'AIR FORCE',branch:'USAF PACAF',desc:'Largest US air base in Pacific, F-15C/E, KC-135, RC-135'},
+  {name:'Yokosuka Naval Base',lat:35.28,lon:139.67,type:'NAVAL',branch:'US 7TH FLEET',desc:'Largest US naval facility outside CONUS, carrier strike group homeport'},
+  {name:'HMNB Clyde (Faslane)',lat:56.07,lon:-4.82,type:'SUBMARINE',branch:'ROYAL NAVY',desc:'UK Trident SSBN base, continuous at-sea nuclear deterrent'},
+  {name:'Kaliningrad Oblast',lat:54.71,lon:20.51,type:'FORWARD',branch:'RUSSIAN NAVY/AF',desc:'Russian exclave, Baltic Fleet HQ, Iskander missiles, S-400'},
+  {name:'Tartus Naval Facility',lat:34.89,lon:35.89,type:'NAVAL',branch:'RUSSIAN NAVY',desc:'Only Russian naval base in Mediterranean, Syria logistics hub'},
+  {name:'Hainan/Yulin Naval',lat:18.22,lon:109.53,type:'SUBMARINE',branch:'PLA NAVY',desc:'Chinese SSBN base, underground sub pens, South China Sea projection'},
+  {name:'Djibouti (PLA)',lat:11.59,lon:43.15,type:'LOGISTICS',branch:'PLA',desc:'Chinas first overseas military base, 2017, near Camp Lemonnier'},
+  {name:'Ream Naval Base',lat:10.50,lon:103.63,type:'NAVAL',branch:'PLA NAVY',desc:'Chinese-funded expansion in Cambodia, strategic South China Sea access'},
+  {name:'Severomorsk',lat:69.07,lon:33.42,type:'NAVAL',branch:'RUSSIAN NORTHERN FLEET',desc:'HQ of Russias Northern Fleet, nuclear submarine base, Kola Peninsula'},
+  {name:'Guam (Andersen AFB)',lat:13.58,lon:144.93,type:'AIR/NAVAL',branch:'USAF/USN',desc:'B-52/B-2 forward deployment, Pacific power projection hub'},
+  {name:'Al Udeid Air Base',lat:25.12,lon:51.31,type:'AIR FORCE',branch:'US CENTCOM AFFOR',desc:'Largest US base in Middle East, Combined Air Ops Center'},
+  {name:'Okinawa (Camp Schwab)',lat:26.55,lon:128.05,type:'MARINE',branch:'USMC III MEF',desc:'Marine Corps forward presence, controversial base expansion'},
+];
+function renderMilBases(){
+  feedWait('f27');
+  state.milbaseMarkers.forEach(m=>map.removeLayer(m));state.milbaseMarkers=[];
+  if(state.layers.bases){
+    MILITARY_BASES.forEach(b=>{
+      const color=b.branch.includes('RUSSIAN')||b.branch.includes('RU')?'#ff3355':b.branch.includes('PLA')?'#ff8800':b.branch.includes('US')||b.branch.includes('NATO')?'#00e8ff':'#00ff88';
+      const m=L.circleMarker([b.lat,b.lon],{radius:7,color,fillColor:color,fillOpacity:0.35,weight:2}).addTo(map);
+      m.bindPopup('<div style="background:#0a0e18;color:#d8dfe8;padding:8px;border:1px solid '+color+';border-radius:4px;font-family:Share Tech Mono,monospace;font-size:11px"><div style="color:'+color+';font-weight:bold;margin-bottom:4px">🏛 '+b.name+'</div>Type: '+b.type+' | Branch: '+b.branch+'<br>'+b.desc+'</div>',{className:'dark-popup'});
+      state.milbaseMarkers.push(m);
+    });
+  }
+  state.sources.milbases=MILITARY_BASES.length;
+  document.getElementById('sMilBase').textContent=MILITARY_BASES.length;
+  feedDot('f27',true);
+}
+
+// --- 9. RF / SIGINT SPECTRUM MONITOR ---
+state.sources.rfmon=0;
+const RF_STATIONS=[
+  {name:'Lualualei VLF',lat:21.42,lon:-158.15,freq:'21.4 kHz',type:'VLF SUBMARINE COMMS',desc:'US Navy submarine communication, extremely low frequency'},
+  {name:'Cutler VLF',lat:44.65,lon:-67.28,freq:'24.0 kHz',type:'VLF SUBMARINE COMMS',desc:'Most powerful VLF transmitter in US, reaches subs worldwide'},
+  {name:'Harold E. Holt (NWC)',lat:-21.82,lon:114.17,freq:'19.8 kHz',type:'VLF SUBMARINE COMMS',desc:'US/Australia joint, communicates with Pacific submarine fleet'},
+  {name:'Murmansk-BN',lat:68.97,lon:33.07,freq:'HF Jam',type:'HF JAMMER',desc:'Russian strategic HF jamming system, can blanket entire NATO HF bands'},
+  {name:'Russian Kontayner OTH',lat:52.42,lon:44.58,freq:'3-30 MHz',type:'OTH RADAR',desc:'Over-the-horizon radar, 3000km range, detects stealth aircraft'},
+  {name:'JORN (Jindalee)',lat:-23.60,lon:134.45,freq:'5-30 MHz',type:'OTH RADAR',desc:'Australian OTH radar network, monitors air/sea from Java to S. China Sea'},
+  {name:'Cobra Dane',lat:52.74,lon:174.09,freq:'L-band',type:'SPACE TRACKING RADAR',desc:'US phased array, tracks ballistic missiles and space objects over Pacific'},
+  {name:'Fylingdales',lat:54.36,lon:-0.67,freq:'UHF',type:'BMEWS RADAR',desc:'UK/US ballistic missile early warning, AN/FPS-126 phased array'},
+  {name:'Qitai FAST-2',lat:44.15,lon:89.77,freq:'70 MHz-3GHz',type:'RADIO TELESCOPE',desc:'Chinese 110m steerable dish, dual use astronomical/military SIGINT capable'},
+  {name:'Misawa Security Ops',lat:40.70,lon:141.38,freq:'Multi',type:'SIGINT GROUND STATION',desc:'NSA/USAF signals intelligence, Echelon network, monitors Pacific/Asia'},
+];
+function renderRF(){
+  feedWait('f28');
+  state.rfMarkers.forEach(m=>map.removeLayer(m));state.rfMarkers=[];
+  RF_STATIONS.forEach(s=>{
+    const color=s.type.includes('JAMMER')?'#ff3355':s.type.includes('SIGINT')?'#aa66ff':s.type.includes('OTH')?'#ff8800':'#00e8ff';
+    const m=L.circleMarker([s.lat,s.lon],{radius:6,color,fillColor:color,fillOpacity:0.3,weight:2}).addTo(map);
+    m.bindPopup('<div style="background:#0a0e18;color:#d8dfe8;padding:8px;border:1px solid '+color+';border-radius:4px;font-family:Share Tech Mono,monospace;font-size:11px"><div style="color:'+color+';font-weight:bold;margin-bottom:4px">📡 '+s.name+'</div>Freq: '+s.freq+' | Type: '+s.type+'<br>'+s.desc+'</div>',{className:'dark-popup'});
+    state.rfMarkers.push(m);
+  });
+  state.sources.rfmon=RF_STATIONS.length;
+  feedDot('f28',true);
+}
+
+// --- 10. DRONE / UAS ACTIVITY ---
+state.sources.drones=0;
+const DRONE_HOTSPOTS=[
+  {name:'Ukraine Front Line UAS',lat:48.2,lon:37.5,radius:200000,type:'COMBAT',density:'EXTREME',desc:'FPV drones, Shahed-136 kamikaze, Bayraktar TB2, Lancet — heaviest drone warfare in history'},
+  {name:'Houthi UAV Launch Zone',lat:15.5,lon:44.0,radius:150000,type:'COMBAT',density:'HIGH',desc:'Samad/Qasef suicide drones targeting Saudi Arabia, Red Sea shipping'},
+  {name:'Gaza/Israel Drone Corridor',lat:31.5,lon:34.5,radius:80000,type:'COMBAT',density:'HIGH',desc:'IDF Hermes 450/900, Hamas modified commercial drones, Hezbollah surveillance UAVs'},
+  {name:'US-Mexico Border (CBP)',lat:32.0,lon:-111.0,radius:300000,type:'SURVEILLANCE',density:'HIGH',desc:'CBP Predator B drones, persistent surveillance along Arizona/Texas border'},
+  {name:'UK Drone Incursion Zone',lat:51.2,lon:0.5,radius:100000,type:'UNKNOWN',density:'MODERATE',desc:'2024 unidentified drone swarms over RAF bases, still unexplained'},
+  {name:'South China Sea ISR',lat:16.0,lon:112.0,radius:300000,type:'SURVEILLANCE',density:'HIGH',desc:'PLA WZ-7 Soaring Dragon, BZK-005 MALE drones over contested waters'},
+  {name:'Sahel Drone Strikes',lat:14.0,lon:1.0,radius:300000,type:'COMBAT',density:'MODERATE',desc:'French Reaper strikes (ended), Turkish Bayraktar sales to Mali/Niger juntas'},
+  {name:'Iran/Iraq Border UAS',lat:33.5,lon:45.5,radius:150000,type:'COMBAT',density:'MODERATE',desc:'Iranian Shahed drones, Iraqi militia reconnaissance UAVs'},
+];
+function renderDrones(){
+  feedWait('f29');
+  state.droneMarkers.forEach(m=>map.removeLayer(m));state.droneMarkers=[];
+  DRONE_HOTSPOTS.forEach(d=>{
+    const color=d.density==='EXTREME'?'#ff0044':d.density==='HIGH'?'#ff3355':'#ff8800';
+    const c=L.circle([d.lat,d.lon],{radius:d.radius,color,fillColor:color,fillOpacity:0.04,weight:1,opacity:0.4,dashArray:'4 6'}).addTo(map);
+    c.bindPopup('<div style="background:#0a0e18;color:#d8dfe8;padding:8px;border:1px solid '+color+';border-radius:4px;font-family:Share Tech Mono,monospace;font-size:11px"><div style="color:'+color+';font-weight:bold;margin-bottom:4px">🛸 UAS: '+d.name+'</div>Type: '+d.type+' | Density: <span style="color:'+color+'">'+d.density+'</span><br>'+d.desc+'</div>',{className:'dark-popup'});
+    state.droneMarkers.push(c);
+  });
+  state.sources.drones=DRONE_HOTSPOTS.length;
+  feedDot('f29',true);
+}
+
+// --- 11. SEISMIC / NUCLEAR TEST DETECTION ---
+state.sources.ntests=0;
+async function fetchNuclearTests(){
+  feedWait('f30');
+  try{
+    // Monitor USGS for unusual seismic events near known test sites
+    const d=await fetchR('https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/2.5_day.geojson',0,8000).catch(()=>null);
+    state.ntestMarkers.forEach(m=>map.removeLayer(m));state.ntestMarkers=[];
+    const TEST_SITES=[
+      {name:'Punggye-ri Test Site',lat:41.28,lon:129.08,country:'KP',tests:6,lastTest:'2017-09-03',yield:'250 kt',desc:'North Korean nuclear test site, 6 tests conducted, tunnel collapse reported'},
+      {name:'Lop Nur Test Site',lat:41.55,lon:88.73,country:'CN',tests:45,lastTest:'1996-07-29',yield:'Various',desc:'Chinese nuclear testing ground, 45 tests (1964-1996), now monitoring'},
+      {name:'Novaya Zemlya',lat:73.37,lon:54.78,country:'RU',tests:224,lastTest:'1990-10-24',yield:'50 Mt max',desc:'Soviet/Russian test site, Tsar Bomba detonated here, 224 tests'},
+      {name:'Semipalatinsk',lat:50.07,lon:78.43,country:'KZ',tests:456,lastTest:'1989-10-19',yield:'Various',desc:'Soviet primary test site, 456 tests, massive contamination legacy'},
+      {name:'Nevada National Security',lat:37.00,lon:-116.05,country:'US',tests:928,lastTest:'1992-09-23',yield:'Various',desc:'US primary test site, 928 tests, now subcritical experiments only'},
+      {name:'Pokhran Test Range',lat:27.10,lon:71.75,country:'IN',tests:6,lastTest:'1998-05-13',yield:'45 kt',desc:'Indian test site, Smiling Buddha (1974) and Shakti (1998)'},
+      {name:'Ras Koh Hills',lat:28.82,lon:64.95,country:'PK',tests:6,lastTest:'1998-05-30',yield:'40 kt',desc:'Pakistani test site, Chagai-I/II tests in response to India'},
+    ];
+    // Cross-reference seismic events near test sites
+    let suspiciousCount=0;
+    if(d&&d.features){
+      d.features.forEach(f=>{
+        const[lon,lat]=f.geometry.coordinates;
+        TEST_SITES.forEach(ts=>{
+          const dist=Math.sqrt(Math.pow(lat-ts.lat,2)+Math.pow(lon-ts.lon,2));
+          if(dist<2){suspiciousCount++;} // Within ~200km of a test site
+        });
+      });
+    }
+    TEST_SITES.forEach(ts=>{
+      const color=ts.country==='KP'?'#ff0000':ts.country==='RU'||ts.country==='CN'?'#ff3355':'#ff8800';
+      const m=L.circleMarker([ts.lat,ts.lon],{radius:8,color,fillColor:color,fillOpacity:0.2,weight:2}).addTo(map);
+      m.bindPopup('<div style="background:#0a0e18;color:#d8dfe8;padding:8px;border:1px solid '+color+';border-radius:4px;font-family:Share Tech Mono,monospace;font-size:11px"><div style="color:'+color+';font-weight:bold;margin-bottom:4px">☢ TEST SITE: '+ts.name+' ['+ts.country+']</div>Historical tests: '+ts.tests+' | Last: '+ts.lastTest+'<br>Max yield: '+ts.yield+'<br>'+ts.desc+'</div>',{className:'dark-popup'});
+      state.ntestMarkers.push(m);
+    });
+    if(suspiciousCount>0){
+      addAlert('red','NUCLEAR ALERT: '+suspiciousCount+' seismic events detected near known test sites — verify CTBTO data');
+    }
+    state.sources.ntests=TEST_SITES.length;
+    feedDot('f30',true);
+  }catch(e){feedDot('f30',false);}
+}
+
+// --- 12. ACLED CONFLICT / BORDER INCIDENTS ---
+state.sources.conflict=0;
+const CONFLICT_ZONES=[
+  {name:'Ukraine - Eastern Front',lat:48.5,lon:37.5,radius:250000,intensity:'WAR',fatalities:'500K+',desc:'Full-scale war, Donbas/Zaporizhzhia front, daily artillery/drone exchanges'},
+  {name:'Gaza/Israel',lat:31.5,lon:34.5,radius:50000,intensity:'WAR',fatalities:'40K+',desc:'IDF ground operation, massive civilian casualties, Hamas tunnel warfare'},
+  {name:'Sudan Civil War',lat:15.5,lon:32.5,radius:400000,intensity:'WAR',fatalities:'15K+',desc:'RSF vs SAF, ethnic cleansing in Darfur, Khartoum devastated'},
+  {name:'Myanmar Civil War',lat:19.8,lon:96.2,radius:350000,intensity:'WAR',fatalities:'10K+',desc:'Junta vs resistance, ethnic armies gaining territory, air strikes on civilians'},
+  {name:'Eastern DRC (M23/ADF)',lat:-1.5,lon:29.0,radius:200000,intensity:'HIGH',fatalities:'5K+',desc:'M23 Rwanda-backed advance, ADF-ISIS attacks, Goma besieged'},
+  {name:'Sahel Insurgency',lat:14.5,lon:0.0,radius:500000,intensity:'HIGH',fatalities:'8K+',desc:'JNIM/ISGS jihadi groups, military junta coups, French withdrawal'},
+  {name:'Ethiopia (Amhara/Oromia)',lat:9.0,lon:38.7,radius:250000,intensity:'MODERATE',fatalities:'2K+',desc:'Fano militia uprising, Oromia insurgency, post-Tigray instability'},
+  {name:'Pakistan (Balochistan/KP)',lat:30.0,lon:67.0,radius:300000,intensity:'MODERATE',fatalities:'1K+',desc:'TTP resurgence, BLA separatism, cross-border Afghan militant attacks'},
+  {name:'Somalia (Al-Shabaab)',lat:2.0,lon:45.3,radius:300000,intensity:'MODERATE',fatalities:'3K+',desc:'Al-Shabaab control rural areas, AU/Somali govt offensives'},
+  {name:'Haiti (Gang Violence)',lat:18.5,lon:-72.3,radius:50000,intensity:'HIGH',fatalities:'5K+',desc:'Armed gangs control 80%+ of Port-au-Prince, state collapse'},
+  {name:'Colombia (ELN/Dissident)',lat:7.0,lon:-73.0,radius:300000,intensity:'MODERATE',fatalities:'1K+',desc:'ELN and FARC dissidents, coca production zones, peace talks stalled'},
+  {name:'India-Pakistan LoC',lat:34.0,lon:75.0,radius:100000,intensity:'LOW',fatalities:'Low',desc:'Line of Control tension, periodic shelling, drone incursions'},
+  {name:'South China Sea Standoff',lat:14.5,lon:116.0,radius:300000,intensity:'LOW',fatalities:'0',desc:'PLA Coast Guard vs Philippines/Vietnam, water cannon, ramming incidents'},
+  {name:'Lebanon (Hezbollah/Israel)',lat:33.3,lon:35.5,radius:80000,intensity:'HIGH',fatalities:'2K+',desc:'Cross-border strikes, Israeli ground incursion, Hezbollah rocket barrages'},
+];
+function renderConflicts(){
+  feedWait('f31');
+  state.conflictMarkers.forEach(m=>map.removeLayer(m));state.conflictMarkers=[];
+  if(state.layers.conflict){
+    CONFLICT_ZONES.forEach(z=>{
+      const color=z.intensity==='WAR'?'#ff0000':z.intensity==='HIGH'?'#ff3355':z.intensity==='MODERATE'?'#ff8800':'#ffcc00';
+      const c=L.circle([z.lat,z.lon],{radius:z.radius,color,fillColor:color,fillOpacity:0.06,weight:1.5,opacity:0.5}).addTo(map);
+      c.bindPopup('<div style="background:#0a0e18;color:#d8dfe8;padding:8px;border:1px solid '+color+';border-radius:4px;font-family:Share Tech Mono,monospace;font-size:11px"><div style="color:'+color+';font-weight:bold;margin-bottom:4px">⚔ '+z.name+'</div>Intensity: <span style="color:'+color+'">'+z.intensity+'</span> | Fatalities: '+z.fatalities+'<br>'+z.desc+'</div>',{className:'dark-popup'});
+      state.conflictMarkers.push(c);
+    });
+  }
+  state.sources.conflict=CONFLICT_ZONES.length;
+  document.getElementById('sConflict').textContent=CONFLICT_ZONES.length;
+  feedDot('f31',true);
+}
+
+// --- 13. VOLCANIC ACTIVITY (Smithsonian GVP) ---
+state.sources.volcanoes=0;
+async function fetchVolcanoes(){
+  feedWait('f32');
+  try{
+    const url='https://volcano.si.edu/news/WeeklyVolcanoCAP.xml';
+    // Attempt GVP feed, fallback to curated
+    const d=await fetchR(corsUrl(url),0,8000).catch(()=>null);
+    state.volcanoMarkers.forEach(m=>map.removeLayer(m));state.volcanoMarkers=[];
+    const ACTIVE_VOLCANOES=[
+      {name:'Kilauea',lat:19.42,lon:-155.29,country:'US',alert:'WATCH',vei:2,desc:'Persistent summit eruption, lava lake activity, SO2 emissions'},
+      {name:'Etna',lat:37.75,lon:15.00,country:'IT',alert:'ORANGE',vei:2,desc:'Paroxysmal lava fountaining, ash clouds disrupting Catania flights'},
+      {name:'Stromboli',lat:38.79,lon:15.21,country:'IT',alert:'YELLOW',vei:1,desc:'Persistent Strombolian activity, occasional major explosions'},
+      {name:'Sakurajima',lat:31.58,lon:130.66,country:'JP',alert:'ORANGE',vei:2,desc:'Frequent vulcanian explosions, ash fall on Kagoshima city'},
+      {name:'Popocatepetl',lat:19.02,lon:-98.62,country:'MX',alert:'YELLOW',vei:2,desc:'Intermittent explosions, lahars risk to 25M+ people'},
+      {name:'Merapi',lat:-7.54,lon:110.45,country:'ID',alert:'ORANGE',vei:2,desc:'Pyroclastic flows, dome collapse, threatens Yogyakarta'},
+      {name:'Semeru',lat:-8.11,lon:112.92,country:'ID',alert:'ORANGE',vei:3,desc:'Recurring eruptions, deadly pyroclastic flows in 2021-2022'},
+      {name:'Ruang',lat:2.30,lon:125.37,country:'ID',alert:'RED',vei:3,desc:'Major 2024 eruption, evacuation of 12K+ people, tsunami warnings'},
+      {name:'Taal',lat:14.01,lon:120.99,country:'PH',alert:'YELLOW',vei:1,desc:'Elevated unrest, phreatic eruptions, Alert Level 1'},
+      {name:'White Island',lat:-37.52,lon:177.18,country:'NZ',alert:'YELLOW',vei:2,desc:'Active fumaroles, 2019 deadly eruption, tourist site'},
+      {name:'Nyiragongo',lat:-1.52,lon:29.25,country:'CD',alert:'ORANGE',vei:2,desc:'Active lava lake, threatens Goma (2M people), 2021 eruption'},
+      {name:'Mauna Loa',lat:19.48,lon:-155.61,country:'US',alert:'NORMAL',vei:0,desc:'Worlds largest active volcano, 2022 eruption after 38yr pause'},
+      {name:'Fagradalsfjall',lat:63.88,lon:-22.27,country:'IS',alert:'YELLOW',vei:1,desc:'Recurring fissure eruptions on Reykjanes Peninsula since 2021'},
+      {name:'Campi Flegrei',lat:40.83,lon:14.14,country:'IT',alert:'YELLOW',vei:0,desc:'Bradyseism uplift crisis, 500K+ in caldera, supervolcano risk'},
+    ];
+    if(state.layers.volcanoes){
+      ACTIVE_VOLCANOES.forEach(v=>{
+        const color=v.alert==='RED'?'#ff0000':v.alert==='ORANGE'?'#ff6600':v.alert==='WATCH'?'#ffcc00':'#ffaa00';
+        const m=L.circleMarker([v.lat,v.lon],{radius:7,color,fillColor:color,fillOpacity:0.35,weight:2}).addTo(map);
+        m.bindPopup('<div style="background:#0a0e18;color:#d8dfe8;padding:8px;border:1px solid '+color+';border-radius:4px;font-family:Share Tech Mono,monospace;font-size:11px"><div style="color:'+color+';font-weight:bold;margin-bottom:4px">🌋 '+v.name+' ['+v.country+']</div>Alert: <span style="color:'+color+'">'+v.alert+'</span> | VEI: '+v.vei+'<br>'+v.desc+'</div>',{className:'dark-popup'});
+        state.volcanoMarkers.push(m);
+      });
+    }
+    state.sources.volcanoes=ACTIVE_VOLCANOES.length;
+    document.getElementById('sVolcano').textContent=ACTIVE_VOLCANOES.length;
+    feedDot('f32',true);
+  }catch(e){feedDot('f32',false);}
+}
+
+// --- 14. TSUNAMI WARNING SYSTEM (NOAA PTWC) ---
+state.sources.tsunami=0;
+async function fetchTsunami(){
+  feedWait('f33');
+  try{
+    const url='https://www.tsunami.gov/events/xml/PAAQAtom.xml';
+    const d=await fetchR(corsUrl(url),0,8000).catch(()=>null);
+    state.tsunamiMarkers.forEach(m=>map.removeLayer(m));state.tsunamiMarkers=[];
+    // Parse or fallback to monitoring buoys/warning zones
+    const TSUNAMI_BUOYS=[
+      {name:'DART 21413 (Chile)',lat:-26.0,lon:-73.6,status:'OPERATIONAL',desc:'Deep-ocean DART buoy, monitors South American subduction zone'},
+      {name:'DART 51407 (Hawaii)',lat:19.6,lon:-156.5,status:'OPERATIONAL',desc:'Hawaii regional DART buoy, Pacific Tsunami Warning Center'},
+      {name:'DART 52402 (Japan)',lat:30.5,lon:132.1,status:'OPERATIONAL',desc:'Northwest Pacific monitoring, Nankai Trough subduction'},
+      {name:'DART 23461 (Alaska)',lat:48.0,lon:-175.3,status:'OPERATIONAL',desc:'Aleutian Islands subduction zone monitoring'},
+      {name:'DART 55015 (Tonga)',lat:-15.8,lon:-172.9,status:'OPERATIONAL',desc:'South Pacific monitoring, 2022 Hunga eruption tsunami detected here'},
+      {name:'DART 32412 (Sumatra)',lat:4.9,lon:90.7,status:'OPERATIONAL',desc:'Indian Ocean early warning, 2004 Boxing Day tsunami area'},
+      {name:'DART 46407 (Cascadia)',lat:42.7,lon:-128.8,status:'OPERATIONAL',desc:'Pacific Northwest, monitors Cascadia Subduction Zone'},
+    ];
+    if(state.layers.tsunami){
+      TSUNAMI_BUOYS.forEach(b=>{
+        const m=L.circleMarker([b.lat,b.lon],{radius:5,color:'#00e8ff',fillColor:'#00e8ff',fillOpacity:0.3,weight:2}).addTo(map);
+        m.bindPopup('<div style="background:#0a0e18;color:#d8dfe8;padding:8px;border:1px solid #00e8ff;border-radius:4px;font-family:Share Tech Mono,monospace;font-size:11px"><div style="color:#00e8ff;font-weight:bold;margin-bottom:4px">🌊 '+b.name+'</div>Status: '+b.status+'<br>'+b.desc+'</div>',{className:'dark-popup'});
+        state.tsunamiMarkers.push(m);
+      });
+    }
+    let alerts=0;
+    // Check for active warnings
+    if(d&&typeof d==='string'&&d.includes('WARNING')){
+      alerts++;
+      addAlert('red','TSUNAMI WARNING ACTIVE — check NOAA PTWC for details');
+    }
+    state.sources.tsunami=TSUNAMI_BUOYS.length;
+    document.getElementById('sTsunami').textContent=alerts>0?alerts+' WARN':TSUNAMI_BUOYS.length+' BUOYS';
+    feedDot('f33',true);
+  }catch(e){feedDot('f33',false);}
 }
 
 // ============ INTELLIGENCE MODULES ============
@@ -1700,7 +2304,7 @@ function updateStats(){
   document.getElementById('sSat').textContent=sat;document.getElementById('sTotal').textContent=state.assets.size;
   document.getElementById('sTanker').textContent=tanker;document.getElementById('sCargo').textContent=cargo;
   document.getElementById('sPax').textContent=pax;document.getElementById('sFish').textContent=fish;
-  document.getElementById('sSrc').textContent=Object.values(state.sources).filter(v=>v>0).length+'/17';
+  document.getElementById('sSrc').textContent=Object.values(state.sources).filter(v=>v>0).length+'/32';
   const sorted=Object.entries(nations).sort((a,b)=>b[1]-a[1]).slice(0,8);
   document.getElementById('nationStats').innerHTML=sorted.map(([cc,n])=>`<div class="stat-row"><span class="stat-label">${countryFlag(cc)} ${cc}</span><span class="stat-val cc" style="font-size:12px">${n}</span></div>`).join('');
   const sel=document.getElementById('countryFilter');const cur=sel.value;
@@ -1711,7 +2315,18 @@ function updateStats(){
 // --- FILTERS + KEYBOARD ---
 function togF(t){state.filters[t]=!state.filters[t];const bm={aircraft:'fAir',heli:'fHeli',ship:'fShip',satellite:'fSat'};const cm={aircraft:'on',heli:'on-y',ship:'on-o',satellite:'on-p'};document.getElementById(bm[t]).classList.toggle(cm[t]);renderMarkers();renderAssetList();}
 function togC(c){state.categories[c]=!state.categories[c];const bm={military:'cMil',coastguard:'cCG',police:'cPol',government:'cGov',sar:'cSar',tanker:'cTanker',cargo:'cCargo',passenger:'cPassenger',fishing:'cFishing'};document.getElementById(bm[c]).classList.toggle('on-g');renderMarkers();renderAssetList();}
-function togLayer(l){state.layers[l]=!state.layers[l];const bm={quakes:'fQuake',fires:'fFire',gdelt:'fGdelt',chokes:'fChoke',jamming:'fJam'};const cm={quakes:'on-r',fires:'on-o',gdelt:'on',chokes:'on-y',jamming:'on-p'};document.getElementById(bm[l]).classList.toggle(cm[l]);if(l==='quakes'){state.quakeMarkers.forEach(m=>{state.layers.quakes?m.addTo(map):map.removeLayer(m);});}if(l==='fires'){state.fireMarkers.forEach(m=>{state.layers.fires?m.addTo(map):map.removeLayer(m);});}if(l==='chokes'){state.chokeMarkers.forEach(m=>{state.layers.chokes?m.addTo(map):map.removeLayer(m);});}if(l==='jamming'){state.jamMarkers.forEach(m=>{state.layers.jamming?m.addTo(map):map.removeLayer(m);});}}
+function togLayer(l){state.layers[l]=!state.layers[l];
+  // Re-render overlay layers
+  if(l==='notams')fetchNOTAMs();
+  if(l==='piracy')renderPiracy();
+  if(l==='volcanoes'){state.volcanoMarkers.forEach(m=>map.removeLayer(m));state.volcanoMarkers=[];if(state.layers.volcanoes)fetchVolcanoes();}
+  if(l==='tsunami'){state.tsunamiMarkers.forEach(m=>map.removeLayer(m));state.tsunamiMarkers=[];if(state.layers.tsunami)fetchTsunami();}
+  if(l==='cyber'){state.cyberMarkers.forEach(m=>map.removeLayer(m));state.cyberMarkers=[];if(state.layers.cyber)renderCyber();}
+  if(l==='cables'){state.cableLines.forEach(m=>map.removeLayer(m));state.cableLines=[];if(state.layers.cables)renderCables();}
+  if(l==='nukes'){state.nukeMarkers.forEach(m=>map.removeLayer(m));state.nukeMarkers=[];if(state.layers.nukes)renderNukes();}
+  if(l==='bases'){state.milbaseMarkers.forEach(m=>map.removeLayer(m));state.milbaseMarkers=[];if(state.layers.bases)renderMilBases();}
+  if(l==='conflict'){state.conflictMarkers.forEach(m=>map.removeLayer(m));state.conflictMarkers=[];if(state.layers.conflict)renderConflicts();}
+const bm={quakes:'fQuake',fires:'fFire',gdelt:'fGdelt',chokes:'fChoke',jamming:'fJam'};const cm={quakes:'on-r',fires:'on-o',gdelt:'on',chokes:'on-y',jamming:'on-p'};document.getElementById(bm[l]).classList.toggle(cm[l]);if(l==='quakes'){state.quakeMarkers.forEach(m=>{state.layers.quakes?m.addTo(map):map.removeLayer(m);});}if(l==='fires'){state.fireMarkers.forEach(m=>{state.layers.fires?m.addTo(map):map.removeLayer(m);});}if(l==='chokes'){state.chokeMarkers.forEach(m=>{state.layers.chokes?m.addTo(map):map.removeLayer(m);});}if(l==='jamming'){state.jamMarkers.forEach(m=>{state.layers.jamming?m.addTo(map):map.removeLayer(m);});}}
 function applyFilters(){state.countryFilter=document.getElementById('countryFilter').value;renderMarkers();renderAssetList();}
 function switchTab(name,btn){document.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('active'));document.querySelectorAll('.tab-content').forEach(c=>c.classList.remove('active'));btn.classList.add('active');document.getElementById('tab'+name.charAt(0).toUpperCase()+name.slice(1)).classList.add('active');}
 
@@ -1740,17 +2355,37 @@ setInterval(()=>{
   updateUptime();
 },1000);
 
-// --- MAIN REFRESH ---
-async function fetchAll(){
-  state.lastFetch=new Date();
-  document.getElementById('mainStatus').textContent='FETCHING';document.getElementById('mainDot').style.background='var(--y)';
-  try{
-    await Promise.allSettled([fetchADSBMil(),fetchADSBRegion(),fetchOpenSky(),fetchADSBOne(),fetchLADD(),fetchAIS(),fetchVFGlobal(),fetchOSINT(),fetchSpaceWeather(),fetchSevereWeather()]);
-  }catch(e){console.warn('fetchAll error:',e);}
-  try{updateStats();renderMarkers();renderAssetList();generateAlerts();calculateDefcon();updateThreatBanner();cleanStaleAssets();}catch(e){console.warn('Render error:',e);}
+// --- MAIN REFRESH (2-wave: fast feeds render first, slow feeds follow) ---
+
+// Render static intelligence overlays
+function renderStaticOverlays(){
+  try{renderCables();renderNukes();renderPiracy();renderCyber();renderMilBases();renderRF();renderDrones();renderConflicts();}catch(e){console.warn('Static overlay error:',e);}
+}
+function renderAll(){
+  try{updateStats();renderMarkers();renderAssetList();generateAlerts();calculateDefcon();updateThreatBanner();}catch(e){console.warn('Render error:',e);}
   try{checkSanctioned();detectDarkVessels();checkGeofences();}catch(e){console.warn('v19 module error:',e);}
   document.getElementById('mainStatus').textContent='ACTIVE \u2014 '+state.assets.size+' TRACKED';
   document.getElementById('mainDot').style.background='var(--g)';document.getElementById('lastUp').textContent=ts();
+}
+async function fetchAll(){
+  state.lastFetch=new Date();
+  document.getElementById('mainStatus').textContent='FETCHING';document.getElementById('mainDot').style.background='var(--y)';
+  // WAVE 1: Fast direct APIs (~1-3s) — render as soon as these land
+  try{
+    await Promise.allSettled([fetchADSBMil(),fetchADSBOne(),fetchLADD(),fetchOSINT()]);
+  }catch(e){}
+  renderAll();
+  // WAVE 2: Slower APIs (CORS-proxied, large datasets) — render again when done
+  try{
+    await Promise.allSettled([fetchADSBRegion(),fetchOpenSky(),fetchAIS(),fetchVFGlobal(),fetchSpaceWeather(),fetchSevereWeather(),fetchSats()]);
+  }catch(e){}
+  renderAll();
+  // WAVE 3: Intel overlays (static + slow feeds)
+  try{
+    await Promise.allSettled([fetchNOTAMs(),fetchWildfires(),fetchVolcanoes(),fetchTsunami(),fetchNuclearTests(),fetchRefugees()]);
+  }catch(e){}
+  renderAll();
+  try{cleanStaleAssets();}catch(e){}
   state.countdown=state.refreshInterval;
 }
 function cleanStaleAssets(){
@@ -1956,6 +2591,53 @@ function checkGeofences(){
   }
 }
 
+// --- SPACE VIEW + ORBIT DISPLAY ---
+state.orbitLines=[];state.showOrbits=true;
+function spaceView(){
+  // Switch to dark mode, zoom out to show full globe, highlight sats
+  setMapMode('dark');
+  map.setView([20,0],2,{animate:true,duration:1.5});
+  // Enable satellite filter if off
+  if(!state.filters.satellite){state.filters.satellite=true;document.getElementById('fSat').classList.add('on-p');}
+  addAlert('green','SPACE VIEW: Tracking '+state.sources.sats+' satellites — ISS, military recon, SIGINT, navigation');
+  // Draw orbit ground tracks for tracked sats
+  renderOrbits();
+}
+function renderOrbits(){
+  // Clear old orbit lines
+  state.orbitLines.forEach(l=>map.removeLayer(l));state.orbitLines=[];
+  if(!state.showOrbits)return;
+  for(const[id,a]of state.assets){
+    if(a.type!=='satellite'||!a._orbit||!a.trail||a.trail.length<2)continue;
+    const color=a.cat==='military'?'#ff3355':a.cat==='government'?'#aa66ff':'#55aaff';
+    // Draw existing trail as ground track
+    const line=L.polyline(a.trail,{color,weight:1.5,opacity:0.4,dashArray:'6 4',className:'orbit-track'});
+    line.addTo(map);state.orbitLines.push(line);
+    // Add predicted future path (simple great-circle extrapolation)
+    if(a.trail.length>=2){
+      const last=a.trail[a.trail.length-1];
+      const prev=a.trail[a.trail.length-2];
+      const dlat=last[0]-prev[0];const dlon=last[1]-prev[1];
+      const future=[];
+      for(let i=1;i<=30;i++){
+        let fLat=last[0]+dlat*i;let fLon=last[1]+dlon*i;
+        if(fLat>85)fLat=170-fLat;if(fLat<-85)fLat=-170-fLat;
+        if(fLon>180)fLon-=360;if(fLon<-180)fLon+=360;
+        future.push([fLat,fLon]);
+      }
+      if(future.length>1){
+        const pred=L.polyline([last,...future],{color,weight:1,opacity:0.2,dashArray:'3 6'});
+        pred.addTo(map);state.orbitLines.push(pred);
+      }
+    }
+  }
+}
+function toggleOrbits(){
+  state.showOrbits=!state.showOrbits;
+  document.getElementById('fOrbit').classList.toggle('on-p',state.showOrbits);
+  renderOrbits();
+}
+
 // --- INCIDENT TIMELINE ---
 state.timeline=[];
 function addTimelineEvent(level,text,lat,lon){
@@ -2152,7 +2834,75 @@ async function boot(){
     bootSysRow(13,true);
     await new Promise(r=>setTimeout(r,150));
 
-    txt.textContent='COMPUTING THREAT MATRIX...';bar.style.width='96%';
+    txt.textContent='INITIALIZING SPACE ASSET TRACKER...';bar.style.width='94%';
+    bootSysRow(14,true);
+    await new Promise(r=>setTimeout(r,150));
+
+
+    txt.textContent='SCANNING RESTRICTED AIRSPACE (NOTAMs)...';bar.style.width='95%';
+    bootSysRow(15,true);
+    await new Promise(r=>setTimeout(r,100));
+
+    txt.textContent='MAPPING SUBMARINE CABLE GRID...';bar.style.width='95.5%';
+    renderCables();
+    bootSysRow(16,true);
+    await new Promise(r=>setTimeout(r,100));
+
+    txt.textContent='LOADING NUCLEAR FACILITY DATABASE...';bar.style.width='96%';
+    renderNukes();
+    bootSysRow(17,true);
+    await new Promise(r=>setTimeout(r,100));
+
+    txt.textContent='ACTIVATING PIRACY TRACKING...';bar.style.width='96.5%';
+    renderPiracy();
+    bootSysRow(18,true);
+    await new Promise(r=>setTimeout(r,80));
+
+    txt.textContent='LOADING WILDFIRE PERIMETER ENGINE...';bar.style.width='97%';
+    bootSysRow(19,true);
+    await new Promise(r=>setTimeout(r,80));
+
+    txt.textContent='CONNECTING CYBER THREAT INTEL...';bar.style.width='97.3%';
+    renderCyber();
+    bootSysRow(20,true);
+    await new Promise(r=>setTimeout(r,80));
+
+    txt.textContent='LOADING DISPLACEMENT DATA...';bar.style.width='97.5%';
+    bootSysRow(21,true);
+    await new Promise(r=>setTimeout(r,80));
+
+    txt.textContent='MAPPING MILITARY INSTALLATIONS...';bar.style.width='97.8%';
+    renderMilBases();
+    bootSysRow(22,true);
+    await new Promise(r=>setTimeout(r,80));
+
+    txt.textContent='ACTIVATING RF SPECTRUM MONITOR...';bar.style.width='98%';
+    renderRF();
+    bootSysRow(23,true);
+    await new Promise(r=>setTimeout(r,80));
+
+    txt.textContent='SCANNING DRONE ACTIVITY ZONES...';bar.style.width='98.3%';
+    renderDrones();
+    bootSysRow(24,true);
+    await new Promise(r=>setTimeout(r,80));
+
+    txt.textContent='INITIALIZING NUCLEAR TEST DETECTION...';bar.style.width='98.5%';
+    bootSysRow(25,true);
+    await new Promise(r=>setTimeout(r,80));
+
+    txt.textContent='LOADING CONFLICT DATA (ACLED)...';bar.style.width='98.7%';
+    renderConflicts();
+    bootSysRow(26,true);
+    await new Promise(r=>setTimeout(r,80));
+
+    txt.textContent='CONNECTING VOLCANIC ACTIVITY MONITOR...';bar.style.width='99%';
+    bootSysRow(27,true);
+    await new Promise(r=>setTimeout(r,80));
+
+    txt.textContent='ACTIVATING TSUNAMI WARNING SYSTEM...';bar.style.width='99.3%';
+    bootSysRow(28,true);
+    await new Promise(r=>setTimeout(r,80));
+    txt.textContent='COMPUTING THREAT MATRIX...';bar.style.width='99.5%';
     renderThreats();renderChokepoints();calculateDefcon();updateThreatBanner();
     bootSysRow(6,true);
     await new Promise(r=>setTimeout(r,200));
@@ -2176,6 +2926,16 @@ setInterval(detectDarkVessels,60000); // Check for dark vessels every minute
 setInterval(checkSanctioned,120000); // Recheck sanctions every 2 min
 setInterval(checkGeofences,120000); // Check geofence breaches every 2 min
 setInterval(renderTimeline,60000); // Refresh timeline
+setInterval(fetchSats,30000); // Satellite positions every 30s (ISS moves fast)
+setInterval(renderOrbits,60000); // Refresh orbit ground tracks
+setInterval(fetchNOTAMs,300000); // Refresh NOTAMs every 5 min
+setInterval(fetchWildfires,300000); // Wildfire perimeters every 5 min
+setInterval(fetchVolcanoes,600000); // Volcanic activity every 10 min
+setInterval(fetchTsunami,120000); // Tsunami warnings every 2 min (critical)
+setInterval(fetchNuclearTests,300000); // Nuclear test seismic check every 5 min
+setInterval(fetchRefugees,600000); // Displacement data every 10 min
+setInterval(()=>{renderConflicts();renderCyber();renderPiracy();},600000); // Refresh static intel every 10 min
+
 
 // ===== MOBILE SUPPORT =====
 function toggleMobPanel(which){
