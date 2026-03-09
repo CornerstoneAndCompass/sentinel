@@ -26,6 +26,7 @@ html,body{width:100%;height:100%;overflow:hidden;background:#050a12;font-family:
 #map{width:100%;height:100%;z-index:1}
 .leaflet-control-attribution,.leaflet-control-zoom{display:none!important}
 .vehicle-icon{background:none!important;border:none!important}
+.overlay-icon{background:none!important;border:none!important}
 
 /* OVERLAYS */
 .scanlines{position:fixed;top:0;left:0;width:100%;height:100%;background:repeating-linear-gradient(0deg,transparent,transparent 2px,rgba(0,232,255,0.003) 2px,rgba(0,232,255,0.003) 4px);pointer-events:none;z-index:9000}
@@ -738,7 +739,7 @@ html,body{width:100%;height:100%;overflow:hidden;background:#050a12;font-family:
 <div class="feed"><div class="fd wait" id="f33"></div>TSUN</div>
 </div>
 <div><span style="color:var(--td)">REFRESH </span><span id="countdown" style="color:var(--c)">30s</span><span style="color:var(--td)"> | </span><span id="lastUp" style="color:var(--g)">--:--:--</span></div>
-<div style="display:flex;align-items:center;gap:10px"><span style="letter-spacing:3px;color:var(--td);font-family:'Orbitron',sans-serif;font-size:9px">SENTINEL v20.2</span><span style="color:var(--td);font-size:10px;cursor:pointer" onclick="document.getElementById('shortcutsOverlay').classList.toggle('show')">[?]</span></div>
+<div style="display:flex;align-items:center;gap:10px"><span style="letter-spacing:3px;color:var(--td);font-family:'Orbitron',sans-serif;font-size:9px">SENTINEL v20.3</span><span style="color:var(--td);font-size:10px;cursor:pointer" onclick="document.getElementById('shortcutsOverlay').classList.toggle('show')">[?]</span></div>
 </div>
 
 <script>
@@ -858,6 +859,145 @@ function svgIcon(type,color,heading,s){
   return`<svg width="${s}" height="${s}" viewBox="0 0 ${s} ${s}" xmlns="http://www.w3.org/2000/svg"><defs><filter id="gl${s}"><feGaussianBlur stdDeviation="1.5" result="g"/><feMerge><feMergeNode in="g"/><feMergeNode in="SourceGraphic"/></feMerge></filter></defs><g filter="url(#gl${s})">${shape}</g></svg>`;
 }
 const _iconCache=new Map();
+// --- OVERLAY ICON FACTORY ---
+function overlayIcon(type,color,size){
+  const s=size||24,h=s/2;
+  const key='ov_'+type+'_'+color+'_'+s;
+  let ic=_iconCache.get(key);
+  if(ic)return ic;
+  let svg='';
+  switch(type){
+    case 'base':
+      // Pentagon (military base)
+      svg=`<svg width="${s}" height="${s}" viewBox="0 0 ${s} ${s}" xmlns="http://www.w3.org/2000/svg">
+        <polygon points="${h},${s*0.08} ${s*0.95},${s*0.38} ${s*0.8},${s*0.92} ${s*0.2},${s*0.92} ${s*0.05},${s*0.38}"
+          fill="${color}" fill-opacity="0.25" stroke="${color}" stroke-width="1.5"/>
+        <text x="${h}" y="${h+3}" text-anchor="middle" fill="${color}" font-size="${s*0.4}" font-family="monospace" font-weight="bold">★</text>
+      </svg>`;break;
+    case 'nuke':
+      // Radiation trefoil
+      svg=`<svg width="${s}" height="${s}" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+        <circle cx="12" cy="12" r="11" fill="${color}" fill-opacity="0.15" stroke="${color}" stroke-width="1.5"/>
+        <circle cx="12" cy="12" r="3" fill="${color}" fill-opacity="0.8"/>
+        <path d="M12 3 A9 9 0 0 1 19.8 7.5 L14.5 10 A3 3 0 0 0 12 9 Z" fill="${color}" fill-opacity="0.6"/>
+        <path d="M19.8 7.5 A9 9 0 0 1 19.8 16.5 L14.5 14 A3 3 0 0 0 14.5 10 Z" fill="${color}" fill-opacity="0.6"/>
+        <path d="M4.2 7.5 A9 9 0 0 0 4.2 16.5 L9.5 14 A3 3 0 0 1 9.5 10 Z" fill="${color}" fill-opacity="0.6"/>
+      </svg>`;break;
+    case 'cyber':
+      // Terminal/skull
+      svg=`<svg width="${s}" height="${s}" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+        <rect x="2" y="3" width="20" height="15" rx="2" fill="${color}" fill-opacity="0.15" stroke="${color}" stroke-width="1.5"/>
+        <text x="12" y="14" text-anchor="middle" fill="${color}" font-size="9" font-family="monospace" font-weight="bold">&gt;_</text>
+        <line x1="7" y1="20" x2="17" y2="20" stroke="${color}" stroke-width="1.5"/>
+      </svg>`;break;
+    case 'piracy':
+      // Crossbones flag
+      svg=`<svg width="${s}" height="${s}" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+        <circle cx="12" cy="9" r="5" fill="${color}" fill-opacity="0.2" stroke="${color}" stroke-width="1.5"/>
+        <circle cx="10" cy="8" r="1.5" fill="${color}" fill-opacity="0.8"/>
+        <circle cx="14" cy="8" r="1.5" fill="${color}" fill-opacity="0.8"/>
+        <line x1="6" y1="16" x2="18" y2="20" stroke="${color}" stroke-width="2" opacity="0.6"/>
+        <line x1="18" y1="16" x2="6" y2="20" stroke="${color}" stroke-width="2" opacity="0.6"/>
+      </svg>`;break;
+    case 'volcano':
+      // Triangle mountain with eruption
+      svg=`<svg width="${s}" height="${s}" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+        <polygon points="12,2 22,22 2,22" fill="${color}" fill-opacity="0.2" stroke="${color}" stroke-width="1.5"/>
+        <polygon points="12,2 15,8 9,8" fill="${color}" fill-opacity="0.6"/>
+        <circle cx="12" cy="4" r="2" fill="${color}" fill-opacity="0.4"/>
+        <circle cx="10" cy="2" r="1" fill="${color}" fill-opacity="0.3"/>
+        <circle cx="14" cy="3" r="1.3" fill="${color}" fill-opacity="0.3"/>
+      </svg>`;break;
+    case 'tsunami':
+      // Wave
+      svg=`<svg width="${s}" height="${s}" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+        <circle cx="12" cy="12" r="10" fill="${color}" fill-opacity="0.1" stroke="${color}" stroke-width="1"/>
+        <path d="M3 12 Q6 7, 9 12 Q12 17, 15 12 Q18 7, 21 12" fill="none" stroke="${color}" stroke-width="2" opacity="0.8"/>
+        <path d="M3 16 Q6 11, 9 16 Q12 21, 15 16 Q18 11, 21 16" fill="none" stroke="${color}" stroke-width="1.5" opacity="0.5"/>
+      </svg>`;break;
+    case 'rf':
+      // Antenna with signal waves
+      svg=`<svg width="${s}" height="${s}" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+        <line x1="12" y1="22" x2="12" y2="8" stroke="${color}" stroke-width="2"/>
+        <circle cx="12" cy="6" r="2" fill="${color}" fill-opacity="0.8"/>
+        <path d="M7 4 A7 7 0 0 1 17 4" fill="none" stroke="${color}" stroke-width="1.5" opacity="0.6"/>
+        <path d="M4 2 A11 11 0 0 1 20 2" fill="none" stroke="${color}" stroke-width="1" opacity="0.4"/>
+        <line x1="8" y1="22" x2="16" y2="22" stroke="${color}" stroke-width="1.5"/>
+      </svg>`;break;
+    case 'conflict':
+      // Crosshairs/explosion
+      svg=`<svg width="${s}" height="${s}" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+        <circle cx="12" cy="12" r="8" fill="${color}" fill-opacity="0.1" stroke="${color}" stroke-width="1" stroke-dasharray="3 2"/>
+        <circle cx="12" cy="12" r="3" fill="${color}" fill-opacity="0.3" stroke="${color}" stroke-width="1.5"/>
+        <line x1="12" y1="1" x2="12" y2="7" stroke="${color}" stroke-width="1.5"/>
+        <line x1="12" y1="17" x2="12" y2="23" stroke="${color}" stroke-width="1.5"/>
+        <line x1="1" y1="12" x2="7" y2="12" stroke="${color}" stroke-width="1.5"/>
+        <line x1="17" y1="12" x2="23" y2="12" stroke="${color}" stroke-width="1.5"/>
+      </svg>`;break;
+    case 'refugee':
+      // Group of people
+      svg=`<svg width="${s}" height="${s}" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+        <circle cx="8" cy="6" r="3" fill="${color}" fill-opacity="0.6"/>
+        <path d="M4 20 Q4 13 8 13 Q12 13 12 20" fill="${color}" fill-opacity="0.4"/>
+        <circle cx="16" cy="6" r="3" fill="${color}" fill-opacity="0.6"/>
+        <path d="M12 20 Q12 13 16 13 Q20 13 20 20" fill="${color}" fill-opacity="0.4"/>
+        <circle cx="12" cy="4" r="2.5" fill="${color}" fill-opacity="0.5"/>
+        <path d="M8 18 Q8 11 12 11 Q16 11 16 18" fill="${color}" fill-opacity="0.3"/>
+      </svg>`;break;
+    case 'wildfire':
+      // Flame
+      svg=`<svg width="${s}" height="${s}" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+        <path d="M12 2 C12 2 6 10 6 15 C6 19 9 22 12 22 C15 22 18 19 18 15 C18 10 12 2 12 2Z" fill="${color}" fill-opacity="0.4" stroke="${color}" stroke-width="1.5"/>
+        <path d="M12 8 C12 8 9 13 9 16 C9 18 10.5 20 12 20 C13.5 20 15 18 15 16 C15 13 12 8 12 8Z" fill="${color}" fill-opacity="0.6"/>
+      </svg>`;break;
+    case 'ntest':
+      // Blast/mushroom
+      svg=`<svg width="${s}" height="${s}" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+        <ellipse cx="12" cy="8" rx="8" ry="6" fill="${color}" fill-opacity="0.25" stroke="${color}" stroke-width="1.5"/>
+        <rect x="10" y="12" width="4" height="8" fill="${color}" fill-opacity="0.4"/>
+        <ellipse cx="12" cy="20" rx="6" ry="2" fill="${color}" fill-opacity="0.2"/>
+        <circle cx="12" cy="7" r="3" fill="${color}" fill-opacity="0.4"/>
+      </svg>`;break;
+    case 'quake':
+      // Seismic zigzag
+      svg=`<svg width="${s}" height="${s}" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+        <circle cx="12" cy="12" r="10" fill="${color}" fill-opacity="0.1" stroke="${color}" stroke-width="1"/>
+        <polyline points="2,12 6,12 8,6 10,18 12,4 14,20 16,8 18,14 22,12" fill="none" stroke="${color}" stroke-width="2" opacity="0.8"/>
+      </svg>`;break;
+    case 'choke':
+      // Anchor
+      svg=`<svg width="${s}" height="${s}" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+        <circle cx="12" cy="5" r="3" fill="none" stroke="${color}" stroke-width="1.5"/>
+        <line x1="12" y1="8" x2="12" y2="20" stroke="${color}" stroke-width="2"/>
+        <path d="M5 16 Q5 20, 12 20 Q19 20, 19 16" fill="none" stroke="${color}" stroke-width="1.5"/>
+        <line x1="8" y1="12" x2="16" y2="12" stroke="${color}" stroke-width="1.5"/>
+      </svg>`;break;
+    case 'drone':
+      // Quadcopter
+      svg=`<svg width="${s}" height="${s}" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+        <line x1="6" y1="6" x2="18" y2="18" stroke="${color}" stroke-width="1.5" opacity="0.6"/>
+        <line x1="18" y1="6" x2="6" y2="18" stroke="${color}" stroke-width="1.5" opacity="0.6"/>
+        <circle cx="6" cy="6" r="3.5" fill="${color}" fill-opacity="0.2" stroke="${color}" stroke-width="1"/>
+        <circle cx="18" cy="6" r="3.5" fill="${color}" fill-opacity="0.2" stroke="${color}" stroke-width="1"/>
+        <circle cx="6" cy="18" r="3.5" fill="${color}" fill-opacity="0.2" stroke="${color}" stroke-width="1"/>
+        <circle cx="18" cy="18" r="3.5" fill="${color}" fill-opacity="0.2" stroke="${color}" stroke-width="1"/>
+        <rect x="10" y="10" width="4" height="4" fill="${color}" fill-opacity="0.6"/>
+      </svg>`;break;
+    case 'notam':
+      // Warning triangle with exclamation
+      svg=`<svg width="${s}" height="${s}" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+        <polygon points="12,2 23,22 1,22" fill="${color}" fill-opacity="0.15" stroke="${color}" stroke-width="1.5"/>
+        <line x1="12" y1="9" x2="12" y2="15" stroke="${color}" stroke-width="2.5"/>
+        <circle cx="12" cy="18.5" r="1.5" fill="${color}"/>
+      </svg>`;break;
+    default:
+      svg=`<svg width="${s}" height="${s}" viewBox="0 0 ${s} ${s}" xmlns="http://www.w3.org/2000/svg"><circle cx="${h}" cy="${h}" r="${h-2}" fill="${color}" fill-opacity="0.3" stroke="${color}" stroke-width="1.5"/></svg>`;
+  }
+  ic=L.divIcon({html:svg,className:'overlay-icon',iconSize:[s,s],iconAnchor:[s/2,s/2],popupAnchor:[0,-s/2]});
+  _iconCache.set(key,ic);
+  return ic;
+}
+
 function makeIcon(a,s){
   const key=a.type+'_'+markerColor(a)+'_'+Math.round(a.track||0)+'_'+s;
   let ic=_iconCache.get(key);
@@ -1533,7 +1673,7 @@ function renderNukes(){
   if(state.layers.nukes){
     NUCLEAR_FACILITIES.forEach(n=>{
       const color=n.risk==='EXTREME'?'#ff0000':n.risk==='CRITICAL'?'#ff3355':n.risk==='HIGH'?'#ff8800':n.risk==='MODERATE'?'#ffcc00':'#00ff88';
-      const m=L.circleMarker([n.lat,n.lon],{radius:8,color,fillColor:color,fillOpacity:0.3,weight:2}).addTo(map);
+      const m=L.marker([n.lat,n.lon],{icon:overlayIcon('nuke',color,26)}).addTo(map);
       m.bindPopup('<div style="background:#0a0e18;color:#d8dfe8;padding:8px;border:1px solid '+color+';border-radius:4px;font-family:Share Tech Mono,monospace;font-size:11px"><div style="color:'+color+';font-weight:bold;margin-bottom:4px">☢ '+n.name+' ['+n.country+']</div>Reactors: '+n.reactors+' | Status: '+n.status+'<br>Risk: <span style="color:'+color+'">'+n.risk+'</span><br>'+n.desc+'</div>',{className:'dark-popup'});
       state.nukeMarkers.push(m);
     });
@@ -1599,7 +1739,7 @@ async function fetchWildfires(){
         {name:'NSW/QLD Fire Season 2026',lat:-30.0,lon:152.0,acres:75000,contained:55,country:'AU'},
       ];
       ACTIVE_FIRES.forEach(f=>{
-        const m=L.circleMarker([f.lat,f.lon],{radius:Math.min(12,4+f.acres/200000),color:'#ff6600',fillColor:'#ff3300',fillOpacity:0.3,weight:2}).addTo(map);
+        const m=L.marker([f.lat,f.lon],{icon:overlayIcon('wildfire','#ff6600',Math.min(32,18+Math.floor((f.acres||0)/200000)))}).addTo(map);
         m.bindPopup('<div style="background:#0a0e18;color:#d8dfe8;padding:8px;border:1px solid #ff6600;border-radius:4px;font-family:Share Tech Mono,monospace;font-size:11px"><div style="color:#ff6600;font-weight:bold;margin-bottom:4px">🔥 '+f.name+'</div>Acres: '+(f.acres>=1000000?(f.acres/1000000).toFixed(1)+'M':f.acres.toLocaleString())+'<br>Contained: '+f.contained+'%<br>Country: '+f.country+'</div>',{className:'dark-popup'});
         state.wildfireMarkers.push(m);
       });
@@ -1630,7 +1770,7 @@ function renderCyber(){
   if(state.layers.cyber){
     CYBER_THREAT_ORIGINS.forEach(c=>{
       const color=c.threat==='EXTREME'?'#ff0044':c.threat==='HIGH'?'#ff3355':'#ff8800';
-      const m=L.circleMarker([c.lat,c.lon],{radius:10,color,fillColor:color,fillOpacity:0.25,weight:2}).addTo(map);
+      const m=L.marker([c.lat,c.lon],{icon:overlayIcon('cyber',color,28)}).addTo(map);
       m.bindPopup('<div style="background:#0a0e18;color:#d8dfe8;padding:8px;border:1px solid '+color+';border-radius:4px;font-family:Share Tech Mono,monospace;font-size:11px"><div style="color:'+color+';font-weight:bold;margin-bottom:4px">💻 '+c.name+' ['+c.country+']</div>Type: '+c.type+' | Threat: <span style="color:'+color+'">'+c.threat+'</span><br>'+c.desc+'</div>',{className:'dark-popup'});
       state.cyberMarkers.push(m);
     });
@@ -1663,7 +1803,7 @@ async function fetchRefugees(){
     ];
     DISPLACEMENT_CRISES.forEach(c=>{
       const color=c.status==='ACTIVE CONFLICT'?'#ff3355':c.status==='PROTRACTED'?'#ff8800':'#ffcc00';
-      const m=L.circleMarker([c.lat,c.lon],{radius:9,color,fillColor:color,fillOpacity:0.2,weight:2}).addTo(map);
+      const m=L.marker([c.lat,c.lon],{icon:overlayIcon('refugee',color,26)}).addTo(map);
       m.bindPopup('<div style="background:#0a0e18;color:#d8dfe8;padding:8px;border:1px solid '+color+';border-radius:4px;font-family:Share Tech Mono,monospace;font-size:11px"><div style="color:'+color+';font-weight:bold;margin-bottom:4px">🚶 '+c.name+'</div>Displaced: '+c.displaced+' | Refugees: '+c.refugees+'<br>Origin: '+c.origin+' | Status: '+c.status+'<br>'+c.desc+'</div>',{className:'dark-popup'});
       state.refugeeMarkers.push(m);
     });
@@ -1700,7 +1840,7 @@ function renderMilBases(){
   if(state.layers.bases){
     MILITARY_BASES.forEach(b=>{
       const color=b.branch.includes('RUSSIAN')||b.branch.includes('RU')?'#ff3355':b.branch.includes('PLA')?'#ff8800':b.branch.includes('US')||b.branch.includes('NATO')?'#00e8ff':'#00ff88';
-      const m=L.circleMarker([b.lat,b.lon],{radius:7,color,fillColor:color,fillOpacity:0.35,weight:2}).addTo(map);
+      const m=L.marker([b.lat,b.lon],{icon:overlayIcon('base',color,26)}).addTo(map);
       m.bindPopup('<div style="background:#0a0e18;color:#d8dfe8;padding:8px;border:1px solid '+color+';border-radius:4px;font-family:Share Tech Mono,monospace;font-size:11px"><div style="color:'+color+';font-weight:bold;margin-bottom:4px">🏛 '+b.name+'</div>Type: '+b.type+' | Branch: '+b.branch+'<br>'+b.desc+'</div>',{className:'dark-popup'});
       state.milbaseMarkers.push(m);
     });
@@ -1730,7 +1870,7 @@ function renderRF(){
   if(!state.layers.rf){feedDot('f28',false);return;}
   RF_STATIONS.forEach(s=>{
     const color=s.type.includes('JAMMER')?'#ff3355':s.type.includes('SIGINT')?'#aa66ff':s.type.includes('OTH')?'#ff8800':'#00e8ff';
-    const m=L.circleMarker([s.lat,s.lon],{radius:6,color,fillColor:color,fillOpacity:0.3,weight:2}).addTo(map);
+    const m=L.marker([s.lat,s.lon],{icon:overlayIcon('rf',color,24)}).addTo(map);
     m.bindPopup('<div style="background:#0a0e18;color:#d8dfe8;padding:8px;border:1px solid '+color+';border-radius:4px;font-family:Share Tech Mono,monospace;font-size:11px"><div style="color:'+color+';font-weight:bold;margin-bottom:4px">📡 '+s.name+'</div>Freq: '+s.freq+' | Type: '+s.type+'<br>'+s.desc+'</div>',{className:'dark-popup'});
     state.rfMarkers.push(m);
   });
@@ -1794,7 +1934,7 @@ async function fetchNuclearTests(){
     }
     TEST_SITES.forEach(ts=>{
       const color=ts.country==='KP'?'#ff0000':ts.country==='RU'||ts.country==='CN'?'#ff3355':'#ff8800';
-      const m=L.circleMarker([ts.lat,ts.lon],{radius:8,color,fillColor:color,fillOpacity:0.2,weight:2}).addTo(map);
+      const m=L.marker([ts.lat,ts.lon],{icon:overlayIcon('ntest',color,26)}).addTo(map);
       m.bindPopup('<div style="background:#0a0e18;color:#d8dfe8;padding:8px;border:1px solid '+color+';border-radius:4px;font-family:Share Tech Mono,monospace;font-size:11px"><div style="color:'+color+';font-weight:bold;margin-bottom:4px">☢ TEST SITE: '+ts.name+' ['+ts.country+']</div>Historical tests: '+ts.tests+' | Last: '+ts.lastTest+'<br>Max yield: '+ts.yield+'<br>'+ts.desc+'</div>',{className:'dark-popup'});
       state.ntestMarkers.push(m);
     });
@@ -1868,7 +2008,7 @@ async function fetchVolcanoes(){
     if(state.layers.volcanoes){
       ACTIVE_VOLCANOES.forEach(v=>{
         const color=v.alert==='RED'?'#ff0000':v.alert==='ORANGE'?'#ff6600':v.alert==='WATCH'?'#ffcc00':'#ffaa00';
-        const m=L.circleMarker([v.lat,v.lon],{radius:7,color,fillColor:color,fillOpacity:0.35,weight:2}).addTo(map);
+        const m=L.marker([v.lat,v.lon],{icon:overlayIcon('volcano',color,26)}).addTo(map);
         m.bindPopup('<div style="background:#0a0e18;color:#d8dfe8;padding:8px;border:1px solid '+color+';border-radius:4px;font-family:Share Tech Mono,monospace;font-size:11px"><div style="color:'+color+';font-weight:bold;margin-bottom:4px">🌋 '+v.name+' ['+v.country+']</div>Alert: <span style="color:'+color+'">'+v.alert+'</span> | VEI: '+v.vei+'<br>'+v.desc+'</div>',{className:'dark-popup'});
         state.volcanoMarkers.push(m);
       });
@@ -1899,7 +2039,7 @@ async function fetchTsunami(){
     ];
     if(state.layers.tsunami){
       TSUNAMI_BUOYS.forEach(b=>{
-        const m=L.circleMarker([b.lat,b.lon],{radius:5,color:'#00e8ff',fillColor:'#00e8ff',fillOpacity:0.3,weight:2}).addTo(map);
+        const m=L.marker([b.lat,b.lon],{icon:overlayIcon('tsunami','#00e8ff',22)}).addTo(map);
         m.bindPopup('<div style="background:#0a0e18;color:#d8dfe8;padding:8px;border:1px solid #00e8ff;border-radius:4px;font-family:Share Tech Mono,monospace;font-size:11px"><div style="color:#00e8ff;font-weight:bold;margin-bottom:4px">🌊 '+b.name+'</div>Status: '+b.status+'<br>'+b.desc+'</div>',{className:'dark-popup'});
         state.tsunamiMarkers.push(m);
       });
@@ -1932,7 +2072,7 @@ async function fetchEarthquakes(){
       state.earthquakes.push({lat,lon,mag,place,time:time.toISOString(),depth});
       if(state.layers.quakes){
         const radius=Math.max(mag*4,6);const color=mag>=6?'#ff0000':mag>=5?'#ff4400':mag>=4?'#ff8800':'#ffcc00';
-        const m=L.circleMarker([lat,lon],{radius,color,fillColor:color,fillOpacity:0.5,weight:2,opacity:0.8,className:'quake-pulse'});
+        const m=L.marker([lat,lon],{icon:overlayIcon('quake',color,Math.max(20,radius*2.5))});
         m.bindTooltip(`M${mag.toFixed(1)} \u2014 ${place}`,{className:'quake-tooltip',direction:'top',offset:[0,-10]});
         m.on('click',()=>{map.setView([lat,lon],8);addAlert('red',`M${mag.toFixed(1)} EARTHQUAKE: ${place} | Depth: ${depth?.toFixed(0)}km`);});
         m.addTo(map);state.quakeMarkers.push(m);
@@ -2073,7 +2213,7 @@ async function fetchFIRMS(){
       const title=ev.title||'Active Fire';
       state.fires.push({lat,lon,title,date:geo.date});
       if(state.layers.fires){
-        const m=L.circleMarker([lat,lon],{radius:6,color:'#ff6600',fillColor:'#ff4400',fillOpacity:0.6,weight:2,opacity:0.8,className:'fire-pulse'});
+        const m=L.marker([lat,lon],{icon:overlayIcon('wildfire','#ff6600',20)});
         m.bindTooltip(`\ud83d\udd25 ${title}`,{className:'fire-tooltip',direction:'top',offset:[0,-8]});
         m.on('click',()=>{map.setView([lat,lon],7);addAlert('orange',`FIRE: ${title}`);});
         m.addTo(map);state.fireMarkers.push(m);
@@ -2133,7 +2273,7 @@ function renderChokepoints(){
     </div>`;
     if(state.layers.chokes){
       const color=cp.status==='CRITICAL'?'#ff3355':cp.status==='ELEVATED'?'#ffcc00':'#00ff88';
-      const m=L.circleMarker([cp.lat,cp.lon],{radius:10,color,fillColor:color,fillOpacity:0.15,weight:2,opacity:0.6});
+      const m=L.marker([cp.lat,cp.lon],{icon:overlayIcon('choke',color,24)});
       m.bindTooltip(`\u2693 ${cp.name} [${cp.status}]`,{className:'choke-tooltip',direction:'top',offset:[0,-12]});
       m.on('click',()=>{map.setView([cp.lat,cp.lon],cp.zoom);addAlert(cp.status==='CRITICAL'?'red':'orange',`CHOKEPOINT: ${cp.name} \u2014 ${cp.desc}`);});
       m.addTo(map);state.chokeMarkers.push(m);
