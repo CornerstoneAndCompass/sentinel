@@ -104,7 +104,7 @@ html,body{width:100%;height:100%;overflow:hidden;background:#050a12;font-family:
 
 /* RIGHT PANEL */
 .right-panel{position:fixed;top:92px;right:10px;width:340px;z-index:5000;max-height:calc(100vh - 134px);overflow:hidden;display:flex;flex-direction:column;gap:5px}
-.tab-btns{display:flex;gap:0;margin-bottom:0}
+.tab-btns{display:flex;gap:0;margin-bottom:0;flex-shrink:0}
 .tab-btn{flex:1;background:transparent;border:1px solid var(--brd);border-bottom:none;color:var(--tm);font-family:'Orbitron',sans-serif;font-size:9px;letter-spacing:1px;padding:7px 0;cursor:pointer;transition:all 0.2s;text-align:center}
 .tab-btn:first-child{border-radius:4px 0 0 0}
 .tab-btn:last-child{border-radius:0 4px 0 0}
@@ -320,13 +320,65 @@ html,body{width:100%;height:100%;overflow:hidden;background:#050a12;font-family:
 .sat-glow{border-radius:50%;box-shadow:0 0 10px #aa66ff,0 0 20px rgba(170,102,255,0.3);animation:sat-pulse 2s ease-in-out infinite}
 @keyframes sat-pulse{0%,100%{box-shadow:0 0 10px #aa66ff,0 0 20px rgba(170,102,255,0.3)}50%{box-shadow:0 0 15px #aa66ff,0 0 30px rgba(170,102,255,0.5)}}
 
-/* ===== MOBILE NAV TOGGLE ===== */
-.mobile-nav{display:none;position:fixed;bottom:42px;right:10px;z-index:6500;flex-direction:column;gap:6px;align-items:flex-end}
-.mob-btn{width:44px;height:44px;border-radius:50%;border:1px solid var(--brd);background:var(--pnl);color:var(--tm);font-family:'Orbitron',sans-serif;font-size:11px;display:flex;align-items:center;justify-content:center;cursor:pointer;backdrop-filter:blur(12px);box-shadow:0 2px 16px rgba(0,0,0,0.5);transition:all 0.2s;-webkit-tap-highlight-color:transparent}
-.mob-btn:active{transform:scale(0.92)}
-.mob-btn.active{border-color:var(--c);color:var(--c);background:var(--cd)}
-.mob-panel-close{display:none;width:100%;background:var(--pnl);border:1px solid var(--r);color:var(--r);font-family:'Orbitron',sans-serif;font-size:11px;letter-spacing:3px;padding:10px 0;cursor:pointer;border-radius:4px;text-align:center;flex-shrink:0;-webkit-tap-highlight-color:transparent;margin-bottom:4px}
-.mob-panel-close:active{background:var(--rd)}
+/* ===== MOBILE TAB BAR ===== */
+.mobile-tabbar{display:none;position:fixed;bottom:0;left:0;right:0;height:58px;background:rgba(5,10,20,0.97);border-top:1px solid var(--brd);z-index:10500;backdrop-filter:blur(16px);padding-bottom:env(safe-area-inset-bottom)}
+.mtab{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;background:none;border:none;color:var(--td);cursor:pointer;-webkit-tap-highlight-color:transparent;padding:6px 0 8px;transition:color 0.2s;position:relative}
+.mtab svg{width:20px;height:20px;stroke:currentColor;fill:none;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round}
+.mtab span{font-family:'Orbitron',sans-serif;font-size:8px;letter-spacing:1px}
+.mtab.active{color:var(--c)}
+.mtab.active::after{content:'';position:absolute;top:0;left:22%;right:22%;height:2px;background:var(--c);box-shadow:0 0 8px var(--c)}
+.mtab:active{transform:scale(0.95)}
+/* MOBILE DRAWER HEADERS */
+.mob-panel-head{display:none;align-items:center;justify-content:space-between;padding:8px 4px 10px 8px;border-bottom:1px solid var(--brd);margin-bottom:6px;flex-shrink:0}
+.mob-panel-title{font-family:'Orbitron',sans-serif;font-size:12px;letter-spacing:3px;color:var(--c)}
+.mob-panel-sub{font-size:10px;color:var(--td);letter-spacing:1px;margin-top:2px}
+.mob-panel-x{background:none;border:1px solid var(--brd);color:var(--tm);font-size:14px;width:34px;height:34px;border-radius:4px;cursor:pointer;-webkit-tap-highlight-color:transparent;flex-shrink:0}
+.sheet-handle{display:none;width:36px;height:4px;border-radius:2px;background:var(--td);opacity:0.5;margin:8px auto 4px;flex-shrink:0}
+/* FIRST-RUN HINT */
+.mob-hint{display:none;position:fixed;bottom:70px;left:12px;right:12px;z-index:10400;background:var(--pnl);border:1px solid var(--brdh);border-radius:6px;padding:12px 14px;font-size:12px;color:var(--th);line-height:1.5;box-shadow:0 4px 30px rgba(0,0,0,0.6);backdrop-filter:blur(12px)}
+.mob-hint.show{display:block}
+.mob-hint button{display:block;margin-top:8px;background:var(--cd);border:1px solid var(--c);color:var(--c);font-family:'Orbitron',sans-serif;font-size:10px;letter-spacing:2px;padding:6px 16px;border-radius:3px;cursor:pointer;-webkit-tap-highlight-color:transparent}
+
+/* ===== SYSTEM STATUS PANEL ===== */
+.status-overlay{position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(5,10,20,0.92);z-index:10000;display:none;align-items:center;justify-content:center;backdrop-filter:blur(8px)}
+.status-overlay.show{display:flex}
+.status-box{background:var(--pnl);border:1px solid var(--c);border-radius:8px;max-width:640px;width:92%;max-height:85vh;display:flex;flex-direction:column;box-shadow:0 0 60px var(--cd);overflow:hidden}
+.status-summary{display:flex;gap:18px;padding:12px 20px;border-bottom:1px solid var(--brd);flex-shrink:0;flex-wrap:wrap}
+.status-sum-item{display:flex;align-items:center;gap:6px;font-size:11px;color:var(--tm);letter-spacing:1px}
+.status-list{flex:1;overflow-y:auto;padding:6px 0}
+.status-list::-webkit-scrollbar{width:4px}
+.status-list::-webkit-scrollbar-thumb{background:var(--cd);border-radius:3px}
+.status-row{display:flex;align-items:center;gap:10px;padding:7px 20px;border-bottom:1px solid rgba(0,232,255,0.05);font-size:12px}
+.status-row .fd{flex-shrink:0;animation:none}
+.status-row .fd.wait,.status-row .fd.err{animation:pulse 2s ease-in-out infinite}
+.status-name{color:var(--th);width:140px;flex-shrink:0}
+.status-desc{color:var(--td);font-size:11px;flex:1;line-height:1.35}
+.status-state{font-family:'Orbitron',sans-serif;font-size:9px;letter-spacing:1px;flex-shrink:0}
+.feeds{cursor:pointer}
+.feeds-chip{display:inline-flex;align-items:center;gap:5px;border:1px solid var(--brd);border-radius:3px;padding:2px 8px;color:var(--tm);font-size:10px;letter-spacing:1px;transition:all 0.2s;flex-shrink:0}
+.feeds:hover .feeds-chip{border-color:var(--c);color:var(--c)}
+
+/* ===== DEFCON EXPLAINER POPOVER ===== */
+.defcon-pop{position:fixed;top:46px;left:12px;z-index:9500;background:var(--pnl);border:1px solid var(--brd);border-radius:6px;padding:14px 16px;width:310px;max-width:calc(100vw - 24px);max-height:70vh;overflow-y:auto;display:none;box-shadow:0 0 40px rgba(0,0,0,0.7);backdrop-filter:blur(15px);font-size:11px;line-height:1.5}
+.defcon-pop.show{display:block}
+.defcon-pop-title{font-family:'Orbitron',sans-serif;font-size:12px;letter-spacing:2px;margin-bottom:6px}
+.defcon-pop-meaning{color:var(--tm);margin-bottom:10px}
+.defcon-pop-factors{border-top:1px solid var(--brd);padding-top:8px;color:var(--td)}
+.defcon-pop-factors div{padding:2px 0;color:var(--tm)}
+
+/* ===== FILTER GROUP LABELS ===== */
+.fgroup{font-family:'Orbitron',sans-serif;font-size:8px;letter-spacing:2px;color:var(--td);margin:9px 0 4px;text-transform:uppercase}
+.fgroup:first-of-type{margin-top:2px}
+
+/* ===== COLLAPSIBLE CARDS ===== */
+.card-title{cursor:pointer;user-select:none;display:flex;justify-content:space-between;align-items:center;-webkit-tap-highlight-color:transparent}
+.card-title::after{content:'\25be';color:var(--td);font-size:11px;transition:transform 0.2s;margin-left:8px}
+.card.collapsed .card-title{margin-bottom:0;padding-bottom:0;border-bottom:none}
+.card.collapsed .card-title::after{transform:rotate(-90deg)}
+.card.collapsed>*:not(.card-title):not(.mob-panel-head){display:none}
+
+/* ===== TAB COUNT BADGE ===== */
+.tab-count{display:inline-block;margin-left:4px;background:var(--rd);color:var(--r);border:1px solid var(--r);border-radius:8px;font-size:8px;padding:0 4px;min-width:12px;font-family:'Share Tech Mono',monospace}
 
 /* ===== MOBILE BREAKPOINT ===== */
 @media(max-width:768px){
@@ -341,19 +393,19 @@ html,body{width:100%;height:100%;overflow:hidden;background:#050a12;font-family:
   .defcon-badge{font-size:8px;padding:2px 6px;letter-spacing:1px}
 
   /* THREAT BANNER */
-  .threat-banner{top:36px;height:22px}
+  .threat-banner{top:36px!important;height:20px}
   .marquee-text{font-size:9px;letter-spacing:2px}
 
   /* SEARCH */
-  .search-wrap{top:58px;left:8px;right:8px;transform:none;width:auto}
+  .search-wrap{top:60px;left:8px;right:8px;transform:none;width:auto}
   .search-input{width:100%;font-size:12px;padding:7px 12px}
 
   /* LEFT PANEL — full-width drawer */
-  .left-panel{top:0;left:0;right:0;bottom:0;width:100%!important;max-height:100vh;background:rgba(5,10,20,0.97);z-index:8000;border-radius:0;padding:60px 12px 50px;transform:translateX(-100%);transition:transform 0.3s ease;overflow-y:auto;gap:8px}
+  .left-panel{top:0;left:0;right:0;bottom:0;width:100%!important;max-height:100vh;background:rgba(5,10,20,0.97);z-index:8000;border-radius:0;padding:10px 12px 70px;transform:translateX(-100%);transition:transform 0.3s ease;overflow-y:auto;gap:8px}
   .left-panel.mob-open{transform:translateX(0)}
 
   /* RIGHT PANEL — bottom sheet */
-  .right-panel{top:auto;left:0;right:0;bottom:42px;width:100%!important;max-height:55vh;background:rgba(5,10,20,0.97);z-index:8000;border-radius:12px 12px 0 0;border:1px solid var(--brd);border-bottom:none;transform:translateY(100%);transition:transform 0.3s ease;overflow:hidden}
+  .right-panel{top:auto;left:0;right:0;bottom:58px;width:100%!important;max-height:60vh;background:rgba(5,10,20,0.97);z-index:8000;border-radius:12px 12px 0 0;border:1px solid var(--brd);border-bottom:none;transform:translateY(110%);transition:transform 0.3s ease;overflow:hidden}
   .right-panel.mob-open{transform:translateY(0)}
 
   /* TABS — scroll horizontally on mobile */
@@ -368,25 +420,27 @@ html,body{width:100%;height:100%;overflow:hidden;background:#050a12;font-family:
   .stat-label{font-size:11px}
   .stat-val{font-size:13px}
 
-  /* BOTTOM BAR */
-  .bottom-bar{height:36px;padding:0 6px;gap:4px;font-size:9px}
-  .feeds{gap:3px;flex-wrap:nowrap;overflow-x:auto;-webkit-overflow-scrolling:touch;scrollbar-width:none;max-width:55vw}
-  .feeds::-webkit-scrollbar{display:none}
-  .feed{font-size:0;gap:0}
-  .feed .fd{width:6px;height:6px;margin:0 1px}
+  /* BOTTOM BAR — replaced by the tab bar on mobile */
+  .bottom-bar{display:none}
 
   /* ZOOM BADGE */
-  .zoom-badge{bottom:42px;left:8px;right:auto;transform:none;font-size:8px;padding:3px 8px;letter-spacing:1px}
+  .zoom-badge{bottom:64px;left:8px;right:auto;transform:none;font-size:8px;padding:3px 8px;letter-spacing:1px}
 
   /* MAP MODES */
-  .map-modes{left:8px;bottom:80px}
-  .geofence-ctrl{left:8px;bottom:116px}
+  .map-modes{left:8px;bottom:102px}
+  .geofence-ctrl{left:8px;bottom:138px}
 
   /* DETAIL PANEL */
-  .detail-panel{left:8px;right:8px;bottom:42px;transform:none;min-width:auto;width:auto;flex-direction:column;gap:10px;padding:12px 14px;max-height:45vh;overflow-y:auto}
+  .detail-panel{left:8px;right:8px;bottom:64px;transform:none;min-width:auto;width:auto;flex-direction:column;gap:10px;padding:12px 14px;max-height:45vh;overflow-y:auto}
 
   /* ARTICLE VIEWER */
-  .article-viewer{left:0;right:0;top:36px;bottom:0;border-radius:0;border:none}
+  .article-viewer{left:0;right:0;top:36px;bottom:58px;border-radius:0;border:none}
+
+  /* OVERLAYS — keep clear of the tab bar */
+  .sitrep-overlay,.status-overlay,.shortcuts-overlay{padding-bottom:58px}
+  .status-name{width:104px;font-size:11px}
+  .status-row{padding:7px 12px}
+  .defcon-pop{top:40px}
   .article-headline{font-size:15px;padding:12px 14px 0}
   .article-desc{font-size:13px;padding:8px 14px 0}
   .article-text{padding:12px 14px 14px;font-size:12px}
@@ -406,22 +460,24 @@ html,body{width:100%;height:100%;overflow:hidden;background:#050a12;font-family:
   .load-systems{width:240px}
   .load-sys-row{font-size:8px;letter-spacing:1px}
 
-  /* NAV BUTTONS */
-  .nav-btn{padding:6px 8px;font-size:10px}
-  .fbtn{padding:5px 7px;font-size:10px}
+  /* NAV BUTTONS — bigger touch targets */
+  .nav-btn{padding:8px 10px;font-size:11px}
+  .fbtn{padding:8px 9px;font-size:11px}
 
-  /* MOBILE NAV + CLOSE BUTTONS — show */
-  .mobile-nav{display:flex}
-  .mob-panel-close{display:block}
+  /* MOBILE TAB BAR + DRAWER HEADERS — show */
+  .mobile-tabbar{display:flex}
+  .mob-panel-head{display:flex}
+  .sheet-handle{display:block}
 }
 
 /* ===== SMALL PHONE ===== */
 @media(max-width:400px){
   .h-title{font-size:9px;letter-spacing:2px}
+  .h-status{display:none}
   .header{padding:0 6px}
   .right-panel.mob-open{max-height:65vh}
   .stat-val{font-size:12px}
-  .mob-btn{width:40px;height:40px;font-size:10px}
+  .mtab span{font-size:7px}
 }
 
 /* SPACE VIEW MODE — banner only, map stays visible */
@@ -484,7 +540,7 @@ html,body{width:100%;height:100%;overflow:hidden;background:#050a12;font-family:
 <div class="h-left">
 <div class="h-dot" id="mainDot"></div>
 <span class="h-status" id="mainStatus">CONNECTING</span>
-<div class="defcon-badge defcon-4" id="defconBadge" onclick="document.getElementById('defconTip').style.display=document.getElementById('defconTip').style.display==='none'?'block':'none'">DEFCON <span id="defconLevel">4</span></div>
+<div class="defcon-badge defcon-4" id="defconBadge" onclick="toggleDefconPop()" title="Global readiness level — click to see what's driving it">DEFCON <span id="defconLevel">4</span></div>
 </div>
 <div class="h-center">
 <div class="h-title">SENTINEL // COMMAND</div>
@@ -497,89 +553,104 @@ html,body{width:100%;height:100%;overflow:hidden;background:#050a12;font-family:
 </div>
 </div>
 
+<div class="defcon-pop" id="defconPop"></div>
+
 <div class="search-wrap"><input type="text" class="search-input" id="searchInput" placeholder="SEARCH CALLSIGN / HEX / COUNTRY / TYPE... [/]"></div>
 
 <!-- LEFT PANEL -->
 <div class="left-panel">
-<button class="mob-panel-close" onclick="toggleMobPanel('left')">&#x2715; CLOSE</button>
-<div class="card">
+<div class="mob-panel-head"><div><div class="mob-panel-title">CONTROL PANEL</div><div class="mob-panel-sub">Live counts, map layers &amp; navigation</div></div><button class="mob-panel-x" onclick="toggleMobPanel('left')">&#x2715;</button></div>
+<div class="card" id="cardTracking">
 <div class="card-title">Live Tracking</div>
-<div class="stat-row"><span class="stat-label">MILITARY</span><span class="stat-val cc" id="sMil">--</span></div>
-<div class="stat-row"><span class="stat-label">ROTARY</span><span class="stat-val cy" id="sHeli">--</span></div>
-<div class="stat-row"><span class="stat-label">COAST GUARD</span><span class="stat-val" style="color:#ff6600" id="sCG">--</span></div>
-<div class="stat-row"><span class="stat-label">POLICE / GOV</span><span class="stat-val cr" id="sPol">--</span></div>
-<div class="stat-row"><span class="stat-label">TANKERS</span><span class="stat-val" style="color:#e855e8" id="sTanker">--</span></div>
-<div class="stat-row"><span class="stat-label">CARGO</span><span class="stat-val" style="color:#55aaff" id="sCargo">--</span></div>
-<div class="stat-row"><span class="stat-label">CRUISE/PAX</span><span class="stat-val cy" id="sPax">--</span></div>
-<div class="stat-row"><span class="stat-label">FISHING</span><span class="stat-val cg" id="sFish">--</span></div>
-<div class="stat-row"><span class="stat-label">ALL VESSELS</span><span class="stat-val co" id="sShip">--</span></div>
-<div class="stat-row"><span class="stat-label">SATELLITES</span><span class="stat-val cp" id="sSat">--</span></div>
-<div class="stat-row" style="border-top:1px solid var(--brd);margin-top:4px;padding-top:5px"><span class="stat-label">TOTAL ASSETS</span><span class="stat-val cc" id="sTotal">--</span></div>
-<div class="stat-row"><span class="stat-label">VISIBLE</span><span class="stat-val cg" style="font-size:12px" id="sVis">--</span></div>
-<div class="stat-row"><span class="stat-label">SOURCES</span><span class="stat-val cg" style="font-size:12px" id="sSrc">0/32</span></div>
-<div class="stat-row"><span class="stat-label">EARTHQUAKES</span><span class="stat-val cr" style="font-size:12px" id="sQuake">--</span></div>
-<div class="stat-row"><span class="stat-label">HOTSPOTS</span><span class="stat-val co" style="font-size:12px" id="sFires">--</span></div>
-<div class="stat-row"><span class="stat-label">WX ALERTS</span><span class="stat-val cy" style="font-size:12px" id="sWxAlerts">--</span></div>
-<div class="stat-row"><span class="stat-label">Kp INDEX</span><span class="stat-val cp" style="font-size:12px" id="sKp">--</span></div>
-<div class="stat-row"><span class="stat-label">DARK VESSELS</span><span class="stat-val cr" style="font-size:12px" id="sDark">--</span></div>
-<div class="stat-row"><span class="stat-label">SANCTIONED</span><span class="stat-val" style="font-size:12px;color:#ff0044" id="sSanctioned">--</span></div>
-<div class="stat-row"><span class="stat-label">GPS JAM ZONES</span><span class="stat-val cp" style="font-size:12px" id="sJam">--</span></div>
-<div class="stat-row"><span class="stat-label">GEOFENCES</span><span class="stat-val cy" style="font-size:12px" id="sGeo">0</span></div>
-<div class="stat-row"><span class="stat-label">NOTAMs/TFRs</span><span class="stat-val cy" style="font-size:12px" id="sNotam">--</span></div>
-<div class="stat-row"><span class="stat-label">PIRACY ZONES</span><span class="stat-val cr" style="font-size:12px" id="sPiracy">--</span></div>
-<div class="stat-row"><span class="stat-label">VOLCANOES</span><span class="stat-val co" style="font-size:12px" id="sVolcano">--</span></div>
-<div class="stat-row"><span class="stat-label">TSUNAMI</span><span class="stat-val cr" style="font-size:12px" id="sTsunami">--</span></div>
-<div class="stat-row"><span class="stat-label">CONFLICTS</span><span class="stat-val cr" style="font-size:12px" id="sConflict">--</span></div>
-<div class="stat-row"><span class="stat-label">CYBER THREATS</span><span class="stat-val cp" style="font-size:12px" id="sCyber">--</span></div>
-<div class="stat-row"><span class="stat-label">NUKE SITES</span><span class="stat-val co" style="font-size:12px" id="sNuke">--</span></div>
-<div class="stat-row"><span class="stat-label">MIL BASES</span><span class="stat-val cc" style="font-size:12px" id="sMilBase">--</span></div>
+<div class="stat-row" title="Military fixed-wing aircraft currently tracked"><span class="stat-label">MILITARY AIR</span><span class="stat-val cc" id="sMil">--</span></div>
+<div class="stat-row" title="Helicopters currently tracked"><span class="stat-label">HELICOPTERS</span><span class="stat-val cy" id="sHeli">--</span></div>
+<div class="stat-row" title="Coast guard aircraft and vessels"><span class="stat-label">COAST GUARD</span><span class="stat-val" style="color:#ff6600" id="sCG">--</span></div>
+<div class="stat-row" title="Police and government aircraft"><span class="stat-label">POLICE / GOV</span><span class="stat-val cr" id="sPol">--</span></div>
+<div class="stat-row" title="Oil, gas and chemical tankers"><span class="stat-label">TANKERS</span><span class="stat-val" style="color:#e855e8" id="sTanker">--</span></div>
+<div class="stat-row" title="Cargo and container ships"><span class="stat-label">CARGO SHIPS</span><span class="stat-val" style="color:#55aaff" id="sCargo">--</span></div>
+<div class="stat-row" title="Cruise ships, ferries and passenger vessels"><span class="stat-label">CRUISE / FERRY</span><span class="stat-val cy" id="sPax">--</span></div>
+<div class="stat-row" title="Fishing vessels"><span class="stat-label">FISHING</span><span class="stat-val cg" id="sFish">--</span></div>
+<div class="stat-row" title="All tracked vessels of every type"><span class="stat-label">ALL VESSELS</span><span class="stat-val co" id="sShip">--</span></div>
+<div class="stat-row" title="Satellites with live orbital positions"><span class="stat-label">SATELLITES</span><span class="stat-val cp" id="sSat">--</span></div>
+<div class="stat-row" style="border-top:1px solid var(--brd);margin-top:4px;padding-top:5px" title="Everything currently tracked, all types combined"><span class="stat-label">TOTAL ASSETS</span><span class="stat-val cc" id="sTotal">--</span></div>
+<div class="stat-row" title="Assets visible in the current map view"><span class="stat-label">ON SCREEN</span><span class="stat-val cg" style="font-size:12px" id="sVis">--</span></div>
+<div class="stat-row" title="Data feeds currently delivering data — click the status bar below for details"><span class="stat-label">DATA FEEDS</span><span class="stat-val cg" style="font-size:12px" id="sSrc">--</span></div>
 </div>
-<div class="card">
-<div class="card-title">Filters</div>
+<div class="card" id="cardHazards">
+<div class="card-title">Hazards</div>
+<div class="stat-row" title="Earthquakes detected in the last 24 hours (USGS)"><span class="stat-label">EARTHQUAKES</span><span class="stat-val cr" style="font-size:12px" id="sQuake">--</span></div>
+<div class="stat-row" title="Fire hotspots seen from satellite (NASA FIRMS)"><span class="stat-label">FIRE HOTSPOTS</span><span class="stat-val co" style="font-size:12px" id="sFires">--</span></div>
+<div class="stat-row" title="Active severe weather alerts (US NWS)"><span class="stat-label">SEVERE WEATHER</span><span class="stat-val cy" style="font-size:12px" id="sWxAlerts">--</span></div>
+<div class="stat-row" title="Geomagnetic activity — storms can disrupt GPS and radio"><span class="stat-label">SOLAR ACTIVITY</span><span class="stat-val cp" style="font-size:12px" id="sKp">--</span></div>
+<div class="stat-row" title="Volcanoes showing elevated activity"><span class="stat-label">VOLCANOES</span><span class="stat-val co" style="font-size:12px" id="sVolcano">--</span></div>
+<div class="stat-row" title="Active tsunami warnings (NOAA)"><span class="stat-label">TSUNAMI ALERTS</span><span class="stat-val cr" style="font-size:12px" id="sTsunami">--</span></div>
+</div>
+<div class="card" id="cardSecurity">
+<div class="card-title">Security Watch</div>
+<div class="stat-row" title="Vessels that stopped transmitting their position (possible AIS switch-off)"><span class="stat-label">DARK VESSELS</span><span class="stat-val cr" style="font-size:12px" id="sDark">--</span></div>
+<div class="stat-row" title="Tracked vessels matching sanctions lists"><span class="stat-label">SANCTIONED</span><span class="stat-val" style="font-size:12px;color:#ff0044" id="sSanctioned">--</span></div>
+<div class="stat-row" title="Zones with known GPS signal jamming"><span class="stat-label">GPS JAMMING</span><span class="stat-val cp" style="font-size:12px" id="sJam">--</span></div>
+<div class="stat-row" title="Watch zones you've drawn on the map"><span class="stat-label">GEOFENCES</span><span class="stat-val cy" style="font-size:12px" id="sGeo">0</span></div>
+<div class="stat-row" title="Airspace restrictions and flight notices"><span class="stat-label">AIRSPACE NOTICES</span><span class="stat-val cy" style="font-size:12px" id="sNotam">--</span></div>
+<div class="stat-row" title="Maritime piracy risk zones"><span class="stat-label">PIRACY ZONES</span><span class="stat-val cr" style="font-size:12px" id="sPiracy">--</span></div>
+<div class="stat-row" title="Armed conflict and border incidents"><span class="stat-label">CONFLICTS</span><span class="stat-val cr" style="font-size:12px" id="sConflict">--</span></div>
+<div class="stat-row" title="Regions with active cyber threat campaigns"><span class="stat-label">CYBER THREATS</span><span class="stat-val cp" style="font-size:12px" id="sCyber">--</span></div>
+<div class="stat-row" title="Nuclear facilities and test sites"><span class="stat-label">NUCLEAR SITES</span><span class="stat-val co" style="font-size:12px" id="sNuke">--</span></div>
+<div class="stat-row" title="Major military installations"><span class="stat-label">MILITARY BASES</span><span class="stat-val cc" style="font-size:12px" id="sMilBase">--</span></div>
+</div>
+<div class="card" id="cardLayers">
+<div class="card-title">Map Layers</div>
+<div class="fgroup">Asset types</div>
 <div style="display:flex;flex-wrap:wrap">
-<button class="fbtn on" id="fAir" onclick="togF('aircraft')">AIRCRAFT</button>
-<button class="fbtn on-y" id="fHeli" onclick="togF('heli')">HELI</button>
-<button class="fbtn on-o" id="fShip" onclick="togF('ship')">SHIPS</button>
-<button class="fbtn on-p" id="fSat" onclick="togF('satellite')">SATS</button>
-<button class="fbtn on-p" id="fOrbit" onclick="toggleOrbits()">ORBITS</button>
+<button class="fbtn on" id="fAir" onclick="togF('aircraft')" title="Show or hide fixed-wing aircraft">AIRCRAFT</button>
+<button class="fbtn on-y" id="fHeli" onclick="togF('heli')" title="Show or hide helicopters">HELICOPTERS</button>
+<button class="fbtn on-o" id="fShip" onclick="togF('ship')" title="Show or hide ships and vessels">SHIPS</button>
+<button class="fbtn on-p" id="fSat" onclick="togF('satellite')" title="Show or hide satellites">SATELLITES</button>
+<button class="fbtn on-p" id="fOrbit" onclick="toggleOrbits()" title="Draw the orbital path each satellite follows over the ground">ORBIT PATHS</button>
 </div>
-<div style="margin-top:5px;display:flex;flex-wrap:wrap">
-<button class="fbtn on-g" id="cMil" onclick="togC('military')">MILITARY</button>
-<button class="fbtn on-g" id="cCG" onclick="togC('coastguard')">COAST GUARD</button>
-<button class="fbtn on-g" id="cPol" onclick="togC('police')">POLICE</button>
-<button class="fbtn on-g" id="cGov" onclick="togC('government')">GOV</button>
-<button class="fbtn on-g" id="cSar" onclick="togC('sar')">SAR</button>
+<div class="fgroup">Operators</div>
+<div style="display:flex;flex-wrap:wrap">
+<button class="fbtn on-g" id="cMil" onclick="togC('military')" title="Armed forces aircraft and vessels">MILITARY</button>
+<button class="fbtn on-g" id="cCG" onclick="togC('coastguard')" title="Coast guard aircraft and vessels">COAST GUARD</button>
+<button class="fbtn on-g" id="cPol" onclick="togC('police')" title="Police aircraft">POLICE</button>
+<button class="fbtn on-g" id="cGov" onclick="togC('government')" title="Government and state aircraft">GOVERNMENT</button>
+<button class="fbtn on-g" id="cSar" onclick="togC('sar')" title="Search-and-rescue aircraft and vessels">RESCUE</button>
 </div>
-<div style="margin-top:3px;display:flex;flex-wrap:wrap">
-<button class="fbtn" id="cTanker" onclick="togC('tanker')">TANKER</button>
-<button class="fbtn" id="cCargo" onclick="togC('cargo')">CARGO</button>
-<button class="fbtn" id="cPassenger" onclick="togC('passenger')">CRUISE</button>
-<button class="fbtn" id="cFishing" onclick="togC('fishing')">FISHING</button>
+<div class="fgroup">Civilian shipping</div>
+<div style="display:flex;flex-wrap:wrap">
+<button class="fbtn" id="cTanker" onclick="togC('tanker')" title="Oil, gas and chemical tankers">TANKERS</button>
+<button class="fbtn" id="cCargo" onclick="togC('cargo')" title="Cargo and container ships">CARGO</button>
+<button class="fbtn" id="cPassenger" onclick="togC('passenger')" title="Cruise ships and ferries">CRUISE</button>
+<button class="fbtn" id="cFishing" onclick="togC('fishing')" title="Fishing vessels">FISHING</button>
 </div>
-<div style="margin-top:5px;display:flex;flex-wrap:wrap">
-<button class="fbtn on-r" id="fQuake" onclick="togLayer('quakes')">QUAKES</button>
-<button class="fbtn on-o" id="fFire" onclick="togLayer('fires')">FIRES</button>
-<button class="fbtn on" id="fGdelt" onclick="togLayer('gdelt')">EVENTS</button>
-<button class="fbtn on-y" id="fChoke" onclick="togLayer('chokes')">CHOKES</button>
-<button class="fbtn on-p" id="fJam" onclick="togLayer('jamming')">GPS JAM</button>
+<div class="fgroup">Hazards</div>
+<div style="display:flex;flex-wrap:wrap">
+<button class="fbtn on-r" id="fQuake" onclick="togLayer('quakes')" title="Earthquakes from the last 24 hours (USGS)">EARTHQUAKES</button>
+<button class="fbtn on-o" id="fFire" onclick="togLayer('fires')" title="Fire hotspots detected by satellite (NASA)">FIRES</button>
+<button class="fbtn on-o" id="fVolcano" onclick="togLayer('volcanoes')" title="Volcanoes with elevated activity">VOLCANOES</button>
+<button class="fbtn on-r" id="fTsunami" onclick="togLayer('tsunami')" title="Active tsunami warnings (NOAA)">TSUNAMI</button>
 </div>
-<div style="margin-top:3px;display:flex;flex-wrap:wrap">
-<button class="fbtn on-y" id="fNotam" onclick="togLayer('notams')">NOTAMs</button>
-<button class="fbtn on-r" id="fPiracy" onclick="togLayer('piracy')">PIRACY</button>
-<button class="fbtn on-o" id="fVolcano" onclick="togLayer('volcanoes')">VOLCS</button>
-<button class="fbtn on-r" id="fTsunami" onclick="togLayer('tsunami')">TSUN</button>
+<div class="fgroup">Security &amp; intel</div>
+<div style="display:flex;flex-wrap:wrap">
+<button class="fbtn on" id="fGdelt" onclick="togLayer('gdelt')" title="Geolocated world news events (GDELT)">NEWS EVENTS</button>
+<button class="fbtn on-y" id="fChoke" onclick="togLayer('chokes')" title="Strategic straits and canals — Hormuz, Suez, Malacca…">CHOKEPOINTS</button>
+<button class="fbtn on-p" id="fJam" onclick="togLayer('jamming')" title="Zones with known GPS signal jamming">GPS JAMMING</button>
+<button class="fbtn on-y" id="fNotam" onclick="togLayer('notams')" title="Airspace restrictions and flight notices (NOTAMs/TFRs)">AIRSPACE</button>
+<button class="fbtn on-r" id="fPiracy" onclick="togLayer('piracy')" title="Maritime piracy risk zones">PIRACY</button>
+<button class="fbtn on-p" id="fCyber" onclick="togLayer('cyber')" title="Regions with active cyber threat campaigns">CYBER</button>
+<button class="fbtn on-r" id="fConflict" onclick="togLayer('conflict')" title="Armed conflict and border incidents (ACLED)">CONFLICTS</button>
+<button class="fbtn on-p" id="fRF" onclick="togLayer('rf')" title="Radio-frequency interference and signals-intelligence zones">RF SIGNALS</button>
+<button class="fbtn on-o" id="fDrone" onclick="togLayer('drones')" title="Reported drone and UAS activity">DRONES</button>
+<button class="fbtn on-y" id="fRefugee" onclick="togLayer('refugees')" title="Refugee and displacement movements (UNHCR)">REFUGEES</button>
 </div>
-<div style="margin-top:3px;display:flex;flex-wrap:wrap">
-<button class="fbtn on-p" id="fCyber" onclick="togLayer('cyber')">CYBER</button>
-<button class="fbtn" id="fCables" onclick="togLayer('cables')">CABLES</button>
-<button class="fbtn" id="fNuke" onclick="togLayer('nukes')">NUKES</button>
-<button class="fbtn" id="fBases" onclick="togLayer('bases')">BASES</button>
-<button class="fbtn on-r" id="fConflict" onclick="togLayer('conflict')">ACLED</button>
-<button class="fbtn on-p" id="fRF" onclick="togLayer('rf')">RF/SIG</button>
-<button class="fbtn on-o" id="fDrone" onclick="togLayer('drones')">DRONES</button>
-<button class="fbtn on-y" id="fRefugee" onclick="togLayer('refugees')">REFUG</button>
+<div class="fgroup">Infrastructure</div>
+<div style="display:flex;flex-wrap:wrap">
+<button class="fbtn" id="fCables" onclick="togLayer('cables')" title="Undersea internet cable routes">SEA CABLES</button>
+<button class="fbtn" id="fNuke" onclick="togLayer('nukes')" title="Nuclear facilities and test sites">NUCLEAR</button>
+<button class="fbtn" id="fBases" onclick="togLayer('bases')" title="Major military installations">MIL BASES</button>
 </div>
-<select class="country-sel" id="countryFilter" onchange="applyFilters()"><option value="">ALL COUNTRIES</option></select>
+<div class="fgroup">Country</div>
+<select class="country-sel" id="countryFilter" onchange="applyFilters()" title="Only show assets from one country"><option value="">ALL COUNTRIES</option></select>
 </div>
 <div class="card">
 <div class="card-title">Quick Nav</div>
@@ -600,10 +671,10 @@ html,body{width:100%;height:100%;overflow:hidden;background:#050a12;font-family:
 <button class="nav-btn" style="border-color:var(--p);color:var(--p)" onclick="spaceView()">SPACE</button>
 </div>
 <div style="margin-top:5px;display:flex;flex-wrap:wrap;gap:2px">
-<button class="nav-btn" style="flex:1;border-color:var(--c);color:var(--c)" onclick="generateSitrep()">SITREP [S]</button>
+<button class="nav-btn" style="flex:1;border-color:var(--c);color:var(--c)" onclick="generateSitrep()" title="Generate a written situation report summarizing everything currently tracked">SITREP [S]</button>
 </div>
 </div>
-<div class="card">
+<div class="card" id="cardNations">
 <div class="card-title">Top Nations</div>
 <div id="nationStats" style="font-size:11px"></div>
 </div>
@@ -611,16 +682,17 @@ html,body{width:100%;height:100%;overflow:hidden;background:#050a12;font-family:
 
 <!-- RIGHT PANEL -->
 <div class="right-panel">
-<button class="mob-panel-close" onclick="toggleMobPanel('right')">&#x2715; CLOSE</button>
+<div class="sheet-handle"></div>
+<div class="mob-panel-head"><div><div class="mob-panel-title">INTEL FEED</div><div class="mob-panel-sub">Tracked assets, alerts, news &amp; threats</div></div><button class="mob-panel-x" onclick="toggleMobPanel('right')">&#x2715;</button></div>
 <div class="card" style="padding:0;display:flex;flex-direction:column;flex:1;overflow:hidden">
 <div class="tab-btns">
-<button class="tab-btn active" onclick="switchTab('assets',this)">ASSETS</button>
-<button class="tab-btn" onclick="switchTab('alerts',this)">ALERTS</button>
-<button class="tab-btn" onclick="switchTab('intel',this)">INTEL</button>
-<button class="tab-btn" onclick="switchTab('threats',this)">THREATS</button>
-<button class="tab-btn" onclick="switchTab('events',this)">EVENTS</button>
-<button class="tab-btn" onclick="switchTab('chokes',this)">CHOKES</button>
-<button class="tab-btn" onclick="switchTab('timeline',this)">LOG</button>
+<button class="tab-btn active" onclick="switchTab('assets',this)" title="Every aircraft, ship and satellite currently tracked — tap one to follow it">ASSETS</button>
+<button class="tab-btn" onclick="switchTab('alerts',this)" title="Automatic alerts: emergencies, unusual activity, severe weather">ALERTS<span class="tab-count" id="alertTabCount" style="display:none">0</span></button>
+<button class="tab-btn" onclick="switchTab('intel',this)" title="Latest defense and security headlines — tap to read">INTEL</button>
+<button class="tab-btn" onclick="switchTab('threats',this)" title="Threat level by country">THREATS</button>
+<button class="tab-btn" onclick="switchTab('events',this)" title="Geolocated news events from around the world">EVENTS</button>
+<button class="tab-btn" onclick="switchTab('chokes',this)" title="Status of strategic straits and canals">CHOKES</button>
+<button class="tab-btn" onclick="switchTab('timeline',this)" title="Chronological log of incidents this session">LOG</button>
 </div>
 <div class="tab-content active" id="tabAssets"></div>
 <div class="tab-content" id="tabAlerts"><div style="padding:12px;color:var(--td);font-size:11px">Monitoring...</div></div>
@@ -668,16 +740,16 @@ html,body{width:100%;height:100%;overflow:hidden;background:#050a12;font-family:
 
 <!-- MAP MODE SWITCHER -->
 <div class="map-modes" id="mapModes">
-<button class="map-mode-btn active" id="mmDark" onclick="setMapMode('dark')">DARK</button>
-<button class="map-mode-btn" id="mmSat" onclick="setMapMode('satellite')">SAT</button>
-<button class="map-mode-btn" id="mmNVG" onclick="setMapMode('nvg')">NVG</button>
-<button class="map-mode-btn" id="mmTopo" onclick="setMapMode('topo')">TOPO</button>
+<button class="map-mode-btn active" id="mmDark" onclick="setMapMode('dark')" title="Dark tactical map">DARK</button>
+<button class="map-mode-btn" id="mmSat" onclick="setMapMode('satellite')" title="Satellite imagery">SAT</button>
+<button class="map-mode-btn" id="mmNVG" onclick="setMapMode('nvg')" title="Night-vision style map">NVG</button>
+<button class="map-mode-btn" id="mmTopo" onclick="setMapMode('topo')" title="Topographic terrain map">TOPO</button>
 </div>
 
 <!-- GEOFENCE CONTROLS -->
 <div class="geofence-ctrl" id="geofenceCtrl">
-<button class="geo-btn" id="geoDrawBtn" onclick="toggleGeofenceDraw()">+ GEOFENCE</button>
-<button class="geo-btn" id="geoClearBtn" onclick="clearGeofences()">CLEAR</button>
+<button class="geo-btn" id="geoDrawBtn" onclick="toggleGeofenceDraw()" title="Draw a watch zone on the map — you'll be alerted when assets enter it">+ GEOFENCE</button>
+<button class="geo-btn" id="geoClearBtn" onclick="clearGeofences()" title="Remove all watch zones">CLEAR</button>
 </div>
 
 <!-- SITREP OVERLAY -->
@@ -694,52 +766,37 @@ html,body{width:100%;height:100%;overflow:hidden;background:#050a12;font-family:
 </div>
 </div>
 
-<!-- MOBILE NAV -->
-<div class="mobile-nav" id="mobileNav">
-<button class="mob-btn" id="mobSitrep" onclick="generateSitrep()" title="SITREP">S</button>
-<button class="mob-btn" id="mobRight" onclick="toggleMobPanel('right')" title="Intel Panel">R</button>
-<button class="mob-btn" id="mobLeft" onclick="toggleMobPanel('left')" title="Stats Panel">L</button>
+<!-- SYSTEM STATUS PANEL -->
+<div class="status-overlay" id="statusOverlay" onclick="closeStatusPanel()">
+<div class="status-box" onclick="event.stopPropagation()">
+<div class="sitrep-header"><span class="sitrep-title">SYSTEM STATUS</span><button class="article-close" onclick="closeStatusPanel()">CLOSE</button></div>
+<div class="status-summary" id="statusSummary"></div>
+<div class="status-list" id="statusList"></div>
+</div>
+</div>
+
+<!-- FIRST-RUN HINT (mobile) -->
+<div class="mob-hint" id="mobHint">
+<b style="color:var(--c)">Welcome to SENTINEL.</b> The map shows live aircraft, ships, satellites and world events — tap any marker for details.<br>
+Use the bar below: <b>LAYERS</b> picks what's on the map, <b>INTEL</b> has alerts &amp; news, <b>STATUS</b> shows data-feed health.
+<button onclick="dismissHint()">GOT IT</button>
+</div>
+
+<!-- MOBILE TAB BAR -->
+<div class="mobile-tabbar" id="mobileTabbar">
+<button class="mtab active" id="mtabMap" onclick="mobTab('map')"><svg viewBox="0 0 24 24"><path d="M1 6v15l7-3 8 3 7-3V3l-7 3-8-3-7 3z"/><path d="M8 3v15M16 6v15"/></svg><span>MAP</span></button>
+<button class="mtab" id="mtabLayers" onclick="mobTab('left')"><svg viewBox="0 0 24 24"><polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 12 12 17 22 12"/><polyline points="2 17 12 22 22 17"/></svg><span>LAYERS</span></button>
+<button class="mtab" id="mtabIntel" onclick="mobTab('right')"><svg viewBox="0 0 24 24"><line x1="9" y1="6" x2="21" y2="6"/><line x1="9" y1="12" x2="21" y2="12"/><line x1="9" y1="18" x2="21" y2="18"/><circle cx="4" cy="6" r="1.2"/><circle cx="4" cy="12" r="1.2"/><circle cx="4" cy="18" r="1.2"/></svg><span>INTEL</span></button>
+<button class="mtab" id="mtabStatus" onclick="mobTab('status')"><svg viewBox="0 0 24 24"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg><span>STATUS</span></button>
+<button class="mtab" id="mtabSitrep" onclick="mobTab('sitrep')"><svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg><span>SITREP</span></button>
 </div>
 
 <div class="zoom-badge" id="zoomBadge">ZOOM: -- | SHOWING: ALL</div>
 
 <div class="bottom-bar">
-<div class="feeds">
-<div class="feed"><div class="fd wait" id="f1"></div>ADSB</div>
-<div class="feed"><div class="fd wait" id="f2"></div>RGNL</div>
-<div class="feed"><div class="fd wait" id="f3"></div>OSKY</div>
-<div class="feed"><div class="fd wait" id="f4"></div>A.ONE</div>
-<div class="feed"><div class="fd wait" id="f5"></div>LADD</div>
-<div class="feed"><div class="fd wait" id="f6"></div>AIS</div>
-<div class="feed"><div class="fd wait" id="f7"></div>SHIPS</div>
-<div class="feed"><div class="fd wait" id="f8"></div>QUAKE</div>
-<div class="feed"><div class="fd wait" id="f9"></div>GDELT</div>
-<div class="feed"><div class="fd wait" id="f10"></div>NEWS</div>
-<div class="feed"><div class="fd wait" id="f11"></div>FIRMS</div>
-<div class="feed"><div class="fd wait" id="f12"></div>CHOKE</div>
-<div class="feed"><div class="fd wait" id="f14"></div>SOLAR</div>
-<div class="feed"><div class="fd wait" id="f15"></div>WX</div>
-<div class="feed"><div class="fd wait" id="f16"></div>VF.GL</div>
-<div class="feed"><div class="fd wait" id="f17"></div>JAM</div>
-<div class="feed"><div class="fd wait" id="f18"></div>SNCT</div>
-<div class="feed"><div class="fd wait" id="f19"></div>SATS</div>
-<div class="feed"><div class="fd wait" id="f20"></div>NOTAM</div>
-<div class="feed"><div class="fd wait" id="f21"></div>CABLE</div>
-<div class="feed"><div class="fd wait" id="f22"></div>NUKE</div>
-<div class="feed"><div class="fd wait" id="f23"></div>PIRC</div>
-<div class="feed"><div class="fd wait" id="f24"></div>WFIRE</div>
-<div class="feed"><div class="fd wait" id="f25"></div>CYBER</div>
-<div class="feed"><div class="fd wait" id="f26"></div>REFUG</div>
-<div class="feed"><div class="fd wait" id="f27"></div>MILBS</div>
-<div class="feed"><div class="fd wait" id="f28"></div>RFMON</div>
-<div class="feed"><div class="fd wait" id="f29"></div>DRONE</div>
-<div class="feed"><div class="fd wait" id="f30"></div>NTEST</div>
-<div class="feed"><div class="fd wait" id="f31"></div>ACLED</div>
-<div class="feed"><div class="fd wait" id="f32"></div>VOLC</div>
-<div class="feed"><div class="fd wait" id="f33"></div>TSUN</div>
-</div>
-<div><span style="color:var(--td)">REFRESH </span><span id="countdown" style="color:var(--c)">30s</span><span style="color:var(--td)"> | </span><span id="lastUp" style="color:var(--g)">--:--:--</span></div>
-<div style="display:flex;align-items:center;gap:10px"><span style="letter-spacing:3px;color:var(--td);font-family:'Orbitron',sans-serif;font-size:9px">SENTINEL v20.3</span><span style="color:var(--td);font-size:10px;cursor:pointer" onclick="document.getElementById('shortcutsOverlay').classList.toggle('show')">[?]</span></div>
+<div class="feeds" id="feedsBar" onclick="toggleStatusPanel()" title="Data feed health — click for the full system status"></div>
+<div title="Time until the next automatic data refresh, and when data last arrived"><span style="color:var(--td)">REFRESH </span><span id="countdown" style="color:var(--c)">30s</span><span style="color:var(--td)"> | </span><span id="lastUp" style="color:var(--g)">--:--:--</span></div>
+<div style="display:flex;align-items:center;gap:10px"><span style="letter-spacing:3px;color:var(--td);font-family:'Orbitron',sans-serif;font-size:9px">SENTINEL v20.3</span><span style="color:var(--td);font-size:10px;cursor:pointer" onclick="document.getElementById('shortcutsOverlay').classList.toggle('show')" title="Keyboard shortcuts">[?]</span></div>
 </div>
 
 <script>
@@ -775,9 +832,81 @@ const state={
   sources:{},refreshInterval:30,countdown:30,lastFetch:null
 };
 
+// --- DATA FEED REGISTRY (drives the bottom bar + system status panel) ---
+const FEEDS=[
+  {id:'f1',code:'ADSB',name:'Military Aircraft',desc:'Live military aircraft worldwide (adsb.lol)'},
+  {id:'f2',code:'RGNL',name:'Regional Aircraft',desc:'Military & government aircraft near your map view'},
+  {id:'f3',code:'OSKY',name:'OpenSky Network',desc:'Crowd-sourced aircraft positions in view'},
+  {id:'f4',code:'A.ONE',name:'Military Aircraft #2',desc:'Backup military aircraft feed (adsb.one)'},
+  {id:'f5',code:'LADD',name:'Private Aircraft',desc:'Aircraft on the FAA privacy (LADD) list'},
+  {id:'f6',code:'AIS',name:'Baltic Vessels',desc:'Ship positions in the Baltic Sea (Digitraffic AIS)'},
+  {id:'f7',code:'SHIPS',name:'Naval Vessels',desc:'Known military & government vessel positions'},
+  {id:'f8',code:'QUAKE',name:'Earthquakes',desc:'Earthquakes from the last 24 hours (USGS)'},
+  {id:'f9',code:'GDELT',name:'News Events',desc:'Geolocated world events from global media (GDELT)'},
+  {id:'f10',code:'NEWS',name:'Intel Headlines',desc:'Defense & security news headlines'},
+  {id:'f11',code:'FIRMS',name:'Fire Hotspots',desc:'Thermal hotspots detected by NASA satellites'},
+  {id:'f12',code:'CHOKE',name:'Chokepoints',desc:'Strategic strait & canal monitoring'},
+  {id:'f14',code:'SOLAR',name:'Space Weather',desc:'Geomagnetic & solar activity (NOAA)'},
+  {id:'f15',code:'WX',name:'Severe Weather',desc:'Extreme weather alerts (US National Weather Service)'},
+  {id:'f16',code:'VF.GL',name:'Global Vessels',desc:'Worldwide commercial ship positions'},
+  {id:'f17',code:'JAM',name:'GPS Jamming',desc:'Known GPS interference zones'},
+  {id:'f18',code:'SNCT',name:'Sanctions Check',desc:'Vessels cross-checked against sanctions lists'},
+  {id:'f19',code:'SATS',name:'Satellites',desc:'Live satellite positions from orbital data'},
+  {id:'f20',code:'NOTAM',name:'Airspace Notices',desc:'Flight restrictions & airspace notices'},
+  {id:'f21',code:'CABLE',name:'Subsea Cables',desc:'Undersea internet cable routes'},
+  {id:'f22',code:'NUKE',name:'Nuclear Sites',desc:'Nuclear facilities & test sites'},
+  {id:'f23',code:'PIRC',name:'Piracy Zones',desc:'Maritime piracy risk areas'},
+  {id:'f24',code:'WFIRE',name:'Wildfires',desc:'Large active wildfire perimeters'},
+  {id:'f25',code:'CYBER',name:'Cyber Threats',desc:'Cyber threat activity by region'},
+  {id:'f26',code:'REFUG',name:'Displacement',desc:'Refugee & displacement movements'},
+  {id:'f27',code:'MILBS',name:'Military Bases',desc:'Major military installations'},
+  {id:'f28',code:'RFMON',name:'RF Monitor',desc:'Radio-frequency / signals-intelligence zones'},
+  {id:'f29',code:'DRONE',name:'Drone Activity',desc:'Reported drone & UAS activity'},
+  {id:'f30',code:'NTEST',name:'Nuclear Tests',desc:'Seismic screening for possible nuclear tests'},
+  {id:'f31',code:'ACLED',name:'Conflicts',desc:'Armed conflict & border incidents'},
+  {id:'f32',code:'VOLC',name:'Volcanoes',desc:'Volcanic activity monitoring'},
+  {id:'f33',code:'TSUN',name:'Tsunami',desc:'Tsunami warnings (NOAA)'}
+];
+document.getElementById('feedsBar').innerHTML=
+  '<span class="feeds-chip"><span class="fd ok" style="animation:none"></span><span id="feedSummary">FEEDS --/--</span></span>'+
+  FEEDS.map(f=>`<div class="feed" title="${f.name} — ${f.desc}"><div class="fd wait" id="${f.id}"></div>${f.code}</div>`).join('');
+
+function feedState(f){const e=document.getElementById(f.id);return e?(e.classList.contains('ok')?'ok':e.classList.contains('err')?'err':'wait'):'wait';}
+function updateFeedSummary(){
+  const ok=FEEDS.filter(f=>feedState(f)==='ok').length;
+  const el=document.getElementById('feedSummary');
+  if(el)el.textContent='FEEDS '+ok+'/'+FEEDS.length;
+  if(document.getElementById('statusOverlay').classList.contains('show'))renderStatusPanel();
+}
+function renderStatusPanel(){
+  let ok=0,err=0,wait=0;
+  const rows=FEEDS.map(f=>{
+    const st=feedState(f);
+    if(st==='ok')ok++;else if(st==='err')err++;else wait++;
+    const lbl=st==='ok'?'<span class="status-state" style="color:var(--g)">ONLINE</span>':st==='err'?'<span class="status-state" style="color:var(--r)">OFFLINE</span>':'<span class="status-state" style="color:var(--y)">WAITING</span>';
+    return `<div class="status-row"><div class="fd ${st}"></div><span class="status-name">${f.name}</span><span class="status-desc">${f.desc}</span>${lbl}</div>`;
+  }).join('');
+  document.getElementById('statusList').innerHTML=rows;
+  document.getElementById('statusSummary').innerHTML=
+    `<div class="status-sum-item"><div class="fd ok" style="animation:none"></div>${ok} ONLINE</div>`+
+    `<div class="status-sum-item"><div class="fd err" style="animation:none"></div>${err} OFFLINE</div>`+
+    `<div class="status-sum-item"><div class="fd wait" style="animation:none"></div>${wait} WAITING</div>`+
+    `<div class="status-sum-item" style="margin-left:auto;color:var(--td)">OFFLINE FEEDS RETRY AUTOMATICALLY</div>`;
+}
+function toggleStatusPanel(){
+  const o=document.getElementById('statusOverlay');
+  if(o.classList.contains('show')){o.classList.remove('show');}
+  else{renderStatusPanel();o.classList.add('show');}
+  if(typeof syncMobTabs==='function')syncMobTabs();
+}
+function closeStatusPanel(){
+  document.getElementById('statusOverlay').classList.remove('show');
+  if(typeof syncMobTabs==='function')syncMobTabs();
+}
+
 // --- UTILS ---
-function feedDot(id,ok){const e=document.getElementById(id);if(e)e.className='fd '+(ok?'ok':'err');}
-function feedWait(id){const e=document.getElementById(id);if(e)e.className='fd wait';}
+function feedDot(id,ok){const e=document.getElementById(id);if(e)e.className='fd '+(ok?'ok':'err');updateFeedSummary();}
+function feedWait(id){const e=document.getElementById(id);if(e)e.className='fd wait';updateFeedSummary();}
 function fetchJ(url,t=8000){
   const c=new AbortController();
   const tm=setTimeout(()=>c.abort(),t);
@@ -2370,8 +2499,41 @@ function calculateDefcon(){
   document.getElementById('defconLevel').textContent=defcon;
 }
 
+// --- DEFCON EXPLAINER POPOVER ---
+function toggleDefconPop(){
+  const p=document.getElementById('defconPop');
+  if(p.classList.contains('show')){p.classList.remove('show');return;}
+  const d=state.defcon;
+  const meaning={1:'Maximum alert — multiple severe crises unfolding at once',2:'High alert — major active threats worldwide',3:'Elevated — several significant situations developing',4:'Guarded — normal global background activity',5:'Calm — minimal significant activity'};
+  const colors={1:'#ff0000',2:'var(--r)',3:'var(--y)',4:'var(--c)',5:'var(--g)'};
+  let factors='';
+  try{
+    const crit=Object.entries(RISK_DATA).filter(([,v])=>v.level==='CRITICAL').map(([cc])=>CN[cc]||cc);
+    if(crit.length)factors+=`<div>&#x26a0; ${crit.length} region${crit.length>1?'s':''} at critical risk: ${crit.slice(0,5).join(', ')}${crit.length>5?'…':''}</div>`;
+    const bigQ=state.earthquakes.filter(q=>q.mag>=6).length;
+    if(bigQ)factors+=`<div>&#x25cf; ${bigQ} major earthquake${bigQ>1?'s':''} (M6+) in the last 24h</div>`;
+    const critC=CHOKEPOINTS.filter(c=>c.status==='CRITICAL').map(c=>c.name);
+    if(critC.length)factors+=`<div>&#x2693; Critical chokepoint${critC.length>1?'s':''}: ${critC.join(', ')}</div>`;
+    const elevC=CHOKEPOINTS.filter(c=>c.status==='ELEVATED').length;
+    if(elevC)factors+=`<div>&#x2693; ${elevC} chokepoint${elevC>1?'s':''} at elevated status</div>`;
+  }catch(e){}
+  if(!factors)factors='<div>No major contributing factors right now.</div>';
+  p.innerHTML=
+    `<div class="defcon-pop-title" style="color:${colors[d]}">DEFCON ${d} — ${{1:'COCKED PISTOL',2:'FAST PACE',3:'ROUND HOUSE',4:'DOUBLE TAKE',5:'FADE OUT'}[d]}</div>`+
+    `<div class="defcon-pop-meaning">${meaning[d]}. This is SENTINEL's overall readiness estimate, recalculated every 2 minutes from regional risk levels, major earthquakes and chokepoint status.</div>`+
+    `<div class="defcon-pop-factors"><div style="color:var(--td);letter-spacing:1px;margin-bottom:4px">WHAT'S DRIVING IT (THREAT SCORE: ${state.threatScore})</div>${factors}</div>`;
+  p.classList.add('show');
+}
+
 // --- ALERTS SYSTEM ---
 function addAlert(level,text){
+  // Suppress exact-duplicate alerts for 5 minutes so real events stay visible
+  const now=Date.now();
+  state._alertSeen=state._alertSeen||new Map();
+  const last=state._alertSeen.get(text);
+  if(last&&now-last<300000)return;
+  state._alertSeen.set(text,now);
+  if(state._alertSeen.size>500)state._alertSeen.clear();
   state.alerts.unshift({time:ts(),text,level});
   if(state.alerts.length>50)state.alerts.length=50;
   renderAlerts();
@@ -2386,11 +2548,22 @@ function generateAlerts(){
   const zones={};
   for(const a of assets){if(a.type!=='aircraft'&&a.type!=='heli')continue;const k=Math.round(a.lat/2)+'_'+Math.round(a.lon/2);zones[k]=(zones[k]||0)+1;}
   for(const[k,v]of Object.entries(zones)){if(v>=8){const[lat,lon]=k.split('_');addAlert('orange',`HIGH ACTIVITY: ${v} aircraft near ${lat*2}N/${lon*2}E`);}}
-  const total=state.assets.size;const src=Object.values(state.sources).filter(v=>v>0).length;
-  addAlert('green',`STATUS: Tracking ${total} assets from ${src} sources`);
+  // Periodic status line — at most once every 5 minutes (the live numbers change constantly)
+  const now=Date.now();
+  if(!state._lastStatusAlert||now-state._lastStatusAlert>300000){
+    state._lastStatusAlert=now;
+    const total=state.assets.size;const src=Object.values(state.sources).filter(v=>v>0).length;
+    addAlert('green',`STATUS: Tracking ${total} assets from ${src} sources`);
+  }
 }
 function renderAlerts(){
   const el=document.getElementById('tabAlerts');
+  const badge=document.getElementById('alertTabCount');
+  if(badge){
+    const hot=state.alerts.slice(0,40).filter(a=>a.level==='red'||a.level==='orange').length;
+    badge.textContent=hot>99?'99+':hot;
+    badge.style.display=hot>0?'inline-block':'none';
+  }
   if(!state.alerts.length){el.innerHTML='<div style="padding:12px;color:var(--td);font-size:11px;text-align:center">No alerts</div>';return;}
   let html='';
   for(const a of state.alerts.slice(0,40)){html+=`<div class="alert-item ${a.level||''}"><div class="alert-time">${a.time}</div><div class="alert-text">${a.text}</div></div>`;}
@@ -2530,7 +2703,7 @@ function updateStats(){
   document.getElementById('sSat').textContent=sat;document.getElementById('sTotal').textContent=state.assets.size;
   document.getElementById('sTanker').textContent=tanker;document.getElementById('sCargo').textContent=cargo;
   document.getElementById('sPax').textContent=pax;document.getElementById('sFish').textContent=fish;
-  document.getElementById('sSrc').textContent=Object.values(state.sources).filter(v=>v>0).length+'/32';
+  document.getElementById('sSrc').textContent=FEEDS.filter(f=>feedState(f)==='ok').length+'/'+FEEDS.length;
   const sorted=Object.entries(nations).sort((a,b)=>b[1]-a[1]).slice(0,8);
   document.getElementById('nationStats').innerHTML=sorted.map(([cc,n])=>`<div class="stat-row"><span class="stat-label">${countryFlag(cc)} ${cc}</span><span class="stat-val cc" style="font-size:12px">${n}</span></div>`).join('');
   const sel=document.getElementById('countryFilter');const cur=sel.value;
@@ -2581,7 +2754,7 @@ function switchTab(name,btn){document.querySelectorAll('.tab-btn').forEach(b=>b.
 // Keyboard shortcuts
 document.addEventListener('keydown',e=>{
   if(e.target.tagName==='INPUT')return;
-  if(e.key==='Escape'){closeArticle();closeDetail();document.getElementById('shortcutsOverlay').classList.remove('show');}
+  if(e.key==='Escape'){closeArticle();closeDetail();document.getElementById('shortcutsOverlay').classList.remove('show');document.getElementById('statusOverlay').classList.remove('show');document.getElementById('defconPop').classList.remove('show');}
   if(e.key==='?')document.getElementById('shortcutsOverlay').classList.toggle('show');
   if(e.key==='/'){e.preventDefault();document.getElementById('searchInput').focus();}
   if(e.key==='r'||e.key==='R'){fetchAll();fetchEarthquakes();fetchGDELT();fetchNews();fetchFIRMS();}
@@ -3306,30 +3479,62 @@ setInterval(()=>{renderConflicts();renderCyber();renderPiracy();},600000); // Re
 
 
 // ===== MOBILE SUPPORT =====
+// Bottom tab bar: MAP / LAYERS / INTEL / STATUS / SITREP
+function syncMobTabs(){
+  const lp=document.querySelector('.left-panel').classList.contains('mob-open');
+  const rp=document.querySelector('.right-panel').classList.contains('mob-open');
+  const st=document.getElementById('statusOverlay').classList.contains('show');
+  const sit=document.getElementById('sitrepOverlay').classList.contains('show');
+  const set=(id,on)=>document.getElementById(id).classList.toggle('active',on);
+  set('mtabLayers',lp);set('mtabIntel',rp);set('mtabStatus',st);set('mtabSitrep',sit);
+  set('mtabMap',!lp&&!rp&&!st&&!sit);
+}
+function closeAllMobile(){
+  document.querySelector('.left-panel').classList.remove('mob-open');
+  document.querySelector('.right-panel').classList.remove('mob-open');
+  document.getElementById('statusOverlay').classList.remove('show');
+  document.getElementById('sitrepOverlay').classList.remove('show');
+  document.getElementById('shortcutsOverlay').classList.remove('show');
+  document.getElementById('defconPop').classList.remove('show');
+  syncMobTabs();
+}
 function toggleMobPanel(which){
   const lp=document.querySelector('.left-panel');
   const rp=document.querySelector('.right-panel');
-  const mobL=document.getElementById('mobLeft');
-  const mobR=document.getElementById('mobRight');
-  if(which==='left'){
-    const open=lp.classList.toggle('mob-open');
-    if(open)rp.classList.remove('mob-open');
-    mobL.classList.toggle('active',open);
-    mobR.classList.remove('active');
-  }else{
-    const open=rp.classList.toggle('mob-open');
-    if(open)lp.classList.remove('mob-open');
-    mobR.classList.toggle('active',open);
-    mobL.classList.remove('active');
+  const target=which==='left'?lp:rp;
+  const willOpen=!target.classList.contains('mob-open');
+  closeAllMobile();
+  if(willOpen)target.classList.add('mob-open');
+  syncMobTabs();
+}
+function mobTab(which){
+  if(which==='map'){closeAllMobile();return;}
+  if(which==='left'||which==='right'){toggleMobPanel(which);return;}
+  if(which==='status'){
+    const wasOpen=document.getElementById('statusOverlay').classList.contains('show');
+    closeAllMobile();
+    if(!wasOpen)toggleStatusPanel();
+    return;
+  }
+  if(which==='sitrep'){
+    const wasOpen=document.getElementById('sitrepOverlay').classList.contains('show');
+    closeAllMobile();
+    if(!wasOpen)generateSitrep();
+    syncMobTabs();
   }
 }
-// Close mobile panels when clicking map
+// Keep tab highlights in sync when SITREP opens/closes by other means
+const _origGenSitrep=generateSitrep;
+generateSitrep=function(){_origGenSitrep();syncMobTabs();};
+const _origCloseSitrep=closeSitrep;
+closeSitrep=function(){_origCloseSitrep();syncMobTabs();};
+// Close mobile panels + DEFCON popover when clicking the map
 map.on('click',function(){
+  document.getElementById('defconPop').classList.remove('show');
   if(window.innerWidth<=768&&!geofenceDrawing){
     document.querySelector('.left-panel').classList.remove('mob-open');
     document.querySelector('.right-panel').classList.remove('mob-open');
-    document.getElementById('mobLeft').classList.remove('active');
-    document.getElementById('mobRight').classList.remove('active');
+    syncMobTabs();
   }
 });
 // Close mobile panels on asset click (after showing detail)
@@ -3339,14 +3544,39 @@ showDetail=function(id){
   if(window.innerWidth<=768){
     document.querySelector('.left-panel').classList.remove('mob-open');
     document.querySelector('.right-panel').classList.remove('mob-open');
-    document.getElementById('mobLeft').classList.remove('active');
-    document.getElementById('mobRight').classList.remove('active');
+    syncMobTabs();
   }
 };
-// Prevent double-tap zoom on mobile nav buttons
-document.querySelectorAll('.mob-btn,.fbtn,.nav-btn,.tab-btn,.map-mode-btn,.geo-btn').forEach(el=>{
+// Prevent double-tap zoom on touch buttons
+document.querySelectorAll('.mtab,.mob-panel-x,.fbtn,.nav-btn,.tab-btn,.map-mode-btn,.geo-btn').forEach(el=>{
   el.addEventListener('touchend',function(e){e.preventDefault();this.click();},{passive:false});
 });
+
+// ===== COLLAPSIBLE SIDEBAR CARDS =====
+document.querySelectorAll('.left-panel .card-title').forEach(t=>{
+  t.addEventListener('click',()=>t.parentElement.classList.toggle('collapsed'));
+});
+// Start with secondary cards folded on small screens so Layers is easy to reach
+if(window.innerWidth<=768){
+  ['cardHazards','cardSecurity','cardNations'].forEach(id=>{
+    const el=document.getElementById(id);if(el)el.classList.add('collapsed');
+  });
+}
+
+// ===== FIRST-RUN HINT (mobile) =====
+function dismissHint(){
+  document.getElementById('mobHint').classList.remove('show');
+  try{localStorage.setItem('sentinelHintSeen','1');}catch(e){}
+}
+const _origDismissLoader=dismissLoader;
+dismissLoader=function(){
+  _origDismissLoader();
+  if(window.innerWidth<=768){
+    let seen=false;
+    try{seen=!!localStorage.getItem('sentinelHintSeen');}catch(e){}
+    if(!seen)setTimeout(()=>document.getElementById('mobHint').classList.add('show'),1500);
+  }
+};
 </script>
 </body>
 </html>
