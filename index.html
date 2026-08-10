@@ -261,6 +261,34 @@ html,body{width:100%;height:100%;overflow:hidden;background:#050a12;font-family:
 .cb-b{flex:2;color:var(--tm);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .cb-c{flex:1;color:var(--td);text-align:right;white-space:nowrap}
 .cb-foot{margin-top:12px;padding-top:8px;border-top:1px solid var(--brd);font-size:9px;color:var(--td);line-height:1.5}
+#radarBar{position:fixed;left:50%;transform:translateX(-50%);bottom:88px;z-index:5000;display:flex;align-items:center;gap:8px;
+  background:rgba(8,12,20,.85);border:1px solid var(--brd);padding:4px 8px;
+  font-family:'Share Tech Mono',monospace;font-size:10px;color:var(--tm);letter-spacing:1px}
+#radarPlay{background:transparent;border:1px solid var(--brd);color:var(--c);font-family:inherit;
+  font-size:9px;padding:2px 7px;cursor:pointer;letter-spacing:1px}
+#radarPlay:hover{background:var(--c);color:#000}
+@media(max-width:900px){#radarBar{bottom:150px}}
+.cb-quiet{opacity:.55}
+.cb-quiet .cb-sec-h{color:var(--td)}
+/* At phone width the header wrapped mid-chip, the country picker ran off the
+   right edge and the fourth stat tile was cut off. */
+@media(max-width:560px){
+  .country-box{width:96vw;max-width:none}
+  .sitrep-header{flex-wrap:wrap;gap:6px}
+  .sitrep-title{width:100%}
+  #cbPicker{margin-left:0;max-width:none;flex:1}
+  #cbWatch{margin-left:0}
+  /* flex-basis maths plus the scrollbar pushed the right-hand tiles past the
+     box edge; grid just divides the space it actually has. */
+  .cb-summary{display:grid;grid-template-columns:1fr 1fr;gap:6px}
+  .cb-stat{min-width:0}
+  .sitrep-header .article-close{margin-left:auto}
+  .cb-risk{margin-left:6px}
+  .cb-row{flex-wrap:wrap;gap:2px 8px}
+  .cb-a{flex:1 1 100%}
+  .cb-b{flex:1 1 auto;font-size:10px}
+  .cb-c{flex:0 0 auto;font-size:10px}
+}
 #cbWatch{margin-left:12px;background:transparent;border:1px solid var(--brd);color:var(--td);
   font-family:inherit;font-size:9px;letter-spacing:1px;padding:3px 9px;cursor:pointer;white-space:nowrap}
 #cbWatch:hover{border-color:var(--c);color:var(--c)}
@@ -707,6 +735,8 @@ html,body{width:100%;height:100%;overflow:hidden;background:#050a12;font-family:
 <button class="fbtn on-o" id="fFire" onclick="togLayer('fires')" title="Fire hotspots detected by satellite (NASA)">FIRES</button>
 <button class="fbtn on-o" id="fVolcano" onclick="togLayer('volcanoes')" title="Volcanoes with elevated activity">VOLCANOES</button>
 <button class="fbtn on-r" id="fTsunami" onclick="togLayer('tsunami')" title="Active tsunami warnings (NOAA)">TSUNAMI</button>
+<button class="fbtn on" id="fRadar" onclick="toggleRadar()" title="Live precipitation radar (RainViewer)">RAIN RADAR</button>
+<button class="fbtn on-y" id="fBOM" onclick="togLayer('bom')" title="Australian Bureau of Meteorology warnings">AU WARNINGS</button>
 </div>
 <div class="fgroup">Security &amp; intel<span class="grp-ctl"><button onclick="setGroup('grpIntel',true)" title="Turn every layer in this group on">ALL</button><button onclick="setGroup('grpIntel',false)" title="Turn every layer in this group off">NONE</button></span></div>
 <div id="grpIntel" style="display:flex;flex-wrap:wrap">
@@ -887,6 +917,7 @@ Use the bar below: <b>LAYERS</b> picks what's on the map, <b>INTEL</b> has alert
 
 <button class="panel-rail" id="railL" onclick="togglePanel('L')" title="Hide or show the left panel  [ ">‹</button>
 <button class="panel-rail" id="railR" onclick="togglePanel('R')" title="Hide or show the right panel  ] ">›</button>
+<div id="radarBar"><span id="radarTime">RADAR --</span><button id="radarPlay" onclick="toggleRadarPlay()">▶ LOOP</button></div>
 <div class="zoom-badge" id="zoomBadge">ZOOM: -- | SHOWING: ALL</div>
 
 <div class="bottom-bar">
@@ -950,12 +981,12 @@ const state={
   quakeMarkers:[],gdeltMarkers:[],fireMarkers:[],chokeMarkers:[],
   filters:{aircraft:true,heli:true,ship:true,satellite:true},
   categories:{military:true,coastguard:true,police:true,government:true,sar:true,tanker:false,cargo:false,passenger:false,fishing:false},
-  layers:{gdacs:true,quakes:true,fires:true,gdelt:true,chokes:true,notams:true,piracy:true,volcanoes:true,tsunami:true,cyber:true,cables:false,nukes:false,bases:false,conflict:true,rf:true,drones:true,refugees:true,dark:true},
+  layers:{radar:true,bom:true,gdacs:true,quakes:true,fires:true,gdelt:true,chokes:true,notams:true,piracy:true,volcanoes:true,tsunami:true,cyber:true,cables:false,nukes:false,bases:false,conflict:true,rf:true,drones:true,refugees:true,dark:true},
   countryFilter:'',searchTerm:'',selectedId:null,
   alerts:[],news:[],gdeltEvents:[],earthquakes:[],fires:[],notamMarkers:[],cableLines:[],nukeMarkers:[],piracyMarkers:[],wildfireMarkers:[],cyberMarkers:[],refugeeMarkers:[],milbaseMarkers:[],rfMarkers:[],droneMarkers:[],ntestMarkers:[],conflictMarkers:[],volcanoMarkers:[],tsunamiMarkers:[],
   threats:{},defcon:4,threatScore:0,
   proxyHealth:null,darkEvents:[],darkMarkers:[],reliefEvents:[],acledEvents:[],
-  visible:[],gdacs:[],gdacsMarkers:[],bom:[],
+  visible:[],gdacs:[],gdacsMarkers:[],bom:[],bomMarkers:[],
   sources:{},refreshInterval:30,countdown:30,lastFetch:null
 };
 
@@ -997,7 +1028,8 @@ const FEEDS=[
   {id:'f35',code:'GEO',name:'News Map',desc:'Geolocated news mentions, refreshed every 15 min (GDELT GEO)'},
   {id:'f36',code:'RELIEF',name:'Humanitarian',desc:'Disaster declarations & humanitarian alerts (ReliefWeb)'},
   {id:'f37',code:'GDACS',name:'Global Disasters',desc:'Worldwide disaster alerts \u2014 cyclones, floods, fires, drought (GDACS)'},
-  {id:'f38',code:'BOM',name:'Australia Warnings',desc:'Flood, marine and severe weather warnings (Bureau of Meteorology)'}
+  {id:'f38',code:'BOM',name:'Australia Warnings',desc:'Flood, marine and severe weather warnings (Bureau of Meteorology)'},
+  {id:'f39',code:'RADAR',name:'Weather Radar',desc:'Live global precipitation radar, last 2 hours (RainViewer)'}
 ];
 document.getElementById('feedsBar').innerHTML=
   '<span class="feeds-chip" onclick="event.stopPropagation();toggleFeedsBar()" title="Click to show or hide every feed; click the bar for full status"><span class="fd ok" style="animation:none"></span><span id="feedSummary">FEEDS --/--</span></span>'+
@@ -2206,8 +2238,111 @@ async function fetchBOM(){
         addAlert('orange',`AU ${w.state}: ${w.short||w.type} — ${w.title.slice(0,60)}`,{kind:'BOM WARNING'});
       }
     }
+    renderBOMMarkers();
     feedDot('f38',state.bom.length>0);
   }catch(e){console.warn('BOM error:',e);feedDot('f38',false);}
+}
+
+/* ==================== LIVE WEATHER RADAR ====================
+   There was no weather imagery at all — only warning *text*, and only from the
+   US National Weather Service, so a view over Victoria with thirteen active
+   flood warnings rendered completely empty.
+
+   RainViewer publishes global precipitation radar as map tiles: free, no key,
+   CORS enabled, ~13 frames covering the last two hours. This puts actual
+   weather on the map rather than a count in a sidebar.
+*/
+let _radarLayer=null,_radarFrames=[],_radarIdx=-1,_radarTimer=null;
+
+async function fetchRadar(){
+  feedWait('f39');
+  try{
+    const d=await fetchR('https://api.rainviewer.com/public/weather-maps.json',1,12000);
+    const host=d.host||'https://tilecache.rainviewer.com';
+    _radarFrames=(d.radar&&d.radar.past?d.radar.past:[]).map(f=>({time:f.time,url:host+f.path}));
+    if(d.radar&&d.radar.nowcast)_radarFrames=_radarFrames.concat(d.radar.nowcast.map(f=>({time:f.time,url:host+f.path,forecast:true})));
+    state.sources.radar=_radarFrames.length;
+    if(_radarFrames.length){showRadarFrame(_radarFrames.length-1);feedDot('f39',true);}
+    else feedDot('f39',false);
+  }catch(e){console.warn('Radar error:',e);feedDot('f39',false);}
+}
+
+function showRadarFrame(i){
+  if(!_radarFrames.length)return;
+  _radarIdx=(i+_radarFrames.length)%_radarFrames.length;
+  const f=_radarFrames[_radarIdx];
+  // 512px tiles at scheme 4 (universal blue/green/red), smoothed, snow shown.
+  const url=`${f.url}/512/{z}/{x}/{y}/4/1_1.png`;
+  if(_radarLayer)map.removeLayer(_radarLayer);
+  _radarLayer=L.tileLayer(url,{opacity:0.55,zIndex:200,maxNativeZoom:10,crossOrigin:true});
+  if(state.layers.radar!==false)_radarLayer.addTo(map);
+  const el=document.getElementById('radarTime');
+  if(el){
+    const t=new Date(f.time*1000);
+    el.textContent='RADAR '+t.toISOString().slice(11,16)+'Z'+(f.forecast?' FCST':'')
+      +' ('+(_radarIdx+1)+'/'+_radarFrames.length+')';
+  }
+}
+
+// Stepping through the two-hour loop is what shows a front actually moving.
+function toggleRadarPlay(){
+  const btn=document.getElementById('radarPlay');
+  if(_radarTimer){
+    clearInterval(_radarTimer);_radarTimer=null;
+    if(btn)btn.textContent='▶ LOOP';
+    showRadarFrame(_radarFrames.length-1);
+  }else{
+    if(btn)btn.textContent='❚❚ STOP';
+    _radarTimer=setInterval(()=>showRadarFrame(_radarIdx+1),550);
+  }
+}
+function toggleRadar(){
+  state.layers.radar=!state.layers.radar;
+  const btn=document.getElementById('fRadar');
+  if(btn)btn.classList.toggle('on',state.layers.radar);
+  const bar=document.getElementById('radarBar');
+  if(bar)bar.style.display=state.layers.radar?'':'none';
+  if(!state.layers.radar){
+    if(_radarTimer){clearInterval(_radarTimer);_radarTimer=null;
+      const p=document.getElementById('radarPlay');if(p)p.textContent='▶ LOOP';}
+    if(_radarLayer)map.removeLayer(_radarLayer);
+  }else if(_radarLayer){_radarLayer.addTo(map);}
+  else fetchRadar();
+}
+
+/* ---- BOM warnings on the map ----
+   BOM attributes warnings to a state rather than a coordinate, so they had no
+   way onto the map and only ever appeared in the country brief. Placing them at
+   state centroids is approximate by construction — the marker means "this state
+   has this warning", not "the event is here" — but an approximate marker beats
+   an empty map over a state with thirteen active flood warnings.
+*/
+const AU_STATE_CENTRES={
+  NSW:[-32.0,147.0],VIC:[-36.6,144.6],QLD:[-22.5,144.5],SA:[-30.2,135.6],
+  WA:[-25.5,122.0],TAS:[-42.0,146.6],NT:[-19.5,133.5],ACT:[-35.5,149.0]
+};
+function renderBOMMarkers(){
+  state.bomMarkers.forEach(m=>map.removeLayer(m));state.bomMarkers=[];
+  if(!state.bom||!state.bom.length)return;
+  const byState={};
+  for(const w of state.bom){
+    const st=w.state||(w.states&&w.states[0]);
+    if(!st||!AU_STATE_CENTRES[st])continue;
+    (byState[st]=byState[st]||[]).push(w);
+  }
+  for(const[st,list]of Object.entries(byState)){
+    const[lat,lon]=AU_STATE_CENTRES[st];
+    const major=list.filter(w=>w.severity==='major').length;
+    const col=major?'#ff5522':'#ffaa00';
+    const mk=L.circleMarker([lat,lon],{radius:9+Math.min(list.length,8),color:col,weight:2,
+      fillColor:col,fillOpacity:0.12,dashArray:'3 4'})
+      .bindPopup(`<b>${st} — ${list.length} BOM warning${list.length===1?'':'s'}</b>`
+        +(major?`<br><span style="color:${col}">${major} major</span>`:'')
+        +'<br><span style="opacity:.75">'+list.slice(0,6).map(w=>w.short||w.type).join('<br>')+'</span>'
+        +'<br><span style="opacity:.5;font-size:10px">Placed at state centroid — BOM issues by state, not coordinate</span>');
+    if(state.layers.bom!==false)mk.addTo(map);
+    state.bomMarkers.push(mk);
+  }
 }
 
 // --- DARK VESSEL EVENTS (Global Fishing Watch) ---
@@ -3636,12 +3771,13 @@ function togLayer(l){
   state.layers[l]=!state.layers[l];
   const on=state.layers[l];
   // Button ID + color class map
-  const bm={quakes:'fQuake',fires:'fFire',gdelt:'fGdelt',chokes:'fChoke',jamming:'fJam',notams:'fNotam',piracy:'fPiracy',volcanoes:'fVolcano',tsunami:'fTsunami',cyber:'fCyber',cables:'fCables',nukes:'fNuke',bases:'fBases',conflict:'fConflict',rf:'fRF',drones:'fDrone',refugees:'fRefugee'};
-  const cm={quakes:'on-r',fires:'on-o',gdelt:'on',chokes:'on-y',jamming:'on-p',notams:'on-y',piracy:'on-r',volcanoes:'on-o',tsunami:'on-r',cyber:'on-p',cables:'on',nukes:'on-o',bases:'on',conflict:'on-r',rf:'on-p',drones:'on-o',refugees:'on-y'};
+  const bm={bom:'fBOM',quakes:'fQuake',fires:'fFire',gdelt:'fGdelt',chokes:'fChoke',jamming:'fJam',notams:'fNotam',piracy:'fPiracy',volcanoes:'fVolcano',tsunami:'fTsunami',cyber:'fCyber',cables:'fCables',nukes:'fNuke',bases:'fBases',conflict:'fConflict',rf:'fRF',drones:'fDrone',refugees:'fRefugee'};
+  const cm={bom:'on-y',quakes:'on-r',fires:'on-o',gdelt:'on',chokes:'on-y',jamming:'on-p',notams:'on-y',piracy:'on-r',volcanoes:'on-o',tsunami:'on-r',cyber:'on-p',cables:'on',nukes:'on-o',bases:'on',conflict:'on-r',rf:'on-p',drones:'on-o',refugees:'on-y'};
   // Sync button visual to state (not toggle — prevents desync)
   if(bm[l]){const btn=document.getElementById(bm[l]);if(btn){if(on)btn.classList.add(cm[l]);else btn.classList.remove(cm[l]);}}
   // Handle overlay marker layers
   const overlayMap={
+    bom:{markers:'bomMarkers',render:on?renderBOMMarkers:null},
     notams:{markers:'notamMarkers',render:on?fetchNOTAMs:null},
     piracy:{markers:'piracyMarkers',render:on?renderPiracy:null},
     volcanoes:{markers:'volcanoMarkers',render:on?fetchVolcanoes:null},
@@ -3742,7 +3878,7 @@ async function fetchAll(){
   // WAVE 3: Intel overlays (static + slow feeds)
   try{
     await Promise.allSettled([fetchNOTAMs(),fetchWildfires(),fetchVolcanoes(),fetchTsunami(),fetchNuclearTests(),fetchRefugees(),
-      fetchGDELTGeo(),fetchDarkVessels(),fetchReliefWeb(),fetchACLED(),fetchGDACS(),fetchBOM()]);
+      fetchGDELTGeo(),fetchDarkVessels(),fetchReliefWeb(),fetchACLED(),fetchGDACS(),fetchBOM(),fetchRadar()]);
   }catch(e){}
   renderAll();
   try{cleanStaleAssets();}catch(e){}
@@ -4317,17 +4453,37 @@ async function openCountryBrief(isoOrName,lat,lon){
 }
 function closeCountryBrief(){document.getElementById('countryOverlay').classList.remove('show');}
 
+// Sections that contain something are rendered in full and come first; the
+// rest collapse into one line at the bottom. On a phone the old order meant
+// scrolling past eight "Nothing active" headings to reach the one section with
+// data in it, which is the same overload problem in miniature.
+let _briefParts=[];
 function briefSection(title,items,render,emptyNote){
-  if(!items.length)return `<div class="cb-sec"><div class="cb-sec-h">${title}<span class="cb-count">0</span></div>`
-    +`<div class="cb-empty">${emptyNote||'Nothing active'}</div></div>`;
-  return `<div class="cb-sec"><div class="cb-sec-h">${title}<span class="cb-count">${items.length}</span></div>`
+  if(!items.length){_briefParts.push({empty:true,title,note:emptyNote});return'';}
+  _briefParts.push({empty:false,html:
+    `<div class="cb-sec"><div class="cb-sec-h">${title}<span class="cb-count">${items.length}</span></div>`
     +items.slice(0,12).map(render).join('')
-    +(items.length>12?`<div class="cb-more">+${items.length-12} more</div>`:'')+'</div>';
+    +(items.length>12?`<div class="cb-more">+${items.length-12} more</div>`:'')+'</div>'});
+  return'';
+}
+function briefFlush(){
+  const live=_briefParts.filter(p=>!p.empty).map(p=>p.html).join('');
+  const empty=_briefParts.filter(p=>p.empty);
+  _briefParts=[];
+  if(!empty.length)return live;
+  const names=empty.map(e=>e.title).join(' · ');
+  const notes=empty.filter(e=>e.note).map(e=>`${e.title}: ${e.note}`).join('<br>');
+  return live+`<div class="cb-sec cb-quiet"><div class="cb-sec-h">Nothing active`
+    +`<span class="cb-count">${empty.length}</span></div>`
+    +`<div class="cb-empty">${names}</div>`
+    +(notes?`<div class="cb-empty" style="margin-top:5px;opacity:.7">${notes}</div>`:'')
+    +`</div>`;
 }
 
 function renderCountryBrief(){
   const c=_briefCountry;
   if(!c)return;
+  _briefParts=[];
   const b=buildCountryBrief(c);
   const esc=s=>String(s==null?'':s).replace(/[<>&]/g,m=>({'<':'&lt;','>':'&gt;','&':'&amp;'}[m]));
   const totalContacts=b.contacts.military.length+b.contacts.heli.length+b.contacts.vessel.length+b.contacts.gov.length;
@@ -4393,6 +4549,7 @@ function renderCountryBrief(){
     +briefSection('In the news',b.news,n=>
        `<div class="cb-row" onclick="window.open('${esc(n.url)}','_blank','noopener')">
           <span class="cb-a" style="flex:3">${esc((n.title||'').slice(0,72))}</span><span class="cb-c">${esc(n.source||'')}</span></div>`)
+    +briefFlush()
     +`<div class="cb-foot">Borders: Natural Earth 110m. Aircraft and vessel coverage depends on
         community ADS-B and AIS receiver density, which is thin over much of the world —
         an empty section means no reception, not necessarily no activity.</div>`;
@@ -4740,6 +4897,7 @@ async function boot(){
   updateNotifyBtn();
   restorePanels();
   renderWatchlist();
+  if(loadWatch().length){loadCountries().then(renderWatchlist).catch(()=>{});}
 }
 boot();
 
