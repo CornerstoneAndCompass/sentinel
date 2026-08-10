@@ -1,0 +1,4 @@
+# Local `wrangler dev` state — miniflare caches, DO storage, config cache.
+.wrangler/
+node_modules/
+.dev.vars

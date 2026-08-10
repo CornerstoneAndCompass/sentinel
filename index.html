@@ -201,6 +201,7 @@ html,body{width:100%;height:100%;overflow:hidden;background:#050a12;font-family:
 .fd.ok{background:var(--g);box-shadow:0 0 6px var(--g)}
 .fd.err{background:var(--r);box-shadow:0 0 6px var(--r)}
 .fd.wait{background:var(--y);box-shadow:0 0 6px var(--y)}
+.fd.idle{background:var(--td);box-shadow:none;animation:none}
 
 /* SEARCH */
 .search-wrap{position:fixed;top:46px;left:50%;transform:translateX(-50%);z-index:5000}
@@ -812,34 +813,64 @@ const map = L.map('map',{center:[25,20],zoom:3,zoomControl:false,attributionCont
 const _baseTile=L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',{maxZoom:19,subdomains:'abcd'}).addTo(map);
 
 // --- STATE ---
-const CORS_PROXIES=[
+// --- FEED PROXY ---
+// Most OSINT upstreams send no Access-Control-Allow-Origin header, so the
+// browser cannot read them directly no matter what we do client-side.
+// Deploy worker/ (see worker/README.md) and paste its URL into the PROXY field
+// in SYSTEM STATUS. Feeds that can be fetched direct never touch the proxy.
+let PROXY_BASE=(localStorage.getItem('sentinel_proxy')||'').replace(/\/+$/,'');
+function hasProxy(){return !!PROXY_BASE;}
+function setProxyBase(u){
+  PROXY_BASE=(u||'').trim().replace(/\/+$/,'');
+  if(PROXY_BASE)localStorage.setItem('sentinel_proxy',PROXY_BASE);
+  else localStorage.removeItem('sentinel_proxy');
+  state.proxyHealth=null;
+  checkProxyHealth().then(()=>{renderStatusPanel();fetchAll();});
+}
+// Worker route builder — returns null when no proxy is configured, so callers
+// can mark their feed NO-PROXY instead of hammering a dead endpoint.
+function workerUrl(path){return PROXY_BASE?PROXY_BASE+path:null;}
+// Last-resort public proxies, used only when no Worker is configured. These are
+// unreliable by nature; the Worker is the supported path.
+const FALLBACK_PROXIES=[
   u=>'https://api.allorigins.win/raw?url='+encodeURIComponent(u),
-  u=>'https://corsproxy.io/?'+encodeURIComponent(u),
   u=>'https://api.codetabs.com/v1/proxy?quest='+encodeURIComponent(u)
 ];
 let corsIdx=0;
-function corsUrl(u){return CORS_PROXIES[corsIdx%CORS_PROXIES.length](u);}
-function rotateCors(){corsIdx++;console.log('CORS proxy rotated to index',corsIdx%CORS_PROXIES.length);}
+function corsUrl(u){
+  if(PROXY_BASE)return PROXY_BASE+'/p?url='+encodeURIComponent(u);
+  return FALLBACK_PROXIES[corsIdx%FALLBACK_PROXIES.length](u);
+}
+function rotateCors(){corsIdx++;}
+async function checkProxyHealth(){
+  if(!PROXY_BASE){state.proxyHealth={ok:false,reason:'not configured'};return state.proxyHealth;}
+  try{
+    const d=await fetchJ(PROXY_BASE+'/health',6000);
+    state.proxyHealth={ok:true,configured:d.configured||{}};
+  }catch(e){state.proxyHealth={ok:false,reason:e.message};}
+  return state.proxyHealth;
+}
 const state={
   assets:new Map(),markers:new Map(),routes:new Map(),
   quakeMarkers:[],gdeltMarkers:[],fireMarkers:[],chokeMarkers:[],
   filters:{aircraft:true,heli:true,ship:true,satellite:true},
   categories:{military:true,coastguard:true,police:true,government:true,sar:true,tanker:false,cargo:false,passenger:false,fishing:false},
-  layers:{quakes:true,fires:true,gdelt:true,chokes:true,notams:true,piracy:true,volcanoes:true,tsunami:true,cyber:true,cables:false,nukes:false,bases:false,conflict:true,rf:true,drones:true,refugees:true},
+  layers:{quakes:true,fires:true,gdelt:true,chokes:true,notams:true,piracy:true,volcanoes:true,tsunami:true,cyber:true,cables:false,nukes:false,bases:false,conflict:true,rf:true,drones:true,refugees:true,dark:true},
   countryFilter:'',searchTerm:'',selectedId:null,
   alerts:[],news:[],gdeltEvents:[],earthquakes:[],fires:[],notamMarkers:[],cableLines:[],nukeMarkers:[],piracyMarkers:[],wildfireMarkers:[],cyberMarkers:[],refugeeMarkers:[],milbaseMarkers:[],rfMarkers:[],droneMarkers:[],ntestMarkers:[],conflictMarkers:[],volcanoMarkers:[],tsunamiMarkers:[],
   threats:{},defcon:4,threatScore:0,
+  proxyHealth:null,darkEvents:[],darkMarkers:[],reliefEvents:[],acledEvents:[],
   sources:{},refreshInterval:30,countdown:30,lastFetch:null
 };
 
 // --- DATA FEED REGISTRY (drives the bottom bar + system status panel) ---
 const FEEDS=[
-  {id:'f1',code:'ADSB',name:'Military Aircraft',desc:'Live military aircraft worldwide (adsb.lol)'},
+  {id:'f1',code:'ADSB',name:'Military Aircraft',desc:'Live military aircraft worldwide (airplanes.live)'},
   {id:'f2',code:'RGNL',name:'Regional Aircraft',desc:'Military & government aircraft near your map view'},
   {id:'f3',code:'OSKY',name:'OpenSky Network',desc:'Crowd-sourced aircraft positions in view'},
-  {id:'f4',code:'A.ONE',name:'Military Aircraft #2',desc:'Backup military aircraft feed (adsb.one)'},
+  {id:'f4',code:'A.FI',name:'Military Aircraft #2',desc:'Backup military aircraft feed (adsb.fi)'},
   {id:'f5',code:'LADD',name:'Private Aircraft',desc:'Aircraft on the FAA privacy (LADD) list'},
-  {id:'f6',code:'AIS',name:'Baltic Vessels',desc:'Ship positions in the Baltic Sea (Digitraffic AIS)'},
+  {id:'f6',code:'AIS',name:'Baltic Vessels',desc:'Ship positions in Finnish & Baltic waters (Digitraffic AIS)'},
   {id:'f7',code:'SHIPS',name:'Naval Vessels',desc:'Known military & government vessel positions'},
   {id:'f8',code:'QUAKE',name:'Earthquakes',desc:'Earthquakes from the last 24 hours (USGS)'},
   {id:'f9',code:'GDELT',name:'News Events',desc:'Geolocated world events from global media (GDELT)'},
@@ -848,7 +879,7 @@ const FEEDS=[
   {id:'f12',code:'CHOKE',name:'Chokepoints',desc:'Strategic strait & canal monitoring'},
   {id:'f14',code:'SOLAR',name:'Space Weather',desc:'Geomagnetic & solar activity (NOAA)'},
   {id:'f15',code:'WX',name:'Severe Weather',desc:'Extreme weather alerts (US National Weather Service)'},
-  {id:'f16',code:'VF.GL',name:'Global Vessels',desc:'Worldwide commercial ship positions'},
+  {id:'f16',code:'AIS.GL',name:'Global Vessels',desc:'Worldwide live ship positions (aisstream.io)'},
   {id:'f17',code:'JAM',name:'GPS Jamming',desc:'Known GPS interference zones'},
   {id:'f18',code:'SNCT',name:'Sanctions Check',desc:'Vessels cross-checked against sanctions lists'},
   {id:'f19',code:'SATS',name:'Satellites',desc:'Live satellite positions from orbital data'},
@@ -865,33 +896,60 @@ const FEEDS=[
   {id:'f30',code:'NTEST',name:'Nuclear Tests',desc:'Seismic screening for possible nuclear tests'},
   {id:'f31',code:'ACLED',name:'Conflicts',desc:'Armed conflict & border incidents'},
   {id:'f32',code:'VOLC',name:'Volcanoes',desc:'Volcanic activity monitoring'},
-  {id:'f33',code:'TSUN',name:'Tsunami',desc:'Tsunami warnings (NOAA)'}
+  {id:'f33',code:'TSUN',name:'Tsunami',desc:'Tsunami warnings (NOAA)'},
+  {id:'f34',code:'DARK',name:'Dark Vessels',desc:'AIS gaps, encounters & loitering (Global Fishing Watch)'},
+  {id:'f35',code:'GEO',name:'News Map',desc:'Geolocated news mentions, refreshed every 15 min (GDELT GEO)'},
+  {id:'f36',code:'RELIEF',name:'Humanitarian',desc:'Disaster declarations & humanitarian alerts (ReliefWeb)'}
 ];
 document.getElementById('feedsBar').innerHTML=
   '<span class="feeds-chip"><span class="fd ok" style="animation:none"></span><span id="feedSummary">FEEDS --/--</span></span>'+
   FEEDS.map(f=>`<div class="feed" title="${f.name} — ${f.desc}"><div class="fd wait" id="${f.id}"></div>${f.code}</div>`).join('');
 
-function feedState(f){const e=document.getElementById(f.id);return e?(e.classList.contains('ok')?'ok':e.classList.contains('err')?'err':'wait'):'wait';}
+function feedState(f){const e=document.getElementById(f.id);if(!e)return'wait';return e.classList.contains('ok')?'ok':e.classList.contains('err')?'err':e.classList.contains('idle')?'idle':'wait';}
+function feedNote(f){const e=document.getElementById(f.id);return e?(e.dataset.note||''):'';}
 function updateFeedSummary(){
   const ok=FEEDS.filter(f=>feedState(f)==='ok').length;
+  const live=FEEDS.filter(f=>feedState(f)!=='idle').length;
   const el=document.getElementById('feedSummary');
-  if(el)el.textContent='FEEDS '+ok+'/'+FEEDS.length;
+  if(el)el.textContent='FEEDS '+ok+'/'+live;
   if(document.getElementById('statusOverlay').classList.contains('show'))renderStatusPanel();
 }
 function renderStatusPanel(){
-  let ok=0,err=0,wait=0;
+  let ok=0,err=0,wait=0,idle=0;
   const rows=FEEDS.map(f=>{
     const st=feedState(f);
-    if(st==='ok')ok++;else if(st==='err')err++;else wait++;
-    const lbl=st==='ok'?'<span class="status-state" style="color:var(--g)">ONLINE</span>':st==='err'?'<span class="status-state" style="color:var(--r)">OFFLINE</span>':'<span class="status-state" style="color:var(--y)">WAITING</span>';
+    if(st==='ok')ok++;else if(st==='err')err++;else if(st==='idle')idle++;else wait++;
+    const lbl=st==='ok'?'<span class="status-state" style="color:var(--g)">ONLINE</span>'
+      :st==='err'?'<span class="status-state" style="color:var(--r)">OFFLINE</span>'
+      :st==='idle'?`<span class="status-state" style="color:var(--td)">${(feedNote(f)||'OFF').toUpperCase()}</span>`
+      :'<span class="status-state" style="color:var(--y)">WAITING</span>';
     return `<div class="status-row"><div class="fd ${st}"></div><span class="status-name">${f.name}</span><span class="status-desc">${f.desc}</span>${lbl}</div>`;
   }).join('');
-  document.getElementById('statusList').innerHTML=rows;
+  document.getElementById('statusList').innerHTML=renderProxyRow()+rows;
   document.getElementById('statusSummary').innerHTML=
     `<div class="status-sum-item"><div class="fd ok" style="animation:none"></div>${ok} ONLINE</div>`+
     `<div class="status-sum-item"><div class="fd err" style="animation:none"></div>${err} OFFLINE</div>`+
     `<div class="status-sum-item"><div class="fd wait" style="animation:none"></div>${wait} WAITING</div>`+
+    (idle?`<div class="status-sum-item"><div class="fd idle"></div>${idle} NEEDS SETUP</div>`:'')+
     `<div class="status-sum-item" style="margin-left:auto;color:var(--td)">OFFLINE FEEDS RETRY AUTOMATICALLY</div>`;
+}
+// The proxy is the single point of failure for ~half the feeds, so it gets its
+// own row at the top of the status panel rather than being invisible config.
+function renderProxyRow(){
+  const h=state.proxyHealth;
+  const dot=!PROXY_BASE?'idle':h&&h.ok?'ok':h?'err':'wait';
+  const txt=!PROXY_BASE?'NOT SET — many feeds unavailable'
+    :h&&h.ok?('CONNECTED'+(h.configured?' — keys: '+(Object.entries(h.configured).filter(([,v])=>v).map(([k])=>k.toUpperCase()).join(', ')||'none'):''))
+    :h?('UNREACHABLE — '+(h.reason||'error')):'CHECKING…';
+  return `<div class="status-row" style="border-bottom:1px solid var(--brd);padding-bottom:10px;margin-bottom:6px">
+    <div class="fd ${dot}"></div>
+    <span class="status-name">Feed Proxy</span>
+    <span class="status-desc">${txt}</span>
+    <input id="proxyInput" value="${(PROXY_BASE||'').replace(/"/g,'&quot;')}" placeholder="https://sentinel-feeds.<you>.workers.dev"
+      style="flex:1;min-width:180px;background:var(--bg2);border:1px solid var(--brd);color:var(--tp);font-family:inherit;font-size:10px;padding:4px 6px">
+    <button onclick="setProxyBase(document.getElementById('proxyInput').value)"
+      style="background:var(--c);border:0;color:#000;font-family:inherit;font-size:10px;padding:4px 10px;cursor:pointer;letter-spacing:1px">SAVE</button>
+  </div>`;
 }
 function toggleStatusPanel(){
   const o=document.getElementById('statusOverlay');
@@ -905,8 +963,11 @@ function closeStatusPanel(){
 }
 
 // --- UTILS ---
-function feedDot(id,ok){const e=document.getElementById(id);if(e)e.className='fd '+(ok?'ok':'err');updateFeedSummary();}
+function feedDot(id,ok){const e=document.getElementById(id);if(e){e.className='fd '+(ok?'ok':'err');delete e.dataset.note;}updateFeedSummary();}
 function feedWait(id){const e=document.getElementById(id);if(e)e.className='fd wait';updateFeedSummary();}
+// A feed that cannot run because it needs a proxy or an API key is not a
+// failure — showing it red just trains you to ignore red.
+function feedIdle(id,note){const e=document.getElementById(id);if(e){e.className='fd idle';e.dataset.note=note||'not configured';}updateFeedSummary();}
 function fetchJ(url,t=8000){
   const c=new AbortController();
   const tm=setTimeout(()=>c.abort(),t);
@@ -1223,11 +1284,11 @@ async function liveTrackAsset(){
   if(!state.selectedId)return;const a=state.assets.get(state.selectedId);if(!a||!a.hex)return;
   try{
     if(a.type==='aircraft'||a.type==='heli'){
-      const data=await fetchJ(`https://api.adsb.lol/v2/hex/${a.hex}`,6000);
+      const data=await fetchJ(`${AL_BASE}/hex/${a.hex}`,6000);
       const ac=(data.ac||[])[0];
       if(ac&&ac.lat&&ac.lon){const old=state.assets.get(state.selectedId);const trail=old?.trail?[...old.trail.slice(-30),[ac.lat,ac.lon]]:[[ac.lat,ac.lon]];state.assets.set(state.selectedId,{...old,lat:ac.lat,lon:ac.lon,alt:ac.alt_baro||ac.alt_geom||old.alt,gs:ac.gs??old.gs,track:ac.track??old.track,vrate:ac.baro_rate??old.vrate,squawk:ac.squawk??old.squawk,t:ac.t||old.t,trail,_lastSeen:Date.now()});const mk=state.markers.get(state.selectedId);if(mk)mk.setLatLng([ac.lat,ac.lon]);const rt=state.routes.get(state.selectedId);if(rt)rt.setLatLngs(trail);}
     }else if(a.type==='ship'){
-      try{const data=await fetchJ(corsUrl(`https://meri.digitraffic.fi/api/ais/v1/locations?mmsi=${a.hex}`),6000);const f=(data.features||[])[0];if(f?.geometry?.coordinates){const[lon,lat]=f.geometry.coordinates;const old=state.assets.get(state.selectedId);const trail=old?.trail?[...old.trail.slice(-30),[lat,lon]]:[[lat,lon]];state.assets.set(state.selectedId,{...old,lat,lon,gs:f.properties?.sog??old.gs,track:f.properties?.cog??old.track,trail,_lastSeen:Date.now()});const mk=state.markers.get(state.selectedId);if(mk)mk.setLatLng([lat,lon]);}}catch(e){}
+      try{const data=await fetchJ(`https://meri.digitraffic.fi/api/ais/v1/locations?mmsi=${a.hex}`,6000);const f=(data.features||[])[0];if(f?.geometry?.coordinates){const[lon,lat]=f.geometry.coordinates;const old=state.assets.get(state.selectedId);const trail=old?.trail?[...old.trail.slice(-30),[lat,lon]]:[[lat,lon]];state.assets.set(state.selectedId,{...old,lat,lon,gs:f.properties?.sog??old.gs,track:f.properties?.cog??old.track,trail,_lastSeen:Date.now()});const mk=state.markers.get(state.selectedId);if(mk)mk.setLatLng([lat,lon]);}}catch(e){}
     }
   }catch(e){}
   updateDetailPanel();
@@ -1298,11 +1359,54 @@ function processAC(list,src){
   return n;
 }
 
-async function fetchADSBMil(){feedWait('f1');try{const d=await fetchR('https://api.adsb.lol/v2/mil');const n=processAC(d.ac||[],'ADSB.LOL');state.sources.adsb=n;feedDot('f1',true);}catch(e){feedDot('f1',false);}}
-async function fetchADSBRegion(){feedWait('f2');try{const b=map.getBounds();const u=`https://api.adsb.lol/v2/lat/${b.getCenter().lat.toFixed(3)}/lon/${b.getCenter().lng.toFixed(3)}/dist/250`;const d=await fetchR(u);const mil=(d.ac||[]).filter(a=>{const cs=(a.flight||'').trim();return a.dbFlags===1||MIL_P.some(p=>p.test(cs))||CG_P.some(p=>p.test(cs))||POL_P.some(p=>p.test(cs))||GOV_P.some(p=>p.test(cs))||SAR_P.some(p=>p.test(cs));});const n=processAC(mil,'REGIONAL');state.sources.region=n;feedDot('f2',true);}catch(e){feedDot('f2',false);}}
-async function fetchOpenSky(){feedWait('f3');try{const b=map.getBounds();const u=`https://opensky-network.org/api/states/all?lamin=${b.getSouth().toFixed(1)}&lomin=${b.getWest().toFixed(1)}&lamax=${b.getNorth().toFixed(1)}&lomax=${b.getEast().toFixed(1)}`;const d=await fetchR(u,0,10000);const sts=d.states||[];const acl=sts.map(s=>({icao24:s[0],callsign:s[1],lat:s[6],lon:s[5],baro_altitude:s[7]?Math.round(s[7]*3.281):null,velocity:s[9]?Math.round(s[9]*1.944):null,true_track:s[10],vertical_rate:s[11]?Math.round(s[11]*196.85):null,squawk:s[14]})).filter(a=>a.lat&&a.lon);const mil=acl.filter(a=>{const cs=(a.callsign||'').trim();return MIL_P.some(p=>p.test(cs))||CG_P.some(p=>p.test(cs))||POL_P.some(p=>p.test(cs))||GOV_P.some(p=>p.test(cs))||SAR_P.some(p=>p.test(cs));});const n=processAC(mil,'OPENSKY');state.sources.opensky=n;feedDot('f3',true);}catch(e){feedDot('f3',false);}}
-async function fetchADSBOne(){feedWait('f4');try{const d=await fetchR('https://api.adsb.one/v2/mil');const n=processAC(d.ac||[],'ADSB.ONE');state.sources.adsbOne=n;feedDot('f4',true);}catch(e){feedDot('f4',false);}}
-async function fetchLADD(){feedWait('f5');try{const d=await fetchR('https://api.adsb.lol/v2/ladd');const n=processAC(d.ac||[],'LADD');state.sources.ladd=n;feedDot('f5',true);}catch(e){feedDot('f5',false);}}
+// airplanes.live is the only ADS-B aggregator that sends Access-Control-Allow-Origin:*,
+// so it is the primary and works with no proxy at all. adsb.lol and adsb.fi are
+// identical in shape but CORS-blocked, so they ride the Worker as backups.
+// (adsb.one was dropped in Aug 2026 — it now 403s every request.)
+const AL_BASE='https://api.airplanes.live/v2';
+async function fetchADSBMil(){
+  feedWait('f1');
+  try{
+    const d=await fetchR(AL_BASE+'/mil',1,10000);
+    const n=processAC(d.ac||[],'AIRPLANES.LIVE');state.sources.adsb=n;feedDot('f1',n>0);
+  }catch(e){
+    // Fall back to adsb.lol through the proxy if airplanes.live is having a day.
+    if(!hasProxy()){feedDot('f1',false);return;}
+    try{const d=await fetchR(corsUrl('https://api.adsb.lol/v2/mil'),1,12000);const n=processAC(d.ac||[],'ADSB.LOL');state.sources.adsb=n;feedDot('f1',n>0);}
+    catch(e2){feedDot('f1',false);}
+  }
+}
+async function fetchADSBRegion(){
+  feedWait('f2');
+  try{
+    const c=map.getBounds().getCenter();
+    const d=await fetchR(`${AL_BASE}/point/${c.lat.toFixed(3)}/${c.lng.toFixed(3)}/250`,1,12000);
+    const mil=(d.ac||[]).filter(a=>{const cs=(a.flight||'').trim();return a.dbFlags===1||MIL_P.some(p=>p.test(cs))||CG_P.some(p=>p.test(cs))||POL_P.some(p=>p.test(cs))||GOV_P.some(p=>p.test(cs))||SAR_P.some(p=>p.test(cs));});
+    const n=processAC(mil,'REGIONAL');state.sources.region=n;feedDot('f2',true);
+  }catch(e){feedDot('f2',false);}
+}
+// OpenSky pins Access-Control-Allow-Origin to its own domain, so it can only
+// ever be read server-side. The Worker also holds the OAuth2 client credentials
+// that replaced basic auth in March 2026.
+async function fetchOpenSky(){
+  const u=workerUrl('/osky');
+  if(!u){feedIdle('f3','needs proxy');state.sources.opensky=0;return;}
+  feedWait('f3');
+  try{
+    const b=map.getBounds();
+    const d=await fetchR(`${u}?lamin=${b.getSouth().toFixed(1)}&lomin=${b.getWest().toFixed(1)}&lamax=${b.getNorth().toFixed(1)}&lomax=${b.getEast().toFixed(1)}`,0,12000);
+    const acl=(d.states||[]).map(s=>({icao24:s[0],callsign:s[1],lat:s[6],lon:s[5],baro_altitude:s[7]?Math.round(s[7]*3.281):null,velocity:s[9]?Math.round(s[9]*1.944):null,true_track:s[10],vertical_rate:s[11]?Math.round(s[11]*196.85):null,squawk:s[14]})).filter(a=>a.lat&&a.lon);
+    const mil=acl.filter(a=>{const cs=(a.callsign||'').trim();return MIL_P.some(p=>p.test(cs))||CG_P.some(p=>p.test(cs))||POL_P.some(p=>p.test(cs))||GOV_P.some(p=>p.test(cs))||SAR_P.some(p=>p.test(cs));});
+    const n=processAC(mil,'OPENSKY');state.sources.opensky=n;feedDot('f3',true);
+  }catch(e){feedDot('f3',false);}
+}
+async function fetchADSBFi(){
+  if(!hasProxy()){feedIdle('f4','needs proxy');state.sources.adsbFi=0;return;}
+  feedWait('f4');
+  try{const d=await fetchR(corsUrl('https://opendata.adsb.fi/api/v2/mil'),1,12000);const n=processAC(d.ac||[],'ADSB.FI');state.sources.adsbFi=n;feedDot('f4',n>0);}
+  catch(e){feedDot('f4',false);}
+}
+async function fetchLADD(){feedWait('f5');try{const d=await fetchR(AL_BASE+'/ladd',1,12000);const n=processAC(d.ac||[],'LADD');state.sources.ladd=n;feedDot('f5',n>0);}catch(e){feedDot('f5',false);}}
 // AIS vessel type classification: 35=military, 55=law enforcement, 51=SAR
 // Only show government/military/CG vessels — no civilian merchant ships
 const AIS_MIL_TYPES=new Set([35,51,55]);
@@ -1311,7 +1415,9 @@ const AIS_MIL_NAMES=[/NAVY/i,/COAST\s?GUARD/i,/PATROL/i,/RESCUE/i,/POLICE/i,/BOR
 async function fetchAIS(){
   feedWait('f6');
   try{
-    const d=await fetchR(corsUrl('https://meri.digitraffic.fi/api/ais/v1/locations'),0,10000);
+    // Digitraffic sends Access-Control-Allow-Origin:* — no proxy needed, and
+    // routing it through one is what killed this feed when the proxies died.
+    const d=await fetchR('https://meri.digitraffic.fi/api/ais/v1/locations',1,12000);
     const f=d.features||[];let n=0;
     const maxVessels=5000;
     for(const ft of f){
@@ -1345,120 +1451,52 @@ async function fetchAIS(){
   }catch(e){console.warn('AIS fetch error:',e);feedDot('f6',false);}
 }
 
-// --- VESSELFINDER GLOBAL SHIP DATA (Binary mp2 endpoint) ---
-const VF_REGIONS=[
-  {name:'E.MED',latmin:30,latmax:41,lonmin:20,lonmax:36},
-  {name:'W.MED',latmin:33,latmax:45,lonmin:-6,lonmax:20},
-  {name:'S.CHINA',latmin:0,latmax:25,lonmin:100,lonmax:125},
-  {name:'MALACCA',latmin:-5,latmax:10,lonmin:95,lonmax:110},
-  {name:'ARABIAN',latmin:10,latmax:30,lonmin:40,lonmax:70},
-  {name:'RED.SEA',latmin:10,latmax:30,lonmin:32,lonmax:45},
-  {name:'BAY.BGL',latmin:5,latmax:23,lonmin:78,lonmax:100},
-  {name:'E.CHINA',latmin:20,latmax:40,lonmin:115,lonmax:135},
-  {name:'BLACK',latmin:40,latmax:47,lonmin:27,lonmax:42},
-  {name:'HORMUZ',latmin:23,latmax:28,lonmin:50,lonmax:60},
-  {name:'BERING',latmin:50,latmax:66,lonmin:160,lonmax:190},
-  {name:'PERSIAN',latmin:24,latmax:32,lonmin:47,lonmax:57},
-  {name:'AUS.E',latmin:-40,latmax:-10,lonmin:140,lonmax:160},
-  {name:'AUS.W',latmin:-35,latmax:-10,lonmin:110,lonmax:140},
-];
-let vfRegionIdx=0;
-function vfClassify(typeCode,name){
-  // VF color codes: 1=passenger, 2=cargo, 3=tanker, 4=high-speed, 5=tug, 6=military/other, 7=fishing, 8=sailing/pleasure
-  // VF type byte (S) corresponds to AIS ship type/10 roughly
+// --- GLOBAL AIS (aisstream.io, bridged by the Worker) ---
+// This replaces the old VesselFinder integration, which hit an undocumented
+// internal endpoint (/api/pub/mp2) with a hand-rolled binary parser. That was
+// against their terms and has returned 403 since Aug 2026. aisstream.io is a
+// supported free API, but it is a firehose (~300 msg/s) and its key must not
+// ship in the page — so the Worker holds the socket and we read snapshots.
+function aisClassify(typeCode,name){
   const nm=(name||'').toUpperCase();
-  // Military patterns
   if(nm.match(/NAVY|WARSHIP|FRIGATE|CORVETTE|DESTROYER|SUBMARINE|PATROL|COAST\s?GUARD|RESCUE|POLICE|BORDER|CUSTOMS|USCG|HMCG|MILITARY|MINESWEEP/))
-    return{cat:'military',t:'NAVAL',type:'ship'};
+    return{cat:'military',t:'NAVAL'};
   if(nm.match(/^HMS\s|^USS\s|^FGS\s|^FS\s|^HNLMS\s|^KNM\s|^HDMS\s|^HSwMS\s|^ORP\s|^TCG\s|^ITS\s|^ESPS\s|^KV\s|^INS\s|^JS\s/))
-    return{cat:'military',t:'NAVAL',type:'ship'};
-  // AIS type ranges (typeCode is raw signed byte from VF binary)
-  const tc=typeCode&0xFF;
-  if(tc>=80&&tc<=89)return{cat:'tanker',t:'TANKER',type:'ship'};
-  if(tc>=70&&tc<=79)return{cat:'cargo',t:'CARGO',type:'ship'};
-  if(tc>=60&&tc<=69)return{cat:'passenger',t:'PASSENGER',type:'ship'};
-  if(tc>=40&&tc<=49)return{cat:'highspeed',t:'HIGH-SPEED',type:'ship'};
-  if(tc===30)return{cat:'fishing',t:'FISHING',type:'ship'};
-  if(tc===35)return{cat:'military',t:'MILITARY',type:'ship'};
-  if(tc===51)return{cat:'sar',t:'SAR',type:'ship'};
-  if(tc===55)return{cat:'police',t:'LAW ENFORCE',type:'ship'};
-  if(tc>=36&&tc<=37)return{cat:'sailing',t:'SAILING',type:'ship'};
-  if(tc>=20&&tc<=29)return{cat:'tug',t:'TUG/PILOT',type:'ship'};
-  // Fall back to VF color code
-  // color 6=military/govt
-  return{cat:'cargo',t:'VESSEL',type:'ship'};
+    return{cat:'military',t:'NAVAL'};
+  const tc=Number(typeCode)||0;
+  if(tc>=80&&tc<=89)return{cat:'tanker',t:'TANKER'};
+  if(tc>=70&&tc<=79)return{cat:'cargo',t:'CARGO'};
+  if(tc>=60&&tc<=69)return{cat:'passenger',t:'PASSENGER'};
+  if(tc>=40&&tc<=49)return{cat:'highspeed',t:'HIGH-SPEED'};
+  if(tc===30)return{cat:'fishing',t:'FISHING'};
+  if(tc===35)return{cat:'military',t:'MILITARY'};
+  if(tc===51)return{cat:'sar',t:'SAR'};
+  if(tc===55)return{cat:'police',t:'LAW ENFORCE'};
+  if(tc>=36&&tc<=37)return{cat:'sailing',t:'SAILING'};
+  if(tc>=20&&tc<=29)return{cat:'tug',t:'TUG/PILOT'};
+  return{cat:'cargo',t:'VESSEL'};
 }
-async function fetchVFGlobal(){
+async function fetchGlobalAIS(){
+  const u=workerUrl('/ais/snapshot');
+  if(!u){feedIdle('f16','needs proxy');state.sources.globalAis=0;return;}
   feedWait('f16');
   try{
-    let totalN=0;
-    // Fetch 3 regions per cycle, rotating through all
-    const batchSize=3;
-    const promises=[];
-    for(let b=0;b<batchSize;b++){
-      const reg=VF_REGIONS[vfRegionIdx%VF_REGIONS.length];
-      vfRegionIdx++;
-      const bbox=[
-        Math.round(reg.lonmin*600000),Math.round(reg.latmin*600000),
-        Math.round(reg.lonmax*600000),Math.round(reg.latmax*600000)
-      ].join(',');
-      const url=`https://www.vesselfinder.com/api/pub/mp2?bbox=${bbox}&zoom=6&mmsi=0&ref=${Math.floor(Math.random()*99999)}&mcbe=1`;
-      promises.push(fetchVFRegion(url,reg.name));
-    }
-    const results=await Promise.allSettled(promises);
-    for(const r of results){if(r.status==='fulfilled')totalN+=r.value;}
-    state.sources.vfGlobal=totalN;
-    feedDot('f16',totalN>0);
-  }catch(e){console.warn('VF Global error:',e);feedDot('f16',false);}
-}
-async function fetchVFRegion(url,regName){
-  try{
-    const resp=await fetch(corsUrl(url),{signal:AbortSignal.timeout(10000)});
-    if(!resp.ok)throw new Error('VF '+resp.status);
-    const buf=await resp.arrayBuffer();
-    const dv=new DataView(buf);
-    if(buf.byteLength<16)return 0;
-    // Parse header
-    const Y=dv.getUint16(1);
-    let I=4+Y;
-    const lt=(I>=4)?dv.getInt32(I-4):0;
+    const b=map.getBounds();
+    const bbox=[b.getWest(),b.getSouth(),b.getEast(),b.getNorth()].map(v=>v.toFixed(2)).join(',');
+    const d=await fetchR(`${u}?bbox=${bbox}&limit=6000`,0,15000);
+    if(!d.configured){feedIdle('f16','needs aisstream key');state.sources.globalAis=0;return;}
     let n=0;
-    while(I<buf.byteLength){
-      if(I+12>buf.byteLength)break;
-      const w=dv.getInt16(I);I+=2;
-      const ht=(w&0xF0)>>4;
-      const mmsi=dv.getInt32(I);I+=4;
-      const lat=dv.getInt32(I)/600000;I+=4;
-      const lon=dv.getInt32(I)/600000;I+=4;
-      const isSelected=(mmsi===lt);
-      let cog=0,sog=0;
-      if(isSelected){
-        if(I+6>buf.byteLength)break;
-        cog=dv.getInt16(I)/10;I+=2;
-        sog=dv.getInt16(I)/10;I+=2;
-        I+=2;
-      }
-      if(I+1>buf.byteLength)break;
-      const S=dv.getInt8(I);I+=1;
-      if(I+1>buf.byteLength)break;
-      const nameLen=dv.getUint8(I);I+=1;
-      if(I+nameLen>buf.byteLength)break;
-      let name='';
-      for(let k=0;k<nameLen;k++)name+=String.fromCharCode(dv.getUint8(I+k));
-      I+=nameLen;
-      if(isSelected){if(I+4>buf.byteLength)break;I+=4;}
-      const sar=(w&2)!==0;
-      if(sar)I+=2;
-      if(mmsi<=0||!isFinite(lat)||!isFinite(lon)||lat===0&&lon===0)continue;
-      const cls=vfClassify(S,name);
-      const id='v_'+mmsi;
+    for(const v of d.vessels||[]){
+      if(!isFinite(v.lat)||!isFinite(v.lon))continue;
+      const cls=aisClassify(v.type,v.name);
+      const id='v_'+v.mmsi;
       const old=state.assets.get(id);
-      const trail=old?.trail?[...old.trail.slice(-20),[lat,lon]]:[[lat,lon]];
-      state.assets.set(id,{id,hex:String(mmsi),cs:name||('MMSI-'+mmsi),type:cls.type,cat:cls.cat,country:mmsiCC(String(mmsi)),lat,lon,alt:0,gs:sog||undefined,track:cog||undefined,t:cls.t,source:'VF-'+regName,trail,_lastSeen:Date.now()});
+      const trail=old?.trail?[...old.trail.slice(-20),[v.lat,v.lon]]:[[v.lat,v.lon]];
+      state.assets.set(id,{id,hex:String(v.mmsi),cs:v.name||('MMSI-'+v.mmsi),type:'ship',cat:cls.cat,country:mmsiCC(String(v.mmsi)),lat:v.lat,lon:v.lon,alt:0,gs:v.sog,track:v.cog,t:cls.t,source:'AISSTREAM',trail,_lastSeen:Date.now()});
       n++;
     }
-    return n;
-  }catch(e){console.warn('VF region '+regName+':',e);return 0;}
+    state.sources.globalAis=n;feedDot('f16',n>0);
+  }catch(e){console.warn('Global AIS error:',e);feedDot('f16',false);}
 }
 
 // OSINT Warships + Coast Guard + Patrol Vessels — Global Coverage
@@ -1558,24 +1596,81 @@ const WARSHIPS=[
   {n:'ABF Ocean Shield',m:'503000200',f:'AU',t:'Patrol',cat:'police'},
   {n:'ABF Thaiyak',m:'503000201',f:'AU',t:'Cape-class Patrol',cat:'police'},
 ];
-// Try multiple AIS sources per vessel for global coverage
-async function queryVessel(ship){
-  // Source 1: VesselFinder free widget endpoint (best global coverage)
-  try{const d=await fetchJ(corsUrl(`https://www.vesselfinder.com/api/pub/click/${ship.m}`),5000);if(d&&d.lat&&d.lon)return{lat:d.lat,lon:d.lon,sog:d.ss,cog:d.sc,src:'VF'};}catch(e){}
-  // Source 2: Finnish AIS (Baltic/Nordic + some global relay)
-  try{const d=await fetchJ(corsUrl(`https://meri.digitraffic.fi/api/ais/v1/locations?mmsi=${ship.m}`),5000);const f=(d.features||[])[0];if(f?.geometry?.coordinates){const[lon,lat]=f.geometry.coordinates;return{lat,lon,sog:f.properties?.sog,cog:f.properties?.cog,src:'AIS-FI'};}}catch(e){}
-  return null;
+function placeWarship(ship,pos,src){
+  const old=state.assets.get('w_'+ship.m);
+  const trail=old?.trail?[...old.trail.slice(-20),[pos.lat,pos.lon]]:[[pos.lat,pos.lon]];
+  state.assets.set('w_'+ship.m,{id:'w_'+ship.m,hex:ship.m,cs:ship.n,type:'ship',cat:ship.cat||'military',country:ship.f,lat:pos.lat,lon:pos.lon,alt:0,gs:pos.sog,track:pos.cog,t:ship.t,source:src,trail,_lastSeen:Date.now()});
 }
-async function fetchOSINT(){feedWait('f7');let n=0;
-  // Process in batches of 15 to avoid overwhelming the API
-  for(let i=0;i<WARSHIPS.length;i+=15){
-    const batch=WARSHIPS.slice(i,i+15);
-    await Promise.allSettled(batch.map(async ship=>{
-      try{const pos=await queryVessel(ship);
-        if(pos){state.assets.set('w_'+ship.m,{id:'w_'+ship.m,hex:ship.m,cs:ship.n,type:'ship',cat:ship.cat||'military',country:ship.f,lat:pos.lat,lon:pos.lon,alt:0,gs:pos.sog,track:pos.cog,t:ship.t,source:pos.src,trail:[[pos.lat,pos.lon]],_lastSeen:Date.now()});n++;}
-      }catch(e){}}));
+// The warship list used to be resolved with one HTTP request per hull — 200+
+// requests every refresh, against an endpoint that now 403s. aisstream can
+// filter by MMSI server-side, so the Worker answers the whole list at once.
+async function fetchOSINT(){
+  feedWait('f7');
+  let n=0;
+  const u=workerUrl('/ais/vessels');
+  if(u){
+    try{
+      for(let i=0;i<WARSHIPS.length;i+=100){
+        const batch=WARSHIPS.slice(i,i+100);
+        const d=await fetchR(`${u}?mmsi=${batch.map(s=>s.m).join(',')}`,0,12000);
+        if(!d.configured){feedIdle('f7','needs aisstream key');state.sources.osint=0;return;}
+        const byMmsi=new Map((d.vessels||[]).map(v=>[String(v.mmsi),v]));
+        for(const ship of batch){
+          const v=byMmsi.get(String(ship.m));
+          if(v&&isFinite(v.lat)&&isFinite(v.lon)){placeWarship(ship,v,'AISSTREAM');n++;}
+        }
+      }
+      state.sources.osint=n;feedDot('f7',n>0);
+      return;
+    }catch(e){console.warn('Warship AIS error:',e);}
   }
-  state.sources.osint=n;feedDot('f7',n>0);
+  // No proxy: Digitraffic is the only direct-fetchable AIS source, so only
+  // hulls currently in Finnish/Baltic waters will resolve.
+  const nordic=WARSHIPS.filter(s=>['NO','FI','SE','DK','EE','LV','LT','PL','DE','RU'].includes(s.f));
+  for(let i=0;i<nordic.length;i+=10){
+    await Promise.allSettled(nordic.slice(i,i+10).map(async ship=>{
+      try{
+        const d=await fetchJ(`https://meri.digitraffic.fi/api/ais/v1/locations?mmsi=${ship.m}`,6000);
+        const f=(d.features||[])[0];
+        if(f?.geometry?.coordinates){
+          const[lon,lat]=f.geometry.coordinates;
+          placeWarship(ship,{lat,lon,sog:f.properties?.sog,cog:f.properties?.cog},'AIS-FI');n++;
+        }
+      }catch(e){}
+    }));
+  }
+  state.sources.osint=n;
+  if(n>0)feedDot('f7',true);else feedIdle('f7','needs proxy for global');
+}
+
+// --- DARK VESSEL EVENTS (Global Fishing Watch) ---
+// Positions tell you where ships are; GFW tells you where they behaved oddly.
+// AIS gaps, at-sea encounters and loitering are the signatures of transshipment
+// and sanctions evasion, which is the part a plain vessel map cannot show.
+const DARK_ICON={ENCOUNTER:{c:'#ff4d6d',t:'ENCOUNTER'},LOITERING:{c:'#ffa94d',t:'LOITERING'},GAP:{c:'#c77dff',t:'AIS GAP'},PORT_VISIT:{c:'#4dabf7',t:'PORT VISIT'}};
+async function fetchDarkVessels(){
+  const u=workerUrl('/gfw/events');
+  if(!u){feedIdle('f34','needs proxy');state.sources.dark=0;return;}
+  feedWait('f34');
+  try{
+    const d=await fetchR(u+'?days=3&limit=150',0,20000);
+    if(!d.configured){feedIdle('f34','needs GFW token');state.sources.dark=0;return;}
+    state.darkMarkers.forEach(m=>map.removeLayer(m));state.darkMarkers=[];
+    state.darkEvents=[];
+    for(const ev of d.entries||[]){
+      const lat=ev.position?.lat,lon=ev.position?.lon;
+      if(!isFinite(lat)||!isFinite(lon))continue;
+      const kind=DARK_ICON[ev.type]||{c:'#c77dff',t:ev.type||'EVENT'};
+      const vessel=ev.vessel?.name||ev.vessel?.ssvid||'Unknown vessel';
+      state.darkEvents.push({type:kind.t,vessel,lat,lon,start:ev.start,end:ev.end});
+      const mk=L.circleMarker([lat,lon],{radius:6,color:kind.c,weight:2,fillColor:kind.c,fillOpacity:0.25})
+        .bindPopup(`<b>${kind.t}</b><br>${vessel}<br><span style="opacity:.7">${(ev.start||'').slice(0,16).replace('T',' ')}</span>`);
+      if(state.layers.dark!==false){mk.addTo(map);}
+      state.darkMarkers.push(mk);
+    }
+    state.sources.dark=state.darkEvents.length;
+    feedDot('f34',true);
+  }catch(e){console.warn('GFW error:',e);feedDot('f34',false);}
 }
 
 // ============ SPACE TRACKING ============
@@ -2217,14 +2312,9 @@ async function fetchEarthquakes(){
 async function fetchGDELT(){
   feedWait('f9');
   try{
-    // Try multiple GDELT endpoints for resilience
-    let d;
-    try{
-      d=await fetchR(corsUrl('https://api.gdeltproject.org/api/v2/doc/doc?query=military+OR+conflict+OR+attack+OR+strike+sourcelang:english&timespan=24h&mode=ArtList&maxrecords=30&format=json'),1,15000);
-    }catch(e1){
-      // Fallback: try without CORS proxy (GDELT sometimes supports CORS directly)
-      try{d=await fetchR('https://api.gdeltproject.org/api/v2/doc/doc?query=military+conflict+sourcelang:english&timespan=24h&mode=ArtList&maxrecords=20&format=json',1,15000);}catch(e2){throw e2;}
-    }
+    // GDELT sends no CORS header and rate-limits hard (429) on repeat callers,
+    // so it needs the proxy — which also caches the response for 5 minutes.
+    const d=await fetchR(corsUrl('https://api.gdeltproject.org/api/v2/doc/doc?query=military+OR+conflict+OR+attack+OR+strike+sourcelang:english&timespan=24h&mode=ArtList&maxrecords=30&format=json'),1,15000);
     state.gdeltEvents=(d.articles||[]).filter(a=>!a.language||a.language.toLowerCase()==='english').map(a=>({title:a.title,url:a.url,source:a.domain||a.source||'',date:a.seendate,tone:a.tone,lat:a.sourcelat,lon:a.sourcelon,lang:a.language,image:a.socialimage}));
     renderGDELT();
     state.sources.gdelt=state.gdeltEvents.length;feedDot('f9',true);
@@ -2234,6 +2324,90 @@ async function fetchGDELT(){
     feedDot('f9',false);
   }
 }
+// --- GDELT GEO 2.0 ---
+// The DOC API gives articles; GEO gives the places those articles are about, as
+// GeoJSON refreshed every 15 minutes. That is what belongs on a map — DOC's
+// sourcelat/sourcelon is only where the newsroom is, not where the event is.
+// NOTE (Aug 2026): api.gdeltproject.org/api/v2/geo/geo is returning 404 for
+// every documented parameter form, including GDELT's own published example,
+// while the DOC endpoint on the same host still answers. That is an upstream
+// outage, not a bad query — this is the canonical URL and will start working
+// again the moment they restore it. The feed reports OFFLINE until then.
+async function fetchGDELTGeo(){
+  feedWait('f35');
+  try{
+    const url='https://api.gdeltproject.org/api/v2/geo/geo?query='+
+      encodeURIComponent('(military OR strike OR attack OR conflict OR explosion) sourcelang:english')+
+      '&format=geojson&mode=pointdata&timespan=1d&maxpoints=500';
+    const d=await fetchR(corsUrl(url),1,15000);
+    state.gdeltMarkers.forEach(m=>map.removeLayer(m));state.gdeltMarkers=[];
+    let n=0;
+    for(const f of d.features||[]){
+      const c=f.geometry?.coordinates;
+      if(!c||!isFinite(c[0])||!isFinite(c[1]))continue;
+      const p=f.properties||{};
+      const count=Number(p.count)||1;
+      const mk=L.circleMarker([c[1],c[0]],{
+        radius:Math.min(4+Math.log2(count+1)*1.6,14),
+        color:'#4dd4ff',weight:1,fillColor:'#4dd4ff',fillOpacity:0.18
+      }).bindPopup(`<b>${p.name||'Location'}</b><br>${count} mention${count===1?'':'s'} in 24h<br><span style="opacity:.7">${(p.html||'').replace(/<[^>]+>/g,' ').slice(0,180)}</span>`);
+      if(state.layers.gdelt)mk.addTo(map);
+      state.gdeltMarkers.push(mk);n++;
+    }
+    state.sources.gdeltGeo=n;feedDot('f35',n>0);
+  }catch(e){console.warn('GDELT GEO error:',e);feedDot('f35',false);}
+}
+
+// --- RELIEFWEB (UN OCHA) ---
+async function fetchReliefWeb(){
+  feedWait('f36');
+  try{
+    // appname must be one ReliefWeb has approved — request at
+    // https://apidoc.reliefweb.int/parameters#appname
+    const app=localStorage.getItem('sentinel_reliefweb_app')||'';
+    if(!app){feedIdle('f36','needs approved appname');state.sources.relief=0;return;}
+    const url=`https://api.reliefweb.int/v2/disasters?appname=${encodeURIComponent(app)}&limit=20&sort[]=date:desc&profile=list&filter[field]=status&filter[value]=alert`;
+    const d=await fetchR(url,1,12000);
+    state.reliefEvents=(d.data||[]).map(x=>({
+      title:x.fields?.name||'Disaster',
+      date:x.fields?.date?.created||'',
+      status:x.fields?.status||'',
+      url:x.fields?.url||''
+    }));
+    state.sources.relief=state.reliefEvents.length;
+    feedDot('f36',state.reliefEvents.length>0);
+  }catch(e){console.warn('ReliefWeb error:',e);feedDot('f36',false);}
+}
+
+// --- ACLED ---
+// The CONFLICT_ZONES list below is hand-maintained and goes stale. When an
+// ACLED key is configured we overlay real dated events on top of it.
+async function fetchACLED(){
+  const u=workerUrl('/acled');
+  if(!u)return; // conflict layer falls back to the static zones
+  try{
+    const d=await fetchR(u+'?days=7&limit=300',0,20000);
+    if(!d.configured||!Array.isArray(d.data))return;
+    state.acledEvents=d.data.filter(e=>isFinite(+e.latitude)&&isFinite(+e.longitude)).map(e=>({
+      lat:+e.latitude,lon:+e.longitude,
+      type:e.event_type||'Event',
+      country:e.country||'',
+      fatalities:+e.fatalities||0,
+      date:e.event_date||'',
+      notes:(e.notes||'').slice(0,220)
+    }));
+    for(const ev of state.acledEvents){
+      const color=ev.fatalities>=10?'#ff0000':ev.fatalities>0?'#ff6b35':'#ffcc00';
+      const mk=L.circleMarker([ev.lat,ev.lon],{radius:ev.fatalities>=10?7:5,color,weight:1.5,fillColor:color,fillOpacity:0.35})
+        .bindPopup(`<b>${ev.type}</b> — ${ev.country}<br>${ev.date} · ${ev.fatalities} fatalities<br><span style="opacity:.7">${ev.notes}</span>`);
+      if(state.layers.conflict)mk.addTo(map);
+      state.conflictMarkers.push(mk);
+    }
+    state.sources.conflict=CONFLICT_ZONES.length+state.acledEvents.length;
+    const el=document.getElementById('sConflict');if(el)el.textContent=state.sources.conflict;
+  }catch(e){console.warn('ACLED error:',e);}
+}
+
 function renderGDELT(){
   const el=document.getElementById('tabEvents');
   if(!state.gdeltEvents.length){el.innerHTML='<div style="padding:12px;color:var(--td);font-size:11px;text-align:center">No events detected</div>';return;}
@@ -2276,12 +2450,20 @@ function extractRSSLink(item){
 async function fetchNews(){
   feedWait('f10');
   try{
+    // No newsroom serves RSS with CORS headers, so every one of these needs the
+    // proxy. Reuters killed its public RSS in 2020 and AP's feeds went dead in
+    // 2026 — both are covered by the Google News queries instead.
     const feeds=[
       {url:corsUrl('https://www.defense.gov/DesktopModules/ArticleCS/RSS.ashx?max=20&ContentType=1&Site=945'),name:'DoD'},
-      {url:corsUrl('https://news.google.com/rss/search?q=military+defense+breaking&hl=en&gl=US&ceid=US:en'),name:'Open Source'},
       {url:corsUrl('https://www.defensenews.com/arc/outboundfeeds/rss/?outputType=xml'),name:'Defense News'},
       {url:corsUrl('https://feeds.bbci.co.uk/news/world/rss.xml'),name:'BBC World'},
       {url:corsUrl('https://rss.nytimes.com/services/xml/rss/nyt/World.xml'),name:'NYT World'},
+      {url:corsUrl('https://www.aljazeera.com/xml/rss/all.xml'),name:'Al Jazeera'},
+      {url:corsUrl('https://www.theguardian.com/world/rss'),name:'Guardian World'},
+      {url:corsUrl('https://feeds.skynews.com/feeds/rss/world.xml'),name:'Sky World'},
+      // when:1h keeps this to genuinely breaking items rather than the day's digest.
+      {url:corsUrl('https://news.google.com/rss/search?q=breaking+when:1h&hl=en-US&gl=US&ceid=US:en'),name:'Breaking'},
+      {url:corsUrl('https://news.google.com/rss/search?q=military+OR+strike+OR+conflict+when:2h&hl=en-US&gl=US&ceid=US:en'),name:'Open Source'},
     ];
     state.news=[];
     await Promise.allSettled(feeds.map(async(feed)=>{
@@ -2327,13 +2509,25 @@ function renderNews(){
 async function fetchFIRMS(){
   feedWait('f11');
   try{
-    const d=await fetchR(corsUrl('https://firms.modaps.eosdis.nasa.gov/api/area/csv/FIRMS_KEY/VIIRS_SNPP_NRT/world/1'),1,15000);
-    // FIRMS CSV might not work without key, fallback to MODIS active fire GeoJSON
     state.fireMarkers.forEach(m=>map.removeLayer(m));state.fireMarkers=[];
     state.fires=[];
-    // Try the open summary endpoint
-    const geoData=await fetchR('https://earthquake.usgs.gov/fdsnws/event/1/query?format=geojson&limit=1',1,5000).catch(()=>null);
-    // Use alternative: EONET natural events API (NASA, free, no key)
+    // This used to request .../api/area/csv/FIRMS_KEY/... — the literal string
+    // FIRMS_KEY, never substituted. It 404'd every time and threw before
+    // reaching the EONET fallback below, so the feed was permanently red.
+    // Real hotspots need a key, which lives in the Worker; EONET is the
+    // key-free fallback and is what was actually rendering all along.
+    const firms=workerUrl('/firms');
+    if(firms){
+      try{
+        const fd=await fetchR(firms+'?days=1',0,15000);
+        if(fd.configured&&Array.isArray(fd.hotspots)){
+          for(const h of fd.hotspots.slice(0,400)){
+            if(!isFinite(h.lat)||!isFinite(h.lon))continue;
+            state.fires.push({lat:h.lat,lon:h.lon,title:`VIIRS hotspot (${h.confidence||'n/a'})`,date:h.date});
+          }
+        }
+      }catch(e){/* fall through to EONET */}
+    }
     const eonet=await fetchR('https://eonet.gsfc.nasa.gov/api/v3/events?status=open&limit=30&category=wildfires',1,12000);
     const events=eonet.events||[];
     for(const ev of events){
@@ -2802,17 +2996,18 @@ async function fetchAll(){
   document.getElementById('mainStatus').textContent='FETCHING';document.getElementById('mainDot').style.background='var(--y)';
   // WAVE 1: Fast direct APIs (~1-3s) — render as soon as these land
   try{
-    await Promise.allSettled([fetchADSBMil(),fetchADSBOne(),fetchLADD(),fetchOSINT()]);
+    await Promise.allSettled([fetchADSBMil(),fetchADSBFi(),fetchLADD(),fetchOSINT()]);
   }catch(e){}
   renderAll();
   // WAVE 2: Slower APIs (CORS-proxied, large datasets) — render again when done
   try{
-    await Promise.allSettled([fetchADSBRegion(),fetchOpenSky(),fetchAIS(),fetchVFGlobal(),fetchSpaceWeather(),fetchSevereWeather(),fetchSats()]);
+    await Promise.allSettled([fetchADSBRegion(),fetchOpenSky(),fetchAIS(),fetchGlobalAIS(),fetchSpaceWeather(),fetchSevereWeather(),fetchSats()]);
   }catch(e){}
   renderAll();
   // WAVE 3: Intel overlays (static + slow feeds)
   try{
-    await Promise.allSettled([fetchNOTAMs(),fetchWildfires(),fetchVolcanoes(),fetchTsunami(),fetchNuclearTests(),fetchRefugees()]);
+    await Promise.allSettled([fetchNOTAMs(),fetchWildfires(),fetchVolcanoes(),fetchTsunami(),fetchNuclearTests(),fetchRefugees(),
+      fetchGDELTGeo(),fetchDarkVessels(),fetchReliefWeb(),fetchACLED()]);
   }catch(e){}
   renderAll();
   try{cleanStaleAssets();}catch(e){}
@@ -3326,6 +3521,8 @@ async function boot(){
   try{
     txt.textContent='ESTABLISHING SATELLITE UPLINK...';bar.style.width='5%';
     bootSysRow(0,true);
+    // Resolve proxy state first — half the feeds branch on it.
+    await Promise.race([checkProxyHealth(),new Promise(r=>setTimeout(r,6000))]);
     await new Promise(r=>setTimeout(r,400));
 
     txt.textContent='CONNECTING ADS-B RECEIVER ARRAY...';bar.style.width='12%';
@@ -3348,8 +3545,8 @@ async function boot(){
     await Promise.race([fetchNews(),new Promise(r=>setTimeout(r,8000))]);
     bootSysRow(5,true);
 
-    txt.textContent='CONNECTING VESSELFINDER GLOBAL...';bar.style.width='63%';
-    await Promise.race([fetchVFGlobal(),new Promise(r=>setTimeout(r,10000))]);
+    txt.textContent='CONNECTING GLOBAL AIS...';bar.style.width='63%';
+    await Promise.race([fetchGlobalAIS(),new Promise(r=>setTimeout(r,10000))]);
     bootSysRow(10,true);
 
     await new Promise(r=>setTimeout(r,400));
@@ -3461,7 +3658,7 @@ setInterval(fetchFIRMS,300000);
 setInterval(fetchSpaceWeather,120000);
 setInterval(fetchSevereWeather,300000);
 setInterval(updateThreatBanner,60000);
-setInterval(fetchVFGlobal,45000); // VF global ships every 45s (rotates 3 regions per cycle)
+setInterval(fetchGlobalAIS,45000); // global AIS snapshot for the current viewport
 setInterval(()=>{calculateDefcon();},120000);
 setInterval(detectDarkVessels,60000); // Check for dark vessels every minute
 setInterval(checkSanctioned,120000); // Recheck sanctions every 2 min

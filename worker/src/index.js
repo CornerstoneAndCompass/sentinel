@@ -1,0 +1,512 @@
+/**
+ * SENTINEL feed proxy
+ *
+ * One origin for every upstream the dashboard needs. It exists because most
+ * OSINT feeds send no Access-Control-Allow-Origin header, so a static page
+ * cannot read them at all. Previously index.html routed those through free
+ * public CORS proxies; all three died and took eight feeds with them.
+ *
+ * Routes
+ *   GET /p?url=<encoded>     allowlisted passthrough, CORS + edge cache
+ *   GET /osky?lamin=..&..    OpenSky, OAuth2 token injected when configured
+ *   GET /ais/snapshot?bbox=  global AIS positions from the aisstream socket
+ *   GET /ais/vessels?mmsi=   positions for specific MMSIs (warship list)
+ *   GET /gfw/events?..       Global Fishing Watch events (dark vessels)
+ *   GET /acled?..            ACLED armed-conflict events
+ *   GET /health              which upstreams and secrets are live
+ */
+
+const ALLOWED_HOSTS = new Set([
+  // aircraft
+  'api.adsb.lol',
+  'opendata.adsb.fi',
+  'api.airplanes.live',
+  'opensky-network.org',
+  // maritime
+  'meri.digitraffic.fi',
+  // events / hazards
+  'api.gdeltproject.org',
+  'earthquake.usgs.gov',
+  'eonet.gsfc.nasa.gov',
+  'firms.modaps.eosdis.nasa.gov',
+  'services.swpc.noaa.gov',
+  'api.weather.gov',
+  'www.tsunami.gov',
+  'volcano.si.edu',
+  'tfr.faa.gov',
+  'services3.arcgis.com',
+  'data.unhcr.org',
+  // space
+  'tle.ivanstanojevic.me',
+  'api.wheretheiss.at',
+  // news
+  'feeds.bbci.co.uk',
+  'rss.nytimes.com',
+  'www.defensenews.com',
+  'www.defense.gov',
+  'news.google.com',
+  'www.aljazeera.com',
+  'www.theguardian.com',
+  'feeds.skynews.com',
+  'api.reliefweb.int',
+]);
+
+// How long the edge may serve a cached copy, by upstream host or path hint.
+const TTL = [
+  [/adsb|airplanes\.live|opensky/, 8],
+  [/digitraffic/, 20],
+  [/gdeltproject/, 300],
+  [/rss|feeds\.|xml|reliefweb|news\.google/, 180],
+  [/firms|eonet|usgs|swpc|weather|tsunami|volcano/, 120],
+];
+function ttlFor(url) {
+  for (const [re, secs] of TTL) if (re.test(url)) return secs;
+  return 60;
+}
+
+const CORS = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Methods': 'GET,OPTIONS',
+  'Access-Control-Allow-Headers': 'Content-Type',
+  'Access-Control-Max-Age': '86400',
+};
+
+function json(body, status = 200, extra = {}) {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { 'Content-Type': 'application/json', ...CORS, ...extra },
+  });
+}
+
+function err(message, status = 400) {
+  return json({ error: message }, status);
+}
+
+/* ---------------------------------------------------------------- proxy -- */
+
+async function passthrough(request, ctx) {
+  const target = new URL(request.url).searchParams.get('url');
+  if (!target) return err('missing url parameter');
+
+  let upstream;
+  try {
+    upstream = new URL(target);
+  } catch {
+    return err('malformed url');
+  }
+  if (upstream.protocol !== 'https:') return err('https only');
+  if (!ALLOWED_HOSTS.has(upstream.hostname)) {
+    return err(`host not allowed: ${upstream.hostname}`, 403);
+  }
+
+  const cache = caches.default;
+  const cacheKey = new Request(upstream.toString(), { method: 'GET' });
+  const hit = await cache.match(cacheKey);
+  if (hit) {
+    const h = new Headers(hit.headers);
+    Object.entries(CORS).forEach(([k, v]) => h.set(k, v));
+    h.set('X-Sentinel-Cache', 'HIT');
+    return new Response(hit.body, { status: hit.status, headers: h });
+  }
+
+  let res;
+  try {
+    res = await fetch(upstream.toString(), {
+      headers: {
+        // Digitraffic rejects requests without these two.
+        'Accept-Encoding': 'gzip',
+        'Digitraffic-User': 'Sentinel/OSINT-dashboard',
+        'User-Agent': 'Sentinel-OSINT/1.0 (+https://github.com/sentinel)',
+        Accept: '*/*',
+      },
+      cf: { cacheEverything: false },
+    });
+  } catch (e) {
+    return err(`upstream fetch failed: ${e.message}`, 502);
+  }
+
+  // GDELT rate-limits by caller IP and answers 429 with an empty body. Serving
+  // the last good copy beats blanking the panel — stale news still reads fine.
+  if (!res.ok) {
+    const stale = await cache.match(new Request(upstream.toString() + '#stale'));
+    if (stale) {
+      const h = new Headers(stale.headers);
+      Object.entries(CORS).forEach(([k, v]) => h.set(k, v));
+      h.set('X-Sentinel-Cache', 'STALE');
+      h.set('X-Sentinel-Upstream-Status', String(res.status));
+      return new Response(stale.body, { status: 200, headers: h });
+    }
+  }
+
+  const headers = new Headers(CORS);
+  headers.set('Content-Type', res.headers.get('Content-Type') || 'application/octet-stream');
+  const ttl = ttlFor(upstream.toString());
+  headers.set('Cache-Control', `public, max-age=${ttl}`);
+  headers.set('X-Sentinel-Cache', 'MISS');
+  headers.set('X-Sentinel-Upstream-Status', String(res.status));
+
+  const body = await res.arrayBuffer();
+  const out = new Response(body, { status: res.status, headers });
+  if (res.ok) {
+    ctx.waitUntil(cache.put(cacheKey, out.clone()));
+    // Long-lived copy used only when the upstream later fails.
+    const staleHeaders = new Headers(headers);
+    staleHeaders.set('Cache-Control', 'public, max-age=86400');
+    ctx.waitUntil(
+      cache.put(new Request(upstream.toString() + '#stale'), new Response(body, { status: 200, headers: staleHeaders }))
+    );
+  }
+  return out;
+}
+
+/* ----------------------------------------------------------------- firms -- */
+
+async function firms(request, env) {
+  if (!env.FIRMS_KEY) return json({ configured: false, hotspots: [] });
+
+  const days = Math.min(parseInt(new URL(request.url).searchParams.get('days') || '1', 10), 10);
+  const res = await fetch(
+    `https://firms.modaps.eosdis.nasa.gov/api/area/csv/${env.FIRMS_KEY}/VIIRS_SNPP_NRT/world/${days}`,
+    { headers: { 'User-Agent': 'Sentinel-OSINT/1.0' } }
+  );
+  if (!res.ok) return json({ configured: true, error: `firms ${res.status}`, hotspots: [] });
+
+  const text = await res.text();
+  const rows = text.trim().split('\n');
+  const head = (rows.shift() || '').split(',');
+  const iLat = head.indexOf('latitude');
+  const iLon = head.indexOf('longitude');
+  const iConf = head.indexOf('confidence');
+  const iDate = head.indexOf('acq_date');
+  if (iLat < 0 || iLon < 0) return json({ configured: true, error: 'unexpected csv', hotspots: [] });
+
+  const hotspots = [];
+  for (const row of rows) {
+    const c = row.split(',');
+    const lat = parseFloat(c[iLat]);
+    const lon = parseFloat(c[iLon]);
+    if (Number.isNaN(lat) || Number.isNaN(lon)) continue;
+    hotspots.push({ lat, lon, confidence: iConf >= 0 ? c[iConf] : null, date: iDate >= 0 ? c[iDate] : null });
+  }
+  return json({ configured: true, count: hotspots.length, hotspots }, 200, {
+    'Cache-Control': 'public, max-age=600',
+  });
+}
+
+/* -------------------------------------------------------------- opensky -- */
+
+let oskyToken = { value: null, expires: 0 };
+
+async function openskyToken(env) {
+  if (!env.OPENSKY_CLIENT_ID || !env.OPENSKY_CLIENT_SECRET) return null;
+  if (oskyToken.value && Date.now() < oskyToken.expires) return oskyToken.value;
+
+  const res = await fetch(
+    'https://auth.opensky-network.org/auth/realms/opensky-network/protocol/openid-connect/token',
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({
+        grant_type: 'client_credentials',
+        client_id: env.OPENSKY_CLIENT_ID,
+        client_secret: env.OPENSKY_CLIENT_SECRET,
+      }),
+    }
+  );
+  if (!res.ok) return null;
+
+  const data = await res.json();
+  // Tokens last 30 minutes; refresh a minute early.
+  oskyToken = {
+    value: data.access_token,
+    expires: Date.now() + (data.expires_in || 1800) * 1000 - 60000,
+  };
+  return oskyToken.value;
+}
+
+async function opensky(request, env) {
+  const p = new URL(request.url).searchParams;
+  const box = ['lamin', 'lomin', 'lamax', 'lomax']
+    .map((k) => `${k}=${encodeURIComponent(p.get(k) || '')}`)
+    .join('&');
+
+  const token = await openskyToken(env);
+  const headers = { 'User-Agent': 'Sentinel-OSINT/1.0' };
+  if (token) headers.Authorization = `Bearer ${token}`;
+
+  const res = await fetch(`https://opensky-network.org/api/states/all?${box}`, { headers });
+  if (!res.ok) return err(`opensky ${res.status}`, res.status === 429 ? 429 : 502);
+
+  const data = await res.json();
+  return json(data, 200, {
+    'Cache-Control': 'public, max-age=8',
+    'X-Sentinel-Auth': token ? 'oauth2' : 'anonymous',
+  });
+}
+
+/* ------------------------------------------------------------ keyed apis -- */
+
+async function gfwEvents(request, env) {
+  if (!env.GFW_TOKEN) return json({ configured: false, entries: [] });
+
+  const p = new URL(request.url).searchParams;
+  const types = p.get('types') || 'ENCOUNTER,LOITERING,GAP';
+  const days = Math.min(parseInt(p.get('days') || '3', 10), 30);
+  const end = new Date();
+  const start = new Date(end.getTime() - days * 86400000);
+
+  const url = new URL('https://gateway.api.globalfishingwatch.org/v3/events');
+  url.searchParams.set('datasets[0]', 'public-global-encounters-events:latest');
+  url.searchParams.set('start-date', start.toISOString().slice(0, 10));
+  url.searchParams.set('end-date', end.toISOString().slice(0, 10));
+  url.searchParams.set('limit', p.get('limit') || '100');
+  url.searchParams.set('offset', '0');
+  for (const t of types.split(',')) url.searchParams.append('types[]', t.trim());
+
+  const res = await fetch(url.toString(), {
+    headers: { Authorization: `Bearer ${env.GFW_TOKEN}`, Accept: 'application/json' },
+  });
+  if (!res.ok) return json({ configured: true, error: `gfw ${res.status}`, entries: [] }, 200);
+
+  const data = await res.json();
+  return json({ configured: true, ...data }, 200, { 'Cache-Control': 'public, max-age=900' });
+}
+
+async function acled(request, env) {
+  if (!env.ACLED_KEY || !env.ACLED_EMAIL) return json({ configured: false, data: [] });
+
+  const p = new URL(request.url).searchParams;
+  const days = Math.min(parseInt(p.get('days') || '7', 10), 30);
+  const since = new Date(Date.now() - days * 86400000).toISOString().slice(0, 10);
+
+  const url = new URL('https://api.acleddata.com/acled/read');
+  url.searchParams.set('key', env.ACLED_KEY);
+  url.searchParams.set('email', env.ACLED_EMAIL);
+  url.searchParams.set('event_date', since);
+  url.searchParams.set('event_date_where', '>=');
+  url.searchParams.set('limit', p.get('limit') || '300');
+
+  const res = await fetch(url.toString(), { headers: { Accept: 'application/json' } });
+  if (!res.ok) return json({ configured: true, error: `acled ${res.status}`, data: [] }, 200);
+
+  const data = await res.json();
+  return json({ configured: true, ...data }, 200, { 'Cache-Control': 'public, max-age=1800' });
+}
+
+/* ------------------------------------------------------- aisstream bridge -- */
+
+export class AisHub {
+  constructor(state, env) {
+    this.state = state;
+    this.env = env;
+    this.vessels = new Map(); // mmsi -> { lat, lon, sog, cog, name, type, ts }
+    this.ws = null;
+    this.connectedAt = 0;
+    this.lastMessage = 0;
+    this.messages = 0;
+  }
+
+  async fetch(request) {
+    const url = new URL(request.url);
+
+    if (!this.env.AISSTREAM_KEY) {
+      return json({ configured: false, vessels: [] });
+    }
+    await this.ensureConnected();
+
+    if (url.pathname.endsWith('/vessels')) {
+      const want = (url.searchParams.get('mmsi') || '')
+        .split(',')
+        .map((s) => s.trim())
+        .filter(Boolean);
+      const out = [];
+      for (const m of want) {
+        const v = this.vessels.get(m);
+        if (v) out.push({ mmsi: m, ...v });
+      }
+      return json({ configured: true, count: out.length, vessels: out });
+    }
+
+    // /snapshot — optional bbox filter as minLon,minLat,maxLon,maxLat
+    const bbox = (url.searchParams.get('bbox') || '')
+      .split(',')
+      .map(Number)
+      .filter((n) => !Number.isNaN(n));
+    const limit = Math.min(parseInt(url.searchParams.get('limit') || '6000', 10), 20000);
+
+    const out = [];
+    for (const [mmsi, v] of this.vessels) {
+      if (bbox.length === 4) {
+        if (v.lon < bbox[0] || v.lon > bbox[2] || v.lat < bbox[1] || v.lat > bbox[3]) continue;
+      }
+      out.push({ mmsi, ...v });
+      if (out.length >= limit) break;
+    }
+
+    return json({
+      configured: true,
+      count: out.length,
+      tracked: this.vessels.size,
+      messages: this.messages,
+      connectedFor: this.connectedAt ? Math.floor((Date.now() - this.connectedAt) / 1000) : 0,
+      vessels: out,
+    });
+  }
+
+  async ensureConnected() {
+    const stale = this.lastMessage && Date.now() - this.lastMessage > 120000;
+    if (this.ws && !stale) return;
+    if (this.ws && stale) {
+      try {
+        this.ws.close();
+      } catch {}
+      this.ws = null;
+    }
+    if (this.ws) return;
+
+    try {
+      const res = await fetch('https://stream.aisstream.io/v0/stream', {
+        headers: { Upgrade: 'websocket' },
+      });
+      const ws = res.webSocket;
+      if (!ws) throw new Error('no websocket in response');
+      ws.accept();
+      this.ws = ws;
+      this.connectedAt = Date.now();
+      this.lastMessage = Date.now();
+
+      ws.send(
+        JSON.stringify({
+          APIKey: this.env.AISSTREAM_KEY,
+          BoundingBoxes: [[[-90, -180], [90, 180]]],
+          FilterMessageTypes: ['PositionReport', 'ShipStaticData'],
+        })
+      );
+
+      ws.addEventListener('message', (ev) => this.onMessage(ev));
+      ws.addEventListener('close', () => {
+        this.ws = null;
+      });
+      ws.addEventListener('error', () => {
+        this.ws = null;
+      });
+
+      // Keep the object resident so the socket survives between requests.
+      await this.state.storage.setAlarm(Date.now() + 20000);
+    } catch (e) {
+      this.ws = null;
+    }
+  }
+
+  onMessage(ev) {
+    this.lastMessage = Date.now();
+    this.messages++;
+    let msg;
+    try {
+      msg = JSON.parse(typeof ev.data === 'string' ? ev.data : new TextDecoder().decode(ev.data));
+    } catch {
+      return;
+    }
+
+    const meta = msg.MetaData || {};
+    const mmsi = String(meta.MMSI || meta.MMSI_String || '');
+    if (!mmsi) return;
+
+    const prev = this.vessels.get(mmsi) || {};
+
+    if (msg.MessageType === 'PositionReport') {
+      const r = msg.Message?.PositionReport;
+      if (!r) return;
+      this.vessels.set(mmsi, {
+        ...prev,
+        lat: r.Latitude,
+        lon: r.Longitude,
+        sog: r.Sog,
+        cog: r.Cog,
+        heading: r.TrueHeading,
+        navStat: r.NavigationalStatus,
+        name: (meta.ShipName || prev.name || '').trim(),
+        ts: Date.now(),
+      });
+    } else if (msg.MessageType === 'ShipStaticData') {
+      const s = msg.Message?.ShipStaticData;
+      if (!s) return;
+      this.vessels.set(mmsi, {
+        ...prev,
+        name: (s.Name || meta.ShipName || prev.name || '').trim(),
+        type: s.Type ?? prev.type,
+        callsign: s.CallSign,
+        destination: s.Destination,
+        ts: prev.ts || Date.now(),
+      });
+    }
+
+    // Cap memory: drop anything not heard from in 45 minutes.
+    if (this.vessels.size > 40000) this.evict();
+  }
+
+  evict() {
+    const cutoff = Date.now() - 2700000;
+    for (const [mmsi, v] of this.vessels) {
+      if ((v.ts || 0) < cutoff) this.vessels.delete(mmsi);
+    }
+  }
+
+  async alarm() {
+    this.evict();
+    await this.ensureConnected();
+    await this.state.storage.setAlarm(Date.now() + 20000);
+  }
+}
+
+/* ---------------------------------------------------------------- router -- */
+
+export default {
+  async fetch(request, env, ctx) {
+    if (request.method === 'OPTIONS') return new Response(null, { status: 204, headers: CORS });
+    if (request.method !== 'GET') return err('GET only', 405);
+
+    const url = new URL(request.url);
+    const path = url.pathname.replace(/\/+$/, '') || '/';
+
+    try {
+      if (path === '/p') return await passthrough(request, ctx);
+      if (path === '/osky') return await opensky(request, env);
+      if (path === '/gfw/events') return await gfwEvents(request, env);
+      if (path === '/acled') return await acled(request, env);
+      if (path === '/firms') return await firms(request, env);
+
+      if (path.startsWith('/ais/')) {
+        if (!env.AIS_HUB) return json({ configured: false, vessels: [] });
+        const id = env.AIS_HUB.idFromName('global');
+        return await env.AIS_HUB.get(id).fetch(request);
+      }
+
+      if (path === '/health') {
+        return json({
+          ok: true,
+          time: new Date().toISOString(),
+          allowedHosts: ALLOWED_HOSTS.size,
+          configured: {
+            opensky: Boolean(env.OPENSKY_CLIENT_ID && env.OPENSKY_CLIENT_SECRET),
+            aisstream: Boolean(env.AISSTREAM_KEY),
+            gfw: Boolean(env.GFW_TOKEN),
+            acled: Boolean(env.ACLED_KEY && env.ACLED_EMAIL),
+            firms: Boolean(env.FIRMS_KEY),
+          },
+        });
+      }
+
+      if (path === '/') {
+        return json({
+          service: 'sentinel-feed-proxy',
+          routes: ['/p?url=', '/osky', '/ais/snapshot', '/ais/vessels', '/gfw/events', '/acled', '/firms', '/health'],
+        });
+      }
+
+      return err('not found', 404);
+    } catch (e) {
+      return err(`worker error: ${e.message}`, 500);
+    }
+  },
+};
