@@ -26,6 +26,8 @@ const ALLOWED_HOSTS = new Set([
   'meri.digitraffic.fi',
   // events / hazards
   'api.gdeltproject.org',
+  'www.gdacs.org',                 // global disaster alerts, EU JRC + UN OCHA
+  'api.weather.bom.gov.au',        // Australian warnings
   'earthquake.usgs.gov',
   'eonet.gsfc.nasa.gov',
   'firms.modaps.eosdis.nasa.gov',
@@ -57,6 +59,7 @@ const TTL = [
   [/digitraffic/, 20],
   [/gdeltproject/, 300],
   [/rss|feeds\.|xml|reliefweb|news\.google/, 180],
+  [/gdacs|bom\.gov\.au/, 300],
   [/firms|eonet|usgs|swpc|weather|tsunami|volcano/, 120],
 ];
 function ttlFor(url) {

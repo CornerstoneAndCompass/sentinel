@@ -934,12 +934,12 @@ const state={
   quakeMarkers:[],gdeltMarkers:[],fireMarkers:[],chokeMarkers:[],
   filters:{aircraft:true,heli:true,ship:true,satellite:true},
   categories:{military:true,coastguard:true,police:true,government:true,sar:true,tanker:false,cargo:false,passenger:false,fishing:false},
-  layers:{quakes:true,fires:true,gdelt:true,chokes:true,notams:true,piracy:true,volcanoes:true,tsunami:true,cyber:true,cables:false,nukes:false,bases:false,conflict:true,rf:true,drones:true,refugees:true,dark:true},
+  layers:{gdacs:true,quakes:true,fires:true,gdelt:true,chokes:true,notams:true,piracy:true,volcanoes:true,tsunami:true,cyber:true,cables:false,nukes:false,bases:false,conflict:true,rf:true,drones:true,refugees:true,dark:true},
   countryFilter:'',searchTerm:'',selectedId:null,
   alerts:[],news:[],gdeltEvents:[],earthquakes:[],fires:[],notamMarkers:[],cableLines:[],nukeMarkers:[],piracyMarkers:[],wildfireMarkers:[],cyberMarkers:[],refugeeMarkers:[],milbaseMarkers:[],rfMarkers:[],droneMarkers:[],ntestMarkers:[],conflictMarkers:[],volcanoMarkers:[],tsunamiMarkers:[],
   threats:{},defcon:4,threatScore:0,
   proxyHealth:null,darkEvents:[],darkMarkers:[],reliefEvents:[],acledEvents:[],
-  visible:[],
+  visible:[],gdacs:[],gdacsMarkers:[],bom:[],
   sources:{},refreshInterval:30,countdown:30,lastFetch:null
 };
 
@@ -979,7 +979,9 @@ const FEEDS=[
   {id:'f33',code:'TSUN',name:'Tsunami',desc:'Tsunami warnings (NOAA)'},
   {id:'f34',code:'DARK',name:'Dark Vessels',desc:'AIS gaps, encounters & loitering (Global Fishing Watch)'},
   {id:'f35',code:'GEO',name:'News Map',desc:'Geolocated news mentions, refreshed every 15 min (GDELT GEO)'},
-  {id:'f36',code:'RELIEF',name:'Humanitarian',desc:'Disaster declarations & humanitarian alerts (ReliefWeb)'}
+  {id:'f36',code:'RELIEF',name:'Humanitarian',desc:'Disaster declarations & humanitarian alerts (ReliefWeb)'},
+  {id:'f37',code:'GDACS',name:'Global Disasters',desc:'Worldwide disaster alerts \u2014 cyclones, floods, fires, drought (GDACS)'},
+  {id:'f38',code:'BOM',name:'Australia Warnings',desc:'Flood, marine and severe weather warnings (Bureau of Meteorology)'}
 ];
 document.getElementById('feedsBar').innerHTML=
   '<span class="feeds-chip" onclick="event.stopPropagation();toggleFeedsBar()" title="Click to show or hide every feed; click the bar for full status"><span class="fd ok" style="animation:none"></span><span id="feedSummary">FEEDS --/--</span></span>'+
@@ -2094,6 +2096,102 @@ async function fetchOSINT(){
   }
   state.sources.osint=n;
   if(n>0)feedDot('f7',true);else feedIdle('f7','needs proxy for global');
+}
+
+/* ==================== GLOBAL HAZARD WARNINGS ====================
+   The country brief could only answer "what weather warnings are active here?"
+   for the United States, because the National Weather Service was the only
+   warning feed wired up. These two close most of that gap.
+
+   GDACS (EU Joint Research Centre + UN OCHA) is the important one: global,
+   free, no key, and every event already carries an ISO3 country code, so it
+   maps straight onto a country brief without any geometry work.
+
+   MeteoAlarm was evaluated for European detail and rejected — its Atom feed
+   406s on content negotiation and the per-country CAP feed is 2.5MB for
+   Austria alone, which is not worth it when GDACS already covers European
+   floods, fires and storms.
+*/
+const GDACS_TYPES={EQ:'Earthquake',TC:'Tropical cyclone',FL:'Flood',VO:'Volcano',DR:'Drought',WF:'Wildfire'};
+const GDACS_COLOR={Red:'#ff0033',Orange:'#ff8800',Green:'#3fb950'};
+
+async function fetchGDACS(){
+  if(!hasProxy()){feedIdle('f37','needs proxy');state.sources.gdacs=0;return;}
+  feedWait('f37');
+  try{
+    const url='https://www.gdacs.org/gdacsapi/api/events/geteventlist/SEARCH?fromDate=&toDate=&alertlevel=Orange;Red';
+    const d=await fetchR(corsUrl(url),1,20000);
+    state.gdacsMarkers.forEach(m=>map.removeLayer(m));state.gdacsMarkers=[];
+    state.gdacs=[];
+    for(const f of d.features||[]){
+      const p=f.properties||{},g=f.geometry||{};
+      const c=g.coordinates||[];
+      const lat=c[1],lon=c[0];
+      if(!isFinite(lat)||!isFinite(lon))continue;
+      const ev={
+        type:GDACS_TYPES[p.eventtype]||p.eventtype||'Event',
+        code:p.eventtype,
+        level:p.alertlevel,
+        name:p.eventname||p.name||'',
+        country:p.country||'',
+        iso3:(p.iso3||'').toUpperCase(),
+        affected:p.affectedcountries||[],
+        desc:(p.description||'').replace(/<[^>]+>/g,' ').trim(),
+        url:p.url&&p.url.report?p.url.report:'',
+        from:p.fromdate,to:p.todate,
+        lat,lon
+      };
+      state.gdacs.push(ev);
+      const col=GDACS_COLOR[ev.level]||'#ff8800';
+      const mk=L.circleMarker([lat,lon],{radius:ev.level==='Red'?10:7,color:col,weight:2,
+        fillColor:col,fillOpacity:0.18})
+        .bindPopup(`<b>${ev.level.toUpperCase()} — ${ev.type}</b><br>${ev.name||ev.country}<br>`
+          +`<span style="opacity:.75">${ev.desc.slice(0,180)}</span>`);
+      if(state.layers.gdacs!==false)mk.addTo(map);
+      state.gdacsMarkers.push(mk);
+      if(ev.level==='Red'){
+        addAlert('red',`${ev.type.toUpperCase()}: ${ev.name||ev.country}`,
+          {lat,lon,zoom:6,kind:ev.type.toUpperCase()});
+      }
+    }
+    state.sources.gdacs=state.gdacs.length;
+    feedDot('f37',state.gdacs.length>0);
+  }catch(e){console.warn('GDACS error:',e);feedDot('f37',false);}
+}
+
+// Australian warnings. BOM attributes by state rather than coordinates, which
+// is enough for a country brief but means these are not map markers.
+async function fetchBOM(){
+  if(!hasProxy()){feedIdle('f38','needs proxy');state.sources.bom=0;return;}
+  feedWait('f38');
+  try{
+    const d=await fetchR(corsUrl('https://api.weather.bom.gov.au/v1/warnings'),1,15000);
+    // BOM's `phase` is the lifecycle state — new / update / renewal / final /
+    // cancelled — not the severity. Severity lives in warning_group_type.
+    // Reading phase as severity meant nothing ever scored, and worse, cancelled
+    // and finalised warnings were listed as if still in force.
+    state.bom=(d.data||[])
+      .filter(w=>w.phase!=='cancelled'&&w.phase!=='final')
+      .map(w=>({
+        id:w.id,
+        type:(w.type||'').replace(/_/g,' '),
+        severity:w.warning_group_type||'',
+        phase:w.phase||'',
+        state:w.state||'',
+        states:w.states||[],
+        title:w.title||'',
+        short:w.short_title||'',
+        issued:w.issue_time||'',
+        expires:w.expiry_time||''
+      }));
+    state.sources.bom=state.bom.length;
+    for(const w of state.bom){
+      if(w.severity==='major'||/severe/i.test(w.type)){
+        addAlert('orange',`AU ${w.state}: ${w.short||w.type} — ${w.title.slice(0,60)}`,{kind:'BOM WARNING'});
+      }
+    }
+    feedDot('f38',state.bom.length>0);
+  }catch(e){console.warn('BOM error:',e);feedDot('f38',false);}
 }
 
 // --- DARK VESSEL EVENTS (Global Fishing Watch) ---
@@ -3623,7 +3721,7 @@ async function fetchAll(){
   // WAVE 3: Intel overlays (static + slow feeds)
   try{
     await Promise.allSettled([fetchNOTAMs(),fetchWildfires(),fetchVolcanoes(),fetchTsunami(),fetchNuclearTests(),fetchRefugees(),
-      fetchGDELTGeo(),fetchDarkVessels(),fetchReliefWeb(),fetchACLED()]);
+      fetchGDELTGeo(),fetchDarkVessels(),fetchReliefWeb(),fetchACLED(),fetchGDACS(),fetchBOM()]);
   }catch(e){}
   renderAll();
   try{cleanStaleAssets();}catch(e){}
@@ -4133,6 +4231,17 @@ function buildCountryBrief(c){
   b.acled=(state.acledEvents||[]).filter(inC);
   b.news=(state.gdeltEvents||[]).filter(inC);
   b.dark=(state.darkEvents||[]).filter(e=>e&&isFinite(e.lat)&&nearCountry(e.lat,e.lon,c,2));
+  // GDACS carries its own ISO3, which is more reliable than a point-in-polygon
+  // test for a cyclone whose plotted centre may sit offshore. Fall back to
+  // geometry, and honour the affected-countries list for multi-country events.
+  b.gdacs=(state.gdacs||[]).filter(e=>{
+    if(e.iso3&&c.iso3&&e.iso3===c.iso3)return true;
+    if(Array.isArray(e.affected)&&e.affected.some(a=>String(a).toLowerCase()===c.name.toLowerCase()))return true;
+    if(typeof e.country==='string'&&e.country.toLowerCase().includes(c.name.toLowerCase()))return true;
+    return pointInCountry(e.lat,e.lon,c);
+  });
+  // BOM is Australia-only and attributed by state rather than coordinates.
+  b.bom=(c.iso==='AU'||c.iso3==='AUS')?(state.bom||[]):[];
 
   // Security and hazard are scored separately and deliberately.
   //
@@ -4151,6 +4260,11 @@ function buildCountryBrief(c){
   for(const q of b.quakes)haz+=q.mag>=7?35:q.mag>=6?18:q.mag>=5?6:1;
   haz+=Math.min(b.wx.filter(w=>w.severity==='Extreme').length*8,24)+Math.min(b.wx.length*1.5,12);
   haz+=Math.min(b.fires.length*1.5,15);
+  // Capped as a group: ten concurrent Orange wildfire alerts in Spain in August
+  // is a normal bad fire season, not a 100/EXTREME country. A single Red still
+  // carries real weight.
+  haz+=Math.min(b.gdacs.reduce((s,e)=>s+(e.level==='Red'?30:9),0),48);
+  haz+=Math.min(b.bom.filter(w=>w.severity==='major').length*6,18)+Math.min(b.bom.length*1.5,12);
   b.security=Math.min(Math.round(sec),100);
   b.hazard=Math.min(Math.round(haz),100);
   b.score=Math.max(b.security,b.hazard);
@@ -4211,6 +4325,18 @@ function renderCountryBrief(){
        <div class="cb-stat"><div class="cb-stat-n">${totalContacts}</div><div class="cb-stat-l">CONTACTS</div></div>
        <div class="cb-stat"><div class="cb-stat-n">${b.conflicts.length+b.acled.length}</div><div class="cb-stat-l">INCIDENTS</div></div>
      </div>`
+    +briefSection('Disaster alerts (GDACS)',b.gdacs,e=>
+       `<div class="cb-row" onclick="closeCountryBrief();focusAlert({lat:${e.lat},lon:${e.lon},zoom:6})">
+          <span class="cb-a" style="color:${GDACS_COLOR[e.level]||'var(--tp)'}">${esc(e.level)} · ${esc(e.type)}</span>
+          <span class="cb-b">${esc(e.name||e.country)}</span>
+          <span class="cb-c">${esc((e.from||'').slice(0,10))}</span></div>`,
+       'No active disaster alerts')
+    +briefSection('Bureau of Meteorology warnings',b.bom,w=>
+       `<div class="cb-row" style="cursor:default">
+          <span class="cb-a">${esc(w.short||w.type)}</span>
+          <span class="cb-b">${esc(w.title.slice(0,52))}</span>
+          <span class="cb-c">${esc(w.state)}</span></div>`,
+       'Australia only')
     +briefSection('Armed conflict',b.conflicts,z=>
        `<div class="cb-row" onclick="closeCountryBrief();focusAlert({lat:${z.lat},lon:${z.lon},zoom:6})">
           <span class="cb-a">${esc(z.name)}</span><span class="cb-b">${esc(z.intensity)}</span><span class="cb-c">${esc(z.fatalities)}</span></div>`)
