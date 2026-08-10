@@ -29,6 +29,8 @@ const ALLOWED_HOSTS = new Set([
   'www.gdacs.org',                 // global disaster alerts, EU JRC + UN OCHA
   'www.nhc.noaa.gov',              // tropical cyclones, Atlantic + E Pacific
   'api.weather.bom.gov.au',        // Australian warnings
+  'www.rfs.nsw.gov.au',            // NSW Rural Fire Service incidents
+  'data.emergency.vic.gov.au',     // VicEmergency incidents
   'earthquake.usgs.gov',
   'eonet.gsfc.nasa.gov',
   'firms.modaps.eosdis.nasa.gov',
@@ -61,6 +63,7 @@ const TTL = [
   [/gdeltproject/, 300],
   [/rss|feeds\.|xml|reliefweb|news\.google/, 180],
   [/gdacs|bom\.gov\.au/, 300],
+  [/rfs\.nsw|emergency\.vic/, 120],
   [/firms|eonet|usgs|swpc|weather|tsunami|volcano/, 120],
 ];
 function ttlFor(url) {

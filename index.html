@@ -764,6 +764,7 @@ html,body{width:100%;height:100%;overflow:hidden;background:#050a12;font-family:
 <button class="fbtn on-r" id="fTsunami" onclick="togLayer('tsunami')" title="Active tsunami warnings (NOAA)">TSUNAMI</button>
 <button class="fbtn on" id="fRadar" onclick="toggleRadar()" title="Live precipitation radar (RainViewer)">RAIN RADAR</button>
 <button class="fbtn on-y" id="fBOM" onclick="togLayer('bom')" title="Australian Bureau of Meteorology warnings">AU WARNINGS</button>
+<button class="fbtn on-r" id="fAusEm" onclick="togLayer('ausEm')" title="Live incidents from NSW RFS and VicEmergency">AU INCIDENTS</button>
 </div>
 <div class="fgroup">Security &amp; intel<span class="grp-ctl"><button onclick="setGroup('grpIntel',true)" title="Turn every layer in this group on">ALL</button><button onclick="setGroup('grpIntel',false)" title="Turn every layer in this group off">NONE</button></span></div>
 <div id="grpIntel" style="display:flex;flex-wrap:wrap">
@@ -1038,12 +1039,12 @@ const state={
   quakeMarkers:[],gdeltMarkers:[],fireMarkers:[],chokeMarkers:[],
   filters:{aircraft:true,heli:true,ship:true,satellite:true},
   categories:{military:true,coastguard:true,police:true,government:true,sar:true,tanker:false,cargo:false,passenger:false,fishing:false},
-  layers:{radar:true,satimg:false,bom:true,gdacs:true,quakes:true,fires:true,gdelt:true,chokes:true,notams:true,piracy:true,volcanoes:true,tsunami:true,cyber:true,cables:false,nukes:false,bases:false,conflict:true,rf:true,drones:true,refugees:true,dark:true},
+  layers:{radar:true,satimg:false,bom:true,ausEm:true,gdacs:true,quakes:true,fires:true,gdelt:true,chokes:true,notams:true,piracy:true,volcanoes:true,tsunami:true,cyber:true,cables:false,nukes:false,bases:false,conflict:true,rf:true,drones:true,refugees:true,dark:true},
   countryFilter:'',searchTerm:'',selectedId:null,
   alerts:[],news:[],gdeltEvents:[],earthquakes:[],fires:[],notamMarkers:[],cableLines:[],nukeMarkers:[],piracyMarkers:[],wildfireMarkers:[],cyberMarkers:[],refugeeMarkers:[],milbaseMarkers:[],rfMarkers:[],droneMarkers:[],ntestMarkers:[],conflictMarkers:[],volcanoMarkers:[],tsunamiMarkers:[],
   threats:{},defcon:4,threatScore:0,
   proxyHealth:null,darkEvents:[],darkMarkers:[],reliefEvents:[],acledEvents:[],
-  visible:[],gdacs:[],gdacsMarkers:[],bom:[],bomMarkers:[],who:[],fcdo:null,conditions:null,
+  visible:[],gdacs:[],gdacsMarkers:[],bom:[],bomMarkers:[],ausEm:[],ausEmMarkers:[],who:[],fcdo:null,conditions:null,
   radarOpacity:0.55,satOpacity:0.65,
   sources:{},refreshInterval:30,countdown:30,lastFetch:null
 };
@@ -1089,7 +1090,8 @@ const FEEDS=[
   {id:'f38',code:'BOM',name:'Australia Warnings',desc:'Flood, marine and severe weather warnings (Bureau of Meteorology)'},
   {id:'f39',code:'RADAR',name:'Weather Radar',desc:'Live global precipitation radar, last 2 hours (RainViewer)'},
   {id:'f40',code:'WHO',name:'Health Emergencies',desc:'Disease outbreak news (World Health Organization)'},
-  {id:'f41',code:'SATIMG',name:'Cloud Imagery',desc:'Himawari-9 satellite \u2014 Asia-Pacific and Australia only'}
+  {id:'f41',code:'SATIMG',name:'Cloud Imagery',desc:'Himawari-9 satellite \u2014 Asia-Pacific and Australia only'},
+  {id:'f42',code:'AU.EM',name:'AU State Emergency',desc:'Live incidents from NSW RFS and VicEmergency'}
 ];
 document.getElementById('feedsBar').innerHTML=
   '<span class="feeds-chip" onclick="event.stopPropagation();toggleFeedsBar()" title="Click to show or hide every feed; click the bar for full status"><span class="fd ok" style="animation:none"></span><span id="feedSummary">FEEDS --/--</span></span>'+
@@ -2357,6 +2359,129 @@ function toggleRadar(){
   }else if(_radarLayer){_radarLayer.addTo(map);}
   else fetchRadar();
   if(typeof syncWxButtons==='function')syncWxButtons();
+}
+
+/* ==================== AUSTRALIAN STATE EMERGENCY ====================
+   BOM issues warnings by state with no coordinates, which is why those markers
+   sit at state centroids. The state emergency services publish the actual
+   incidents with real positions, so these plot where things are happening.
+
+   NSW RFS carries the national warning ladder — Emergency Warning, Watch and
+   Act, Advice — which is the field worth colouring by. VicEmergency covers all
+   incident types rather than fire alone, so a structure fire, a hazmat spill and
+   a rescue all come through.
+
+   Western Australia serves an HTML application shell rather than JSON at its
+   documented path, and South Australia's returns "File currently unavailable",
+   so neither is wired up. Queensland redirects; worth revisiting.
+*/
+// Most of what NSW RFS publishes is not a warning: of 45 entries, 15 are
+// scheduled hazard-reduction burns and 27 carry no warning level at all. They
+// are still worth seeing — a planned burn means smoke and road closures — but
+// they must not read like an emergency, so they get their own muted tier and
+// sort below anything on the warning ladder.
+const AUS_LEVEL={
+  'emergency warning':{score:3,col:'#ff0033',label:'EMERGENCY WARNING'},
+  'watch and act':{score:2,col:'#ff8800',label:'WATCH AND ACT'},
+  'advice':{score:1,col:'#ffcc00',label:'ADVICE'},
+  'planned burn':{score:-1,col:'#6b7a8f',label:'PLANNED BURN'},
+  'not applicable':{score:0,col:'#4dabf7',label:'INCIDENT'},
+  'safe':{score:0,col:'#4dabf7',label:'RESOLVED'}
+};
+function ausLevel(cat){
+  const k=String(cat||'').toLowerCase().trim();
+  return AUS_LEVEL[k]||{score:0,col:'#4dabf7',label:(cat||'Incident').toUpperCase()};
+}
+
+// The NSW feed uses a GeometryCollection per incident; the first point in it is
+// the incident location.
+function firstPoint(geom){
+  if(!geom)return null;
+  if(geom.type==='Point')return geom.coordinates;
+  if(geom.type==='GeometryCollection'){
+    for(const g of geom.geometries||[]){
+      const p=firstPoint(g);
+      if(p)return p;
+    }
+  }
+  if(geom.type==='Polygon'&&geom.coordinates&&geom.coordinates[0]&&geom.coordinates[0][0])return geom.coordinates[0][0];
+  return null;
+}
+
+async function fetchAusEmergency(){
+  if(!hasProxy()){feedIdle('f42','needs proxy');state.sources.ausEm=0;return;}
+  feedWait('f42');
+  const out=[];
+  try{
+    const d=await fetchR(corsUrl('https://www.rfs.nsw.gov.au/feeds/majorIncidents.json'),1,20000);
+    for(const f of d.features||[]){
+      const c=firstPoint(f.geometry);
+      if(!c)continue;
+      const p=f.properties||{};
+      out.push({
+        state:'NSW',agency:'NSW RFS',
+        title:(p.title||'').trim(),
+        level:(p.category||'').trim(),
+        type:'Fire',
+        // The description is an HTML blob of key/value pairs; strip it back.
+        desc:(p.description||'').replace(/<[^>]+>/g,' ').replace(/\s+/g,' ').trim().slice(0,220),
+        url:p.link&&p.link.href?p.link.href:(typeof p.link==='string'?p.link:''),
+        when:p.pubDate||'',
+        lat:c[1],lon:c[0]
+      });
+    }
+  }catch(e){console.warn('NSW RFS error:',e);}
+  try{
+    const d=await fetchR(corsUrl('https://data.emergency.vic.gov.au/Show?pageId=getIncidentJSON'),1,20000);
+    for(const r of d.results||[]){
+      const lat=parseFloat(r.latitude),lon=parseFloat(r.longitude);
+      if(!isFinite(lat)||!isFinite(lon))continue;
+      out.push({
+        state:'VIC',agency:r.agency||'VicEmergency',
+        title:[r.incidentType,r.incidentLocation||r.municipality].filter(Boolean).join(' — '),
+        level:r.incidentStatus||'',
+        type:r.category1||r.category2||r.incidentType||'',
+        desc:[r.incidentSizeFmt&&('Size '+r.incidentSizeFmt),r.resourceCount&&(r.resourceCount+' resources'),r.municipality]
+          .filter(Boolean).join(' · '),
+        url:'',when:r.lastUpdatedDtStr||r.originDateTimeStr||'',
+        lat,lon
+      });
+    }
+  }catch(e){console.warn('VicEmergency error:',e);}
+
+  // Warnings first, planned burns last.
+  out.sort((a,b)=>ausLevel(b.level).score-ausLevel(a.level).score);
+  state.ausEm=out;
+  state.sources.ausEm=out.length;
+  renderAusEmergency();
+  for(const i of out){
+    if(ausLevel(i.level).score>=2){
+      addAlert(ausLevel(i.level).score>=3?'red':'orange',
+        `${i.state} ${i.level.toUpperCase()}: ${i.title.slice(0,60)}`,
+        {lat:i.lat,lon:i.lon,zoom:10,kind:i.state+' EMERGENCY'});
+    }
+  }
+  feedDot('f42',out.length>0);
+}
+
+function renderAusEmergency(){
+  state.ausEmMarkers.forEach(m=>map.removeLayer(m));state.ausEmMarkers=[];
+  if(!state.layers.ausEm)return;
+  for(const i of state.ausEm||[]){
+    const lv=ausLevel(i.level);
+    const mk=L.circleMarker([i.lat,i.lon],{
+      radius:lv.score>=3?9:lv.score>=2?7:lv.score<0?3:5,
+      color:lv.col,weight:lv.score<0?1:2,fillColor:lv.col,
+      fillOpacity:lv.score>=2?0.35:lv.score<0?0.08:0.15,
+      dashArray:lv.score<0?'2 3':null
+    }).bindPopup(
+      `<b style="color:${lv.col}">${i.state} · ${i.level||i.type||'Incident'}</b><br>${i.title}<br>`
+      +(i.desc?`<span style="opacity:.75">${i.desc}</span><br>`:'')
+      +`<span style="opacity:.5;font-size:10px">${i.agency}${i.when?' · '+i.when:''}</span>`
+      +(i.url?`<br><a href="${i.url}" target="_blank" rel="noopener">Details</a>`:''));
+    mk.addTo(map);
+    state.ausEmMarkers.push(mk);
+  }
 }
 
 /* ---- BOM warnings on the map ----
@@ -3820,13 +3945,14 @@ function togLayer(l){
   state.layers[l]=!state.layers[l];
   const on=state.layers[l];
   // Button ID + color class map
-  const bm={bom:'fBOM',quakes:'fQuake',fires:'fFire',gdelt:'fGdelt',chokes:'fChoke',jamming:'fJam',notams:'fNotam',piracy:'fPiracy',volcanoes:'fVolcano',tsunami:'fTsunami',cyber:'fCyber',cables:'fCables',nukes:'fNuke',bases:'fBases',conflict:'fConflict',rf:'fRF',drones:'fDrone',refugees:'fRefugee'};
-  const cm={bom:'on-y',quakes:'on-r',fires:'on-o',gdelt:'on',chokes:'on-y',jamming:'on-p',notams:'on-y',piracy:'on-r',volcanoes:'on-o',tsunami:'on-r',cyber:'on-p',cables:'on',nukes:'on-o',bases:'on',conflict:'on-r',rf:'on-p',drones:'on-o',refugees:'on-y'};
+  const bm={ausEm:'fAusEm',bom:'fBOM',quakes:'fQuake',fires:'fFire',gdelt:'fGdelt',chokes:'fChoke',jamming:'fJam',notams:'fNotam',piracy:'fPiracy',volcanoes:'fVolcano',tsunami:'fTsunami',cyber:'fCyber',cables:'fCables',nukes:'fNuke',bases:'fBases',conflict:'fConflict',rf:'fRF',drones:'fDrone',refugees:'fRefugee'};
+  const cm={ausEm:'on-r',bom:'on-y',quakes:'on-r',fires:'on-o',gdelt:'on',chokes:'on-y',jamming:'on-p',notams:'on-y',piracy:'on-r',volcanoes:'on-o',tsunami:'on-r',cyber:'on-p',cables:'on',nukes:'on-o',bases:'on',conflict:'on-r',rf:'on-p',drones:'on-o',refugees:'on-y'};
   // Sync button visual to state (not toggle — prevents desync)
   if(bm[l]){const btn=document.getElementById(bm[l]);if(btn){if(on)btn.classList.add(cm[l]);else btn.classList.remove(cm[l]);}}
   // Handle overlay marker layers
   const overlayMap={
     bom:{markers:'bomMarkers',render:on?renderBOMMarkers:null},
+    ausEm:{markers:'ausEmMarkers',render:on?renderAusEmergency:null},
     notams:{markers:'notamMarkers',render:on?fetchNOTAMs:null},
     piracy:{markers:'piracyMarkers',render:on?renderPiracy:null},
     volcanoes:{markers:'volcanoMarkers',render:on?fetchVolcanoes:null},
@@ -3927,7 +4053,7 @@ async function fetchAll(){
   // WAVE 3: Intel overlays (static + slow feeds)
   try{
     await Promise.allSettled([fetchNOTAMs(),fetchWildfires(),fetchVolcanoes(),fetchTsunami(),fetchNuclearTests(),fetchRefugees(),
-      fetchGDELTGeo(),fetchDarkVessels(),fetchReliefWeb(),fetchACLED(),fetchGDACS(),fetchBOM(),fetchRadar(),fetchWHO(),fetchSatellite()]);
+      fetchGDELTGeo(),fetchDarkVessels(),fetchReliefWeb(),fetchACLED(),fetchGDACS(),fetchBOM(),fetchRadar(),fetchWHO(),fetchSatellite(),fetchAusEmergency()]);
   }catch(e){}
   renderAll();
   try{cleanStaleAssets();}catch(e){}
@@ -4866,6 +4992,7 @@ function buildCountryBrief(c){
   });
   // BOM is Australia-only and attributed by state rather than coordinates.
   b.bom=(c.iso==='AU'||c.iso3==='AUS')?(state.bom||[]):[];
+  b.ausEm=(c.iso==='AU'||c.iso3==='AUS')?(state.ausEm||[]):[];
 
   // Security and hazard are scored separately and deliberately.
   //
@@ -4892,8 +5019,15 @@ function buildCountryBrief(c){
   // carries real weight.
   haz+=Math.min(b.gdacs.reduce((s,e)=>s+(e.level==='Red'?30:9),0),48);
   haz+=Math.min(b.bom.filter(w=>w.severity==='major').length*6,18)+Math.min(b.bom.length*1.5,12);
-  b.security=Math.min(Math.round(sec),100);
-  b.hazard=Math.min(Math.round(haz),100);
+  // ausLevel scores are a *sort* order, and planned burns sit below zero there
+  // so they sink to the bottom of the list. Feeding that straight into the risk
+  // sum made 15 scheduled hazard-reduction burns subtract 45 points and pushed
+  // Australia's hazard score negative. Only the warning ladder counts as risk.
+  haz+=Math.min((b.ausEm||[]).reduce((s,i)=>s+Math.max(0,ausLevel(i.level).score)*3,0),24);
+  // Clamped at both ends: these are 0-100 scales and a negative reads as
+  // "safer than nothing", which is meaningless.
+  b.security=Math.max(0,Math.min(Math.round(sec),100));
+  b.hazard=Math.max(0,Math.min(Math.round(haz),100));
   b.score=Math.max(b.security,b.hazard);
   b.level=b.score>=70?'EXTREME':b.score>=45?'HIGH':b.score>=22?'MODERATE':b.score>0?'LOW':'MINIMAL';
   b.color=b.score>=70?'#ff0033':b.score>=45?'#ff5522':b.score>=22?'#ffaa00':b.score>0?'#88cc44':'#3fb950';
@@ -5034,6 +5168,12 @@ function renderCountryBrief(){
              <span class="cb-a" style="color:var(--o);flex:1 1 100%">${flags.map(f=>esc(f.t)+' ('+esc(String(f.d).slice(5))+')').join(' · ')}</span></div>`:'');
        },
        'Loading…')
+    +briefSection('State emergency incidents',b.ausEm,i=>
+       `<div class="cb-row" onclick="closeCountryBrief();focusAlert({lat:${i.lat},lon:${i.lon},zoom:10})">
+          <span class="cb-a" style="color:${ausLevel(i.level).col}">${esc(ausLevel(i.level).label)}</span>
+          <span class="cb-b">${esc(i.title.slice(0,54))}</span>
+          <span class="cb-c">${esc(i.state)}</span></div>`,
+       'NSW and Victoria only')
     +briefSection('Bureau of Meteorology warnings',b.bom,w=>
        `<div class="cb-row" style="cursor:default">
           <span class="cb-a">${esc(w.short||w.type)}</span>
