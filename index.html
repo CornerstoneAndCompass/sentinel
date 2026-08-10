@@ -868,7 +868,7 @@ const FEEDS=[
   {id:'f1',code:'ADSB',name:'Military Aircraft',desc:'Live military aircraft worldwide (airplanes.live)'},
   {id:'f2',code:'RGNL',name:'Regional Aircraft',desc:'Military & government aircraft near your map view'},
   {id:'f3',code:'OSKY',name:'OpenSky Network',desc:'Crowd-sourced aircraft positions in view'},
-  {id:'f4',code:'A.FI',name:'Military Aircraft #2',desc:'Backup military aircraft feed (adsb.fi)'},
+  {id:'f4',code:'SQWK',name:'Emergency Squawks',desc:'Aircraft squawking 7500 hijack / 7600 radio failure / 7700 emergency'},
   {id:'f5',code:'LADD',name:'Private Aircraft',desc:'Aircraft on the FAA privacy (LADD) list'},
   {id:'f6',code:'AIS',name:'Baltic Vessels',desc:'Ship positions in Finnish & Baltic waters (Digitraffic AIS)'},
   {id:'f7',code:'SHIPS',name:'Naval Vessels',desc:'Known military & government vessel positions'},
@@ -1359,6 +1359,19 @@ function processAC(list,src){
   return n;
 }
 
+// Leaflet returns a zero-area box when the container has been resized without
+// invalidateSize (mobile tab switches do this), which turns every bbox query
+// into lamin==lamax and silently returns nothing. Fall back to a usable window.
+function safeBounds(){
+  const b=map.getBounds();
+  const s=b.getSouth(),n=b.getNorth(),w=b.getWest(),e=b.getEast();
+  if(!isFinite(s)||!isFinite(n)||Math.abs(n-s)<0.5||Math.abs(e-w)<0.5){
+    const c=map.getCenter();
+    return{south:c.lat-20,north:c.lat+20,west:c.lng-30,east:c.lng+30};
+  }
+  return{south:s,north:n,west:w,east:e};
+}
+
 // airplanes.live is the only ADS-B aggregator that sends Access-Control-Allow-Origin:*,
 // so it is the primary and works with no proxy at all. adsb.lol and adsb.fi are
 // identical in shape but CORS-blocked, so they ride the Worker as backups.
@@ -1393,18 +1406,41 @@ async function fetchOpenSky(){
   if(!u){feedIdle('f3','needs proxy');state.sources.opensky=0;return;}
   feedWait('f3');
   try{
-    const b=map.getBounds();
-    const d=await fetchR(`${u}?lamin=${b.getSouth().toFixed(1)}&lomin=${b.getWest().toFixed(1)}&lamax=${b.getNorth().toFixed(1)}&lomax=${b.getEast().toFixed(1)}`,0,12000);
+    const b=safeBounds();
+    const d=await fetchR(`${u}?lamin=${b.south.toFixed(1)}&lomin=${b.west.toFixed(1)}&lamax=${b.north.toFixed(1)}&lomax=${b.east.toFixed(1)}`,0,20000);
+    // OpenSky blocks datacenter IP ranges, so a Cloudflare-hosted proxy cannot
+    // reach it. Label that rather than flagging it as a feed failure — it needs
+    // a proxy on a residential/VPS IP, not a retry.
+    if(d.blocked){feedIdle('f3','blocked: proxy IP');state.sources.opensky=0;return;}
     const acl=(d.states||[]).map(s=>({icao24:s[0],callsign:s[1],lat:s[6],lon:s[5],baro_altitude:s[7]?Math.round(s[7]*3.281):null,velocity:s[9]?Math.round(s[9]*1.944):null,true_track:s[10],vertical_rate:s[11]?Math.round(s[11]*196.85):null,squawk:s[14]})).filter(a=>a.lat&&a.lon);
     const mil=acl.filter(a=>{const cs=(a.callsign||'').trim();return MIL_P.some(p=>p.test(cs))||CG_P.some(p=>p.test(cs))||POL_P.some(p=>p.test(cs))||GOV_P.some(p=>p.test(cs))||SAR_P.some(p=>p.test(cs));});
     const n=processAC(mil,'OPENSKY');state.sources.opensky=n;feedDot('f3',true);
   }catch(e){feedDot('f3',false);}
 }
-async function fetchADSBFi(){
-  if(!hasProxy()){feedIdle('f4','needs proxy');state.sources.adsbFi=0;return;}
+// Emergency squawks: 7500 hijack, 7600 radio failure, 7700 general emergency.
+// This slot used to hold a second mil feed (adsb.one, then adsb.fi) but both
+// refuse Cloudflare egress IPs, so a proxied backup can never work. These
+// endpoints are browser-direct and worth far more than a duplicate feed.
+const SQUAWKS=[{code:'7700',label:'EMERGENCY',sev:'red'},{code:'7600',label:'RADIO FAIL',sev:'orange'},{code:'7500',label:'HIJACK',sev:'red'}];
+async function fetchSquawks(){
   feedWait('f4');
-  try{const d=await fetchR(corsUrl('https://opendata.adsb.fi/api/v2/mil'),1,12000);const n=processAC(d.ac||[],'ADSB.FI');state.sources.adsbFi=n;feedDot('f4',n>0);}
-  catch(e){feedDot('f4',false);}
+  try{
+    let n=0;
+    for(const sq of SQUAWKS){
+      const d=await fetchR(`${AL_BASE}/squawk/${sq.code}`,0,10000);
+      for(const ac of d.ac||[]){
+        if(!ac.lat||!ac.lon)continue;
+        const cs=(ac.flight||ac.hex||'').trim();
+        addAlert(sq.sev,`SQUAWK ${sq.code} ${sq.label}: ${cs||'unknown'}`);
+        n++;
+      }
+      processAC(d.ac||[],'SQUAWK-'+sq.code);
+    }
+    state.sources.squawks=n;
+    // Zero aircraft squawking emergency is the normal case and a healthy
+    // result — only a failed request counts as an offline feed.
+    feedDot('f4',true);
+  }catch(e){feedDot('f4',false);}
 }
 async function fetchLADD(){feedWait('f5');try{const d=await fetchR(AL_BASE+'/ladd',1,12000);const n=processAC(d.ac||[],'LADD');state.sources.ladd=n;feedDot('f5',n>0);}catch(e){feedDot('f5',false);}}
 // AIS vessel type classification: 35=military, 55=law enforcement, 51=SAR
@@ -1481,8 +1517,8 @@ async function fetchGlobalAIS(){
   if(!u){feedIdle('f16','needs proxy');state.sources.globalAis=0;return;}
   feedWait('f16');
   try{
-    const b=map.getBounds();
-    const bbox=[b.getWest(),b.getSouth(),b.getEast(),b.getNorth()].map(v=>v.toFixed(2)).join(',');
+    const b=safeBounds();
+    const bbox=[b.west,b.south,b.east,b.north].map(v=>v.toFixed(2)).join(',');
     const d=await fetchR(`${u}?bbox=${bbox}&limit=6000`,0,15000);
     if(!d.configured){feedIdle('f16','needs aisstream key');state.sources.globalAis=0;return;}
     let n=0;
@@ -2314,7 +2350,11 @@ async function fetchGDELT(){
   try{
     // GDELT sends no CORS header and rate-limits hard (429) on repeat callers,
     // so it needs the proxy — which also caches the response for 5 minutes.
-    const d=await fetchR(corsUrl('https://api.gdeltproject.org/api/v2/doc/doc?query=military+OR+conflict+OR+attack+OR+strike+sourcelang:english&timespan=24h&mode=ArtList&maxrecords=30&format=json'),1,15000);
+    // GDELT rejects un-parenthesised OR groups with "Queries containing OR'd
+    // terms must be surrounded by ()" — this query was missing them and had
+    // been returning an error string rather than articles.
+    const q='(military OR conflict OR attack OR strike) sourcelang:english';
+    const d=await fetchR(corsUrl('https://api.gdeltproject.org/api/v2/doc/doc?query='+encodeURIComponent(q)+'&timespan=24h&mode=ArtList&maxrecords=30&format=json'),1,30000);
     state.gdeltEvents=(d.articles||[]).filter(a=>!a.language||a.language.toLowerCase()==='english').map(a=>({title:a.title,url:a.url,source:a.domain||a.source||'',date:a.seendate,tone:a.tone,lat:a.sourcelat,lon:a.sourcelon,lang:a.language,image:a.socialimage}));
     renderGDELT();
     state.sources.gdelt=state.gdeltEvents.length;feedDot('f9',true);
@@ -2996,7 +3036,7 @@ async function fetchAll(){
   document.getElementById('mainStatus').textContent='FETCHING';document.getElementById('mainDot').style.background='var(--y)';
   // WAVE 1: Fast direct APIs (~1-3s) — render as soon as these land
   try{
-    await Promise.allSettled([fetchADSBMil(),fetchADSBFi(),fetchLADD(),fetchOSINT()]);
+    await Promise.allSettled([fetchADSBMil(),fetchSquawks(),fetchLADD(),fetchOSINT()]);
   }catch(e){}
   renderAll();
   // WAVE 2: Slower APIs (CORS-proxied, large datasets) — render again when done

@@ -30,12 +30,36 @@ Paste that into the dashboard's **PROXY** field in the header — it is stored i
 | `/firms?days=1` | NASA FIRMS thermal hotspots, parsed from CSV to JSON |
 | `/health` | Which upstreams and secrets are live |
 
-`/p` serves the last good copy of a response when the upstream fails. GDELT
-rate-limits by caller IP and answers 429 with an empty body; stale news reads
-better than a blank panel.
+`/p` serves the last good copy of a response when the upstream fails, and warms
+the cache in the background when GDELT throttles. GDELT asks for one request
+every 5 seconds and 429s until you comply — waiting that out in the request path
+costs 45s, so the retry happens after the response is sent. The first caller
+after a cold start gets a 429, callers a few seconds later get real data.
 
 `/p` only forwards to hosts on the allowlist in `src/index.js` — it is not an
 open proxy. Add a host there before pointing a new feed at it.
+
+## What the Worker cannot reach
+
+Cloudflare Workers share egress IPs across all customers, and the volunteer-run
+ADS-B aggregators block datacenter ranges to prevent abuse. Measured from the
+deployed Worker vs. a residential IP:
+
+| Upstream | Residential | Cloudflare edge |
+|---|---|---|
+| `api.adsb.lol` | 200 | 429 |
+| `opendata.adsb.fi` | 200 | 403 |
+| `opensky-network.org` | 200 | 522 |
+| `meri.digitraffic.fi` | 200 | 200 |
+| news / RSS hosts | 200 | 200 |
+
+This is why aircraft tracking is fetched **browser-direct from airplanes.live**,
+which is the one aggregator that serves `Access-Control-Allow-Origin: *`. Do not
+move those feeds behind the proxy — it will make them worse, not better.
+
+OpenSky is wired but reports `blocked` from Cloudflare. To use it you need a
+proxy on a residential or ordinary VPS IP; the same `src/index.js` runs on
+Node with minor changes, or point `PROXY_BASE` at any host you control.
 
 ## Optional API keys
 

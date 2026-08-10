@@ -69,6 +69,9 @@ const CORS = {
   'Access-Control-Allow-Methods': 'GET,OPTIONS',
   'Access-Control-Allow-Headers': 'Content-Type',
   'Access-Control-Max-Age': '86400',
+  // Without this the diagnostic headers below are invisible to JS on a
+  // cross-origin fetch, which makes the cache path impossible to debug.
+  'Access-Control-Expose-Headers': 'X-Sentinel-Cache, X-Sentinel-Upstream-Status, X-Sentinel-Auth',
 };
 
 function json(body, status = 200, extra = {}) {
@@ -84,7 +87,48 @@ function err(message, status = 400) {
 
 /* ---------------------------------------------------------------- proxy -- */
 
-async function passthrough(request, ctx) {
+// KV keys are limited to 512 bytes and these URLs carry long encoded queries.
+function kvKey(url) {
+  return 'feed:' + url.slice(0, 400);
+}
+
+// Runs after the response is sent. Retries a throttled upstream patiently and
+// writes the result into both the live and stale caches, so the cost of waiting
+// out a rate limit is paid once in the background rather than by every client.
+async function warmCache(url, headers, cache, ttl, env) {
+  for (let i = 0; i < 3; i++) {
+    await new Promise((r) => setTimeout(r, 6000));
+    let res;
+    try {
+      res = await fetch(url, { headers, cf: { cacheEverything: false } });
+    } catch {
+      continue;
+    }
+    if (!res.ok) continue;
+
+    const body = await res.arrayBuffer();
+    const h = new Headers(CORS);
+    h.set('Content-Type', res.headers.get('Content-Type') || 'application/json');
+    h.set('X-Sentinel-Cache', 'WARMED');
+    h.set('X-Sentinel-Upstream-Status', String(res.status));
+
+    const live = new Headers(h);
+    live.set('Cache-Control', `public, max-age=${ttl}`);
+    await cache.put(new Request(url, { method: 'GET' }), new Response(body, { status: 200, headers: live }));
+
+    const stale = new Headers(h);
+    stale.set('Cache-Control', 'public, max-age=86400');
+    await cache.put(new Request(url + '#stale'), new Response(body, { status: 200, headers: stale }));
+
+    // Globally replicated so every colo benefits, not just this one.
+    if (env && env.FEED_CACHE) {
+      await env.FEED_CACHE.put(kvKey(url), new TextDecoder().decode(body), { expirationTtl: 86400 });
+    }
+    return;
+  }
+}
+
+async function passthrough(request, env, ctx) {
   const target = new URL(request.url).searchParams.get('url');
   if (!target) return err('missing url parameter');
 
@@ -109,24 +153,32 @@ async function passthrough(request, ctx) {
     return new Response(hit.body, { status: hit.status, headers: h });
   }
 
+  const upstreamHeaders = {
+    // Digitraffic rejects requests without these two.
+    'Accept-Encoding': 'gzip',
+    'Digitraffic-User': 'Sentinel/OSINT-dashboard',
+    'User-Agent': 'Sentinel-OSINT/1.0 (+https://github.com/sentinel)',
+    Accept: '*/*',
+  };
+
   let res;
   try {
-    res = await fetch(upstream.toString(), {
-      headers: {
-        // Digitraffic rejects requests without these two.
-        'Accept-Encoding': 'gzip',
-        'Digitraffic-User': 'Sentinel/OSINT-dashboard',
-        'User-Agent': 'Sentinel-OSINT/1.0 (+https://github.com/sentinel)',
-        Accept: '*/*',
-      },
-      cf: { cacheEverything: false },
-    });
+    res = await fetch(upstream.toString(), { headers: upstreamHeaders, cf: { cacheEverything: false } });
   } catch (e) {
     return err(`upstream fetch failed: ${e.message}`, 502);
   }
 
-  // GDELT rate-limits by caller IP and answers 429 with an empty body. Serving
-  // the last good copy beats blanking the panel — stale news still reads fine.
+  // GDELT throttles hard but not absolutely: the same query 429s a few times
+  // then succeeds, and its own message asks for one request every 5 seconds.
+  // Waiting that out in the request path costs 45s+, so retry after responding
+  // instead — this caller gets stale data now, the next one gets a warm cache.
+  if (res.status === 429 && /gdeltproject/.test(upstream.hostname)) {
+    ctx.waitUntil(warmCache(upstream.toString(), upstreamHeaders, cache, ttlFor(upstream.toString()), env));
+  }
+
+  // Serving the last good copy beats blanking the panel — stale news reads
+  // fine. Check KV as well as the colo cache: caches.default is per-datacenter,
+  // so a copy warmed in Frankfurt does nothing for a client served from Dublin.
   if (!res.ok) {
     const stale = await cache.match(new Request(upstream.toString() + '#stale'));
     if (stale) {
@@ -136,12 +188,29 @@ async function passthrough(request, ctx) {
       h.set('X-Sentinel-Upstream-Status', String(res.status));
       return new Response(stale.body, { status: 200, headers: h });
     }
+    if (env.FEED_CACHE) {
+      const kv = await env.FEED_CACHE.get(kvKey(upstream.toString()));
+      if (kv) {
+        return new Response(kv, {
+          status: 200,
+          headers: {
+            ...CORS,
+            'Content-Type': 'application/json',
+            'X-Sentinel-Cache': 'KV-STALE',
+            'X-Sentinel-Upstream-Status': String(res.status),
+          },
+        });
+      }
+    }
   }
 
   const headers = new Headers(CORS);
   headers.set('Content-Type', res.headers.get('Content-Type') || 'application/octet-stream');
   const ttl = ttlFor(upstream.toString());
-  headers.set('Cache-Control', `public, max-age=${ttl}`);
+  // Only cache successes. Caching a 429 for 5 minutes means the browser keeps
+  // replaying the rate-limit error from its own disk cache long after the
+  // background warm has fetched real data.
+  headers.set('Cache-Control', res.ok ? `public, max-age=${ttl}` : 'no-store');
   headers.set('X-Sentinel-Cache', 'MISS');
   headers.set('X-Sentinel-Upstream-Status', String(res.status));
 
@@ -155,6 +224,11 @@ async function passthrough(request, ctx) {
     ctx.waitUntil(
       cache.put(new Request(upstream.toString() + '#stale'), new Response(body, { status: 200, headers: staleHeaders }))
     );
+    if (env.FEED_CACHE && /gdeltproject|reliefweb/.test(upstream.hostname)) {
+      ctx.waitUntil(
+        env.FEED_CACHE.put(kvKey(upstream.toString()), new TextDecoder().decode(body), { expirationTtl: 86400 })
+      );
+    }
   }
   return out;
 }
@@ -196,6 +270,7 @@ async function firms(request, env) {
 /* -------------------------------------------------------------- opensky -- */
 
 let oskyToken = { value: null, expires: 0 };
+let oskyBlockedUntil = 0;
 
 async function openskyToken(env) {
   if (!env.OPENSKY_CLIENT_ID || !env.OPENSKY_CLIENT_SECRET) return null;
@@ -224,7 +299,7 @@ async function openskyToken(env) {
   return oskyToken.value;
 }
 
-async function opensky(request, env) {
+async function opensky(request, env, ctx) {
   const p = new URL(request.url).searchParams;
   const box = ['lamin', 'lomin', 'lamax', 'lomax']
     .map((k) => `${k}=${encodeURIComponent(p.get(k) || '')}`)
@@ -234,8 +309,51 @@ async function opensky(request, env) {
   const headers = { 'User-Agent': 'Sentinel-OSINT/1.0' };
   if (token) headers.Authorization = `Bearer ${token}`;
 
-  const res = await fetch(`https://opensky-network.org/api/states/all?${box}`, { headers });
-  if (!res.ok) return err(`opensky ${res.status}`, res.status === 429 ? 429 : 502);
+  // OpenSky refuses this IP range, and a refused request costs ~20s: Cloudflare
+  // synthesizes the 522 itself after its own origin timeout, so an AbortSignal
+  // on the subrequest does not shorten it. Remember the verdict and answer
+  // instantly instead of burning 20s of the dashboard's refresh cycle on every
+  // pass. Re-probe every 30 minutes in case the block lifts.
+  // Module globals are per-isolate, so the verdict has to live somewhere shared
+  // or every cold isolate pays the 8s probe again.
+  const verdictKey = new Request('https://sentinel.internal/osky-blocked');
+  if (Date.now() < oskyBlockedUntil) {
+    return json({ blocked: true, reason: 'upstream refuses this IP range (cached verdict)', cached: true });
+  }
+  const cachedVerdict = await caches.default.match(verdictKey);
+  if (cachedVerdict) {
+    oskyBlockedUntil = Date.now() + 300000;
+    return json({ blocked: true, reason: 'upstream refuses this IP range (cached verdict)', cached: true });
+  }
+
+  const markBlocked = (reason, extra = {}) => {
+    oskyBlockedUntil = Date.now() + 1800000;
+    ctx.waitUntil(
+      caches.default.put(
+        verdictKey,
+        new Response('blocked', { headers: { 'Cache-Control': 'public, max-age=1800' } })
+      )
+    );
+    return json({ blocked: true, reason, ...extra });
+  };
+
+  let res;
+  try {
+    res = await fetch(`https://opensky-network.org/api/states/all?${box}`, {
+      headers,
+      signal: AbortSignal.timeout(8000),
+    });
+  } catch (e) {
+    return markBlocked('connection timed out from datacenter IP');
+  }
+
+  // OpenSky refuses Cloudflare egress IPs — 522/403/429 here is the upstream
+  // rejecting the datacenter range, not a bad query. Say so explicitly so the
+  // dashboard can label it instead of showing a generic OFFLINE.
+  if (res.status === 522 || res.status === 403 || res.status === 429) {
+    return markBlocked(`upstream returned ${res.status} to datacenter IP`, { authenticated: Boolean(token) });
+  }
+  if (!res.ok) return err(`opensky ${res.status}`, 502);
 
   const data = await res.json();
   return json(data, 200, {
@@ -470,8 +588,8 @@ export default {
     const path = url.pathname.replace(/\/+$/, '') || '/';
 
     try {
-      if (path === '/p') return await passthrough(request, ctx);
-      if (path === '/osky') return await opensky(request, env);
+      if (path === '/p') return await passthrough(request, env, ctx);
+      if (path === '/osky') return await opensky(request, env, ctx);
       if (path === '/gfw/events') return await gfwEvents(request, env);
       if (path === '/acled') return await acled(request, env);
       if (path === '/firms') return await firms(request, env);

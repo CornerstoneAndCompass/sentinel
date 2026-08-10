@@ -7,6 +7,15 @@
   "observability": {
     "enabled": true
   },
+  // caches.default is per-datacenter, so a cache warmed in one colo does
+  // nothing for a client hitting another. KV is globally replicated, which is
+  // what a heavily-throttled upstream like GDELT actually needs.
+  "kv_namespaces": [
+    {
+      "binding": "FEED_CACHE",
+      "id": "524df388794b470ab82034c599c068f2"
+    }
+  ],
   "durable_objects": {
     "bindings": [
       {
