@@ -215,6 +215,21 @@ html,body{width:100%;height:100%;overflow:hidden;background:#050a12;font-family:
   font-family:inherit;font-size:8px;letter-spacing:1px;padding:1px 5px;cursor:pointer;line-height:1.5}
 .grp-ctl button:hover{border-color:var(--c);color:var(--c)}
 .card-title{display:flex;align-items:center}
+/* Both panels are fixed overlays on a full-bleed map, so collapsing them is
+   pure gain: 590px of the viewport was permanently spent on chrome. */
+.left-panel,.right-panel{transition:transform .22s ease,opacity .22s ease}
+.left-panel.collapsed{transform:translateX(-272px);opacity:0;pointer-events:none}
+.right-panel.collapsed{transform:translateX(362px);opacity:0;pointer-events:none}
+.panel-rail{position:fixed;top:50%;transform:translateY(-50%);z-index:5001;
+  width:16px;height:64px;padding:0;cursor:pointer;
+  background:rgba(8,12,20,.85);border:1px solid var(--brd);color:var(--tm);
+  font-family:inherit;font-size:13px;line-height:1;transition:left .22s ease,right .22s ease}
+.panel-rail:hover{border-color:var(--c);color:var(--c)}
+#railL{left:266px}
+#railL.shut{left:2px}
+#railR{right:356px}
+#railR.shut{right:2px}
+@media(max-width:900px){.panel-rail{display:none}}
 .alert-item.clickable{cursor:pointer}
 .alert-item.clickable:hover{background:rgba(0,232,255,.07)}
 .alert-go{color:var(--c);letter-spacing:1px;opacity:.75}
@@ -581,7 +596,7 @@ html,body{width:100%;height:100%;overflow:hidden;background:#050a12;font-family:
 <div class="search-wrap"><input type="text" class="search-input" id="searchInput" placeholder="SEARCH CALLSIGN / HEX / COUNTRY / TYPE... [/]"></div>
 
 <!-- LEFT PANEL -->
-<div class="left-panel">
+<div class="left-panel" id="panelL">
 <div class="mob-panel-head"><div><div class="mob-panel-title">CONTROL PANEL</div><div class="mob-panel-sub">Live counts, map layers &amp; navigation</div></div><button class="mob-panel-x" onclick="toggleMobPanel('left')">&#x2715;</button></div>
 <div class="card" id="cardTracking">
 <div class="card-title">Live Tracking</div>
@@ -704,7 +719,7 @@ html,body{width:100%;height:100%;overflow:hidden;background:#050a12;font-family:
 </div>
 
 <!-- RIGHT PANEL -->
-<div class="right-panel">
+<div class="right-panel" id="panelR">
 <div class="sheet-handle"></div>
 <div class="mob-panel-head"><div><div class="mob-panel-title">INTEL FEED</div><div class="mob-panel-sub">Tracked assets, alerts, news &amp; threats</div></div><button class="mob-panel-x" onclick="toggleMobPanel('right')">&#x2715;</button></div>
 <div class="card" style="padding:0;display:flex;flex-direction:column;flex:1;overflow:hidden">
@@ -754,6 +769,9 @@ html,body{width:100%;height:100%;overflow:hidden;background:#050a12;font-family:
 <div class="shortcut-row"><span class="shortcut-key">ESC</span><span class="shortcut-desc">Close panels</span></div>
 <div class="shortcut-row"><span class="shortcut-key">1-7</span><span class="shortcut-desc">Switch tabs (Assets/Alerts/Intel/Threats/Events/Chokes/Log)</span></div>
 <div class="shortcut-row"><span class="shortcut-key">R</span><span class="shortcut-desc">Force refresh all data</span></div>
+<div class="shortcut-row"><span class="shortcut-key">[</span><span class="shortcut-desc">Hide or show the left panel</span></div>
+<div class="shortcut-row"><span class="shortcut-key">]</span><span class="shortcut-desc">Hide or show the right panel</span></div>
+<div class="shortcut-row"><span class="shortcut-key">F</span><span class="shortcut-desc">Focus mode — hide both panels for a clean map</span></div>
 <div class="shortcut-row"><span class="shortcut-key">S</span><span class="shortcut-desc">Generate SITREP briefing</span></div>
 <div class="shortcut-row"><span class="shortcut-key">G</span><span class="shortcut-desc">Global view</span></div>
 <div class="shortcut-row"><span class="shortcut-key">F</span><span class="shortcut-desc">Toggle fullscreen</span></div>
@@ -814,6 +832,8 @@ Use the bar below: <b>LAYERS</b> picks what's on the map, <b>INTEL</b> has alert
 <button class="mtab" id="mtabSitrep" onclick="mobTab('sitrep')"><svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg><span>SITREP</span></button>
 </div>
 
+<button class="panel-rail" id="railL" onclick="togglePanel('L')" title="Hide or show the left panel  [ ">‹</button>
+<button class="panel-rail" id="railR" onclick="togglePanel('R')" title="Hide or show the right panel  ] ">›</button>
 <div class="zoom-badge" id="zoomBadge">ZOOM: -- | SHOWING: ALL</div>
 
 <div class="bottom-bar">
@@ -3120,6 +3140,31 @@ function toggleDefconPop(){
 }
 
 // --- ALERTS SYSTEM ---
+/* ---- panel collapse ----
+   The map is the product; 590px of permanent chrome was competing with it.
+   Collapse state persists, and the map is re-sized afterwards because Leaflet
+   caches container dimensions.
+*/
+function togglePanel(which,force){
+  const panel=document.getElementById('panel'+which);
+  const rail=document.getElementById('rail'+which);
+  if(!panel)return;
+  const shut=force!==undefined?force:!panel.classList.contains('collapsed');
+  panel.classList.toggle('collapsed',shut);
+  if(rail){rail.classList.toggle('shut',shut);rail.textContent=which==='L'?(shut?'›':'‹'):(shut?'‹':'›');}
+  localStorage.setItem('sentinel_panel'+which,shut?'shut':'open');
+  setTimeout(()=>{ensureMapSized();renderMarkers();},240);
+}
+// Hide both for a clean map.
+function focusMode(){
+  const anyOpen=!document.getElementById('panelL').classList.contains('collapsed')
+             || !document.getElementById('panelR').classList.contains('collapsed');
+  togglePanel('L',anyOpen);togglePanel('R',anyOpen);
+}
+function restorePanels(){
+  ['L','R'].forEach(w=>{if(localStorage.getItem('sentinel_panel'+w)==='shut')togglePanel(w,true);});
+}
+
 /* ---- layer group control ----
    Reuses each button's own click handler rather than reimplementing the toggle
    logic, so any side effects those handlers have still happen.
@@ -3458,6 +3503,9 @@ document.addEventListener('keydown',e=>{
   if(e.key==='?')document.getElementById('shortcutsOverlay').classList.toggle('show');
   if(e.key==='/'){e.preventDefault();document.getElementById('searchInput').focus();}
   if(e.key==='r'||e.key==='R'){fetchAll();fetchEarthquakes();fetchGDELT();fetchNews();fetchFIRMS();}
+  if(e.key==='[')togglePanel('L');
+  if(e.key===']')togglePanel('R');
+  if(e.key==='f'||e.key==='F')focusMode();
   if(e.key==='s'||e.key==='S')generateSitrep();
   if(e.key==='g'||e.key==='G')flyTo(20,0,2);
   if(e.key==='f'||e.key==='F'){if(!document.fullscreenElement)document.documentElement.requestFullscreen();else document.exitFullscreen();}
@@ -4166,6 +4214,7 @@ async function boot(){
   // once the real layout is visible.
   setTimeout(()=>{ensureMapSized();renderMarkers();},120);
   updateNotifyBtn();
+  restorePanels();
 }
 boot();
 
