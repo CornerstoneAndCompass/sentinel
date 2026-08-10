@@ -268,6 +268,10 @@ html,body{width:100%;height:100%;overflow:hidden;background:#050a12;font-family:
   font-size:9px;padding:2px 7px;cursor:pointer;letter-spacing:1px}
 #radarPlay:hover{background:var(--c);color:#000}
 @media(max-width:900px){#radarBar{bottom:150px}}
+/* A world dashboard should say when a number is really one country's. */
+.scope-tag{font-size:8px;letter-spacing:1px;border:1px solid var(--brd);color:var(--td);
+  padding:0 3px;margin-left:4px;vertical-align:middle}
+.scope-tag.us{border-color:var(--o);color:var(--o)}
 .cb-advisory{border:1px solid;padding:8px 10px;margin:10px 0 2px;background:rgba(255,255,255,.02)}
 .cb-adv-h{font-family:'Orbitron',sans-serif;font-size:10px;letter-spacing:2px}
 .cb-adv-sub{color:var(--tm);font-size:10px;margin-top:4px;line-height:1.45}
@@ -690,8 +694,8 @@ html,body{width:100%;height:100%;overflow:hidden;background:#050a12;font-family:
 <div class="card" id="cardHazards">
 <div class="card-title">Hazards</div>
 <div class="stat-row" title="Earthquakes detected in the last 24 hours (USGS)"><span class="stat-label">EARTHQUAKES</span><span class="stat-val cr" style="font-size:12px" id="sQuake">--</span></div>
-<div class="stat-row" title="Fire hotspots seen from satellite (NASA FIRMS)"><span class="stat-label">FIRE HOTSPOTS</span><span class="stat-val co" style="font-size:12px" id="sFires">--</span></div>
-<div class="stat-row" title="Active severe weather alerts (US NWS)"><span class="stat-label">SEVERE WEATHER</span><span class="stat-val cy" style="font-size:12px" id="sWxAlerts">--</span></div>
+<div class="stat-row" title="NASA EONET open wildfire events. EONET's wildfire reporting is overwhelmingly US-sourced — set a FIRMS key in the Worker for genuine global hotspots."><span class="stat-label">FIRES <span class="scope-tag">EONET</span></span><span class="stat-val co" style="font-size:12px" id="sFires">--</span></div>
+<div class="stat-row" title="US National Weather Service only. Most carry no geometry, so they cannot be mapped. Global weather comes from GDACS and Open-Meteo in the country brief."><span class="stat-label">SEVERE WX <span class="scope-tag us">US</span></span><span class="stat-val cy" style="font-size:12px" id="sWxAlerts">--</span></div>
 <div class="stat-row" title="Geomagnetic activity — storms can disrupt GPS and radio"><span class="stat-label">SOLAR ACTIVITY</span><span class="stat-val cp" style="font-size:12px" id="sKp">--</span></div>
 <div class="stat-row" title="Volcanoes showing elevated activity"><span class="stat-label">VOLCANOES</span><span class="stat-val co" style="font-size:12px" id="sVolcano">--</span></div>
 <div class="stat-row" title="Active tsunami warnings (NOAA)"><span class="stat-label">TSUNAMI ALERTS</span><span class="stat-val cr" style="font-size:12px" id="sTsunami">--</span></div>
@@ -702,7 +706,7 @@ html,body{width:100%;height:100%;overflow:hidden;background:#050a12;font-family:
 <div class="stat-row" title="Tracked vessels matching sanctions lists"><span class="stat-label">SANCTIONED</span><span class="stat-val" style="font-size:12px;color:#ff0044" id="sSanctioned">--</span></div>
 <div class="stat-row" title="Zones with known GPS signal jamming"><span class="stat-label">GPS JAMMING</span><span class="stat-val cp" style="font-size:12px" id="sJam">--</span></div>
 <div class="stat-row" title="Watch zones you've drawn on the map"><span class="stat-label">GEOFENCES</span><span class="stat-val cy" style="font-size:12px" id="sGeo">0</span></div>
-<div class="stat-row" title="Airspace restrictions and flight notices"><span class="stat-label">AIRSPACE NOTICES</span><span class="stat-val cy" style="font-size:12px" id="sNotam">--</span></div>
+<div class="stat-row" title="FAA temporary flight restrictions — United States only."><span class="stat-label">AIRSPACE <span class="scope-tag us">US</span></span><span class="stat-val cy" style="font-size:12px" id="sNotam">--</span></div>
 <div class="stat-row" title="Maritime piracy risk zones"><span class="stat-label">PIRACY ZONES</span><span class="stat-val cr" style="font-size:12px" id="sPiracy">--</span></div>
 <div class="stat-row" title="Armed conflict and border incidents"><span class="stat-label">CONFLICTS</span><span class="stat-val cr" style="font-size:12px" id="sConflict">--</span></div>
 <div class="stat-row" title="Regions with active cyber threat campaigns"><span class="stat-label">CYBER THREATS</span><span class="stat-val cp" style="font-size:12px" id="sCyber">--</span></div>
@@ -940,8 +944,8 @@ window.addEventListener('unhandledrejection',e=>{console.warn('Unhandled rejecti
 const BOOT_START=Date.now();
 
 // --- MAP ---
-const map = L.map('map',{center:[25,20],zoom:3,zoomControl:false,attributionControl:false,preferCanvas:true,minZoom:1,worldCopyJump:true,maxBoundsViscosity:0});
-const _baseTile=L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',{maxZoom:19,subdomains:'abcd'}).addTo(map);
+const map = L.map('map',{center:[25,20],zoom:3,zoomControl:false,attributionControl:false,preferCanvas:true,minZoom:1,maxZoom:20,worldCopyJump:true,maxBoundsViscosity:0});
+const _baseTile=L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',{maxNativeZoom:19,maxZoom:20,subdomains:'abcd'}).addTo(map);
 
 // --- STATE ---
 // --- FEED PROXY ---
@@ -991,7 +995,7 @@ const state={
   alerts:[],news:[],gdeltEvents:[],earthquakes:[],fires:[],notamMarkers:[],cableLines:[],nukeMarkers:[],piracyMarkers:[],wildfireMarkers:[],cyberMarkers:[],refugeeMarkers:[],milbaseMarkers:[],rfMarkers:[],droneMarkers:[],ntestMarkers:[],conflictMarkers:[],volcanoMarkers:[],tsunamiMarkers:[],
   threats:{},defcon:4,threatScore:0,
   proxyHealth:null,darkEvents:[],darkMarkers:[],reliefEvents:[],acledEvents:[],
-  visible:[],gdacs:[],gdacsMarkers:[],bom:[],bomMarkers:[],who:[],fcdo:null,
+  visible:[],gdacs:[],gdacsMarkers:[],bom:[],bomMarkers:[],who:[],fcdo:null,conditions:null,
   sources:{},refreshInterval:30,countdown:30,lastFetch:null
 };
 
@@ -3904,11 +3908,19 @@ setInterval(cleanStaleAssets,120000);
 // ============ SPY AGENCY MODULES v19 ============
 
 // --- MAP MODE SWITCHER ---
+// maxZoom on a *tile layer* tells Leaflet to stop drawing that layer above the
+// given zoom, so TOPO simply vanished past z17 and the providers' own
+// "no tiles available at this zoom level" placeholder images showed through —
+// which is the "not supported" message you get zooming in.
+//
+// maxNativeZoom is the right property: it caps what is requested from the
+// server and upscales the deepest real tile beyond that, so zooming in keeps
+// working (blurrier, but present) at every level.
 const MAP_TILES={
   dark:_baseTile,
-  satellite:L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',{maxZoom:19,attribution:'Esri'}),
-  nvg:L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_nolabels/{z}/{x}/{y}{r}.png',{maxZoom:19,subdomains:'abcd'}),
-  topo:L.tileLayer('https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png',{maxZoom:17,subdomains:'abc'})
+  satellite:L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',{maxNativeZoom:18,maxZoom:20,attribution:'Esri'}),
+  nvg:L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_nolabels/{z}/{x}/{y}{r}.png',{maxNativeZoom:19,maxZoom:20,subdomains:'abcd'}),
+  topo:L.tileLayer('https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png',{maxNativeZoom:17,maxZoom:20,subdomains:'abc'})
 };
 let currentMapMode='dark';
 function setMapMode(mode){
@@ -4286,6 +4298,129 @@ addAlert=function(level,text,meta){
   // Timeline renders on its own 60s interval — no DOM rebuild per alert
 };
 
+/* ==================== UNIFORM GLOBAL WEATHER ====================
+   Most of the warning feeds are national, and the national ones with the best
+   APIs happen to be American, which quietly made the whole picture US-shaped:
+   EONET's open wildfire events were 30 out of 30 inside the United States, and
+   the "SEVERE WEATHER" counter was the National Weather Service alone.
+
+   Open-Meteo runs the same models over the whole planet with no key and no
+   regional gaps, so every country gets identical treatment rather than
+   whichever ones publish good APIs.
+*/
+const WMO_CODE={0:'Clear',1:'Mainly clear',2:'Partly cloudy',3:'Overcast',45:'Fog',48:'Rime fog',
+  51:'Light drizzle',53:'Drizzle',55:'Heavy drizzle',56:'Freezing drizzle',57:'Freezing drizzle',
+  61:'Light rain',63:'Rain',65:'Heavy rain',66:'Freezing rain',67:'Freezing rain',
+  71:'Light snow',73:'Snow',75:'Heavy snow',77:'Snow grains',
+  80:'Rain showers',81:'Rain showers',82:'Violent rain showers',85:'Snow showers',86:'Heavy snow showers',
+  95:'Thunderstorm',96:'Thunderstorm with hail',99:'Severe thunderstorm with hail'};
+
+// bbox centres fall in the sea for archipelagos and crescent-shaped countries,
+// so use the centroid of the largest ring instead.
+function countryCentroid(c){
+  let best=null,bestLen=0;
+  for(const poly of c.polys){
+    const ring=poly[0];
+    if(ring.length>bestLen){bestLen=ring.length;best=ring;}
+  }
+  if(!best)return[(c.bbox[0]+c.bbox[2])/2,(c.bbox[1]+c.bbox[3])/2];
+  let x=0,y=0;
+  for(const p of best){x+=p[0];y+=p[1];}
+  return[y/best.length,x/best.length];
+}
+
+// A single centroid is meaningless for a continent — Australia's lands in the
+// desert near Alice Springs and tells you nothing about where anyone lives.
+// Open-Meteo accepts multiple coordinates in one request, so populated places
+// are sampled instead where we know them.
+const COUNTRY_POINTS={
+  AUS:[['Sydney',-33.87,151.21],['Melbourne',-37.81,144.96],['Brisbane',-27.47,153.03],
+       ['Perth',-31.95,115.86],['Adelaide',-34.93,138.60],['Darwin',-12.46,130.84],
+       ['Hobart',-42.88,147.33],['Canberra',-35.28,149.13]]
+};
+
+const _omCache=new Map();
+async function fetchConditions(c){
+  const key=c.iso3||c.name;
+  const hit=_omCache.get(key);
+  if(hit&&Date.now()-hit.at<900000)return hit.data;   // 15 min is plenty
+  const pts=COUNTRY_POINTS[c.iso3];
+  if(pts){
+    try{
+      const d=await fetchJ('https://api.open-meteo.com/v1/forecast'
+        +'?latitude='+pts.map(p=>p[1]).join(',')
+        +'&longitude='+pts.map(p=>p[2]).join(',')
+        +'&current=temperature_2m,wind_speed_10m,wind_gusts_10m,precipitation,weather_code'
+        +'&daily=precipitation_sum,wind_gusts_10m_max,temperature_2m_max,temperature_2m_min'
+        +'&forecast_days=3&timezone=UTC',20000);
+      const arr=Array.isArray(d)?d:[d];
+      const out={multi:true,places:arr.map((r,i)=>{
+        const cur=r.current||{},day=r.daily||{};
+        return{
+          name:pts[i]?pts[i][0]:'Point '+(i+1),
+          lat:pts[i]?pts[i][1]:r.latitude,lon:pts[i]?pts[i][2]:r.longitude,
+          temp:cur.temperature_2m,wind:cur.wind_speed_10m,gust:cur.wind_gusts_10m,
+          precip:cur.precipitation,code:cur.weather_code,desc:WMO_CODE[cur.weather_code]||'—',
+          daily:(day.time||[]).map((t,j)=>({date:t,
+            rain:day.precipitation_sum?day.precipitation_sum[j]:null,
+            gust:day.wind_gusts_10m_max?day.wind_gusts_10m_max[j]:null,
+            tmax:day.temperature_2m_max?day.temperature_2m_max[j]:null,
+            tmin:day.temperature_2m_min?day.temperature_2m_min[j]:null}))
+        };
+      })};
+      _omCache.set(key,{at:Date.now(),data:out});
+      return out;
+    }catch(e){return null;}
+  }
+  const[lat,lon]=countryCentroid(c);
+  try{
+    const d=await fetchJ('https://api.open-meteo.com/v1/forecast'
+      +`?latitude=${lat.toFixed(3)}&longitude=${lon.toFixed(3)}`
+      +'&current=temperature_2m,wind_speed_10m,wind_gusts_10m,precipitation,weather_code'
+      +'&daily=precipitation_sum,wind_gusts_10m_max,temperature_2m_max,temperature_2m_min'
+      +'&forecast_days=3&timezone=UTC',15000);
+    const cur=d.current||{},day=d.daily||{};
+    const out={
+      lat,lon,
+      temp:cur.temperature_2m,wind:cur.wind_speed_10m,gust:cur.wind_gusts_10m,
+      precip:cur.precipitation,
+      code:cur.weather_code,desc:WMO_CODE[cur.weather_code]||'—',
+      daily:(day.time||[]).map((t,i)=>({
+        date:t,
+        rain:day.precipitation_sum?day.precipitation_sum[i]:null,
+        gust:day.wind_gusts_10m_max?day.wind_gusts_10m_max[i]:null,
+        tmax:day.temperature_2m_max?day.temperature_2m_max[i]:null,
+        tmin:day.temperature_2m_min?day.temperature_2m_min[i]:null
+      }))
+    };
+    _omCache.set(key,{at:Date.now(),data:out});
+    return out;
+  }catch(e){return null;}
+}
+
+// Thresholds so a country with no warning service still surfaces obviously bad
+// weather. These are deliberately conservative — this is a prompt to look, not
+// a substitute for a national warning.
+function conditionFlags(w){
+  if(!w)return[];
+  if(w.multi){
+    // Name the place, otherwise "damaging wind" across a continent is useless.
+    const out=[];
+    for(const p of w.places||[])for(const g of conditionFlags(p))out.push({...g,t:p.name+': '+g.t});
+    return out.slice(0,8);
+  }
+  const f=[];
+  for(const d of w.daily||[]){
+    if(d.gust!=null&&d.gust>=90)f.push({t:'Damaging wind '+Math.round(d.gust)+'km/h',d:d.date,sev:'high'});
+    else if(d.gust!=null&&d.gust>=65)f.push({t:'Strong wind '+Math.round(d.gust)+'km/h',d:d.date,sev:'mod'});
+    if(d.rain!=null&&d.rain>=80)f.push({t:'Heavy rain '+Math.round(d.rain)+'mm',d:d.date,sev:'high'});
+    else if(d.rain!=null&&d.rain>=40)f.push({t:'Rain '+Math.round(d.rain)+'mm',d:d.date,sev:'mod'});
+    if(d.tmax!=null&&d.tmax>=40)f.push({t:'Extreme heat '+Math.round(d.tmax)+'°C',d:d.date,sev:'high'});
+  }
+  if(w.code>=95)f.push({t:WMO_CODE[w.code]||'Thunderstorm',d:'now',sev:'high'});
+  return f.slice(0,6);
+}
+
 /* ==================== CIVIL WARNINGS ====================
    Official government travel advice and WHO health emergencies — the part of
    the International SOS model that is not weather or conflict tracking.
@@ -4562,9 +4697,13 @@ async function openCountryBrief(isoOrName,lat,lon){
     state.fcdo=null;
     renderCountryBrief();
     renderWatchlist();
+    state.conditions=null;
     fetchFCDO(c).then(f=>{
       // Guard against a slow response landing after the user moved on.
       if(_briefCountry===c){state.fcdo=f;renderCountryBrief();}
+    });
+    fetchConditions(c).then(w=>{
+      if(_briefCountry===c){state.conditions=w;renderCountryBrief();}
     });
     if(!document.getElementById('cbPicker').options.length)populateCountryPicker();
     document.getElementById('cbPicker').value=c.iso||c.name;
@@ -4649,6 +4788,33 @@ function renderCountryBrief(){
           <span class="cb-b">${esc(e.name||e.country)}</span>
           <span class="cb-c">${esc((e.from||'').slice(0,10))}</span></div>`,
        'No active disaster alerts')
+    +briefSection('Conditions & outlook (Open-Meteo, global)',
+       state.conditions?[state.conditions]:[],
+       w=>{
+         const flags=conditionFlags(w);
+         if(w.multi){
+           return (w.places||[]).map(p=>{
+             const d0=(p.daily||[])[0]||{},d1=(p.daily||[])[1]||{};
+             return `<div class="cb-row" onclick="closeCountryBrief();focusAlert({lat:${p.lat},lon:${p.lon},zoom:9})">
+               <span class="cb-a">${esc(p.name)} · ${p.temp!=null?Math.round(p.temp)+'°C':'—'}</span>
+               <span class="cb-b">${esc(p.desc)}${p.wind!=null?' · wind '+Math.round(p.wind):''}${p.gust!=null?' gust '+Math.round(p.gust):''}km/h</span>
+               <span class="cb-c">${d0.rain!=null?Math.round(d0.rain)+'mm':''}${d1.rain!=null?' / '+Math.round(d1.rain)+'mm':''}</span></div>`;
+           }).join('')
+           +(flags.length?`<div class="cb-row" style="cursor:default;flex-wrap:wrap">
+              <span class="cb-a" style="color:var(--o);flex:1 1 100%">${flags.map(f=>esc(f.t)).join(' · ')}</span></div>`:'');
+         }
+         return `<div class="cb-row" style="cursor:default">
+             <span class="cb-a">${esc(w.desc)} · ${w.temp!=null?Math.round(w.temp)+'°C':'—'}</span>
+             <span class="cb-b">wind ${w.wind!=null?Math.round(w.wind):'—'}km/h${w.gust!=null?' gust '+Math.round(w.gust):''}</span>
+             <span class="cb-c">${w.precip!=null?w.precip+'mm':''}</span></div>`
+           +(w.daily||[]).map(d=>`<div class="cb-row" style="cursor:default;opacity:.75">
+             <span class="cb-a">${esc((d.date||'').slice(5))}</span>
+             <span class="cb-b">${d.tmin!=null?Math.round(d.tmin)+'–'+Math.round(d.tmax)+'°C':''}</span>
+             <span class="cb-c">${d.rain!=null?Math.round(d.rain)+'mm':''} ${d.gust!=null?Math.round(d.gust)+'km/h':''}</span></div>`).join('')
+           +(flags.length?`<div class="cb-row" style="cursor:default;flex-wrap:wrap">
+             <span class="cb-a" style="color:var(--o);flex:1 1 100%">${flags.map(f=>esc(f.t)+' ('+esc(String(f.d).slice(5))+')').join(' · ')}</span></div>`:'');
+       },
+       'Loading…')
     +briefSection('Bureau of Meteorology warnings',b.bom,w=>
        `<div class="cb-row" style="cursor:default">
           <span class="cb-a">${esc(w.short||w.type)}</span>
@@ -4689,9 +4855,15 @@ function renderCountryBrief(){
        `<div class="cb-row" onclick="window.open('${esc(n.url)}','_blank','noopener')">
           <span class="cb-a" style="flex:3">${esc((n.title||'').slice(0,72))}</span><span class="cb-c">${esc(n.source||'')}</span></div>`)
     +briefFlush()
-    +`<div class="cb-foot">Borders: Natural Earth 110m. Aircraft and vessel coverage depends on
-        community ADS-B and AIS receiver density, which is thin over much of the world —
-        an empty section means no reception, not necessarily no activity.</div>`;
+    +`<div class="cb-foot">
+        <b>Coverage.</b> Global sources: GDACS, Open-Meteo, USGS seismic, WHO, FCDO, GDELT, rain radar.
+        Single-country sources: Bureau of Meteorology (Australia), National Weather Service (United States),
+        FAA airspace notices (United States). NASA EONET's open wildfire events are currently
+        30 of 30 inside the United States, so the fire count reflects where that programme reports,
+        not where the world is burning — a NASA FIRMS key replaces it with genuine global hotspots.<br>
+        Aircraft and vessel coverage follows community ADS-B and AIS receiver density, which is thin
+        over much of the world: an empty section means no reception, not necessarily no activity.<br>
+        Borders: Natural Earth 110m.</div>`;
 }
 
 // Refresh the open brief when new data lands, so it behaves like a live view
