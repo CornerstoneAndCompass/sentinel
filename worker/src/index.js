@@ -393,21 +393,72 @@ async function gfwEvents(request, env) {
   return json({ configured: true, ...data }, 200, { 'Cache-Control': 'public, max-age=900' });
 }
 
+// ACLED retired the key+email query-parameter API on 15 September 2025 and
+// moved to OAuth2. The password grant is their design, not a choice made here;
+// the credentials live in Worker secrets set by the account holder and are never
+// sent to the browser. Access tokens last 24h and refresh tokens 14 days, so the
+// refresh path is used whenever possible to avoid replaying the password.
+let acledToken = { access: null, refresh: null, expires: 0 };
+
+async function acledAuth(env) {
+  if (acledToken.access && Date.now() < acledToken.expires) return acledToken.access;
+
+  const form = new URLSearchParams({ client_id: 'acled' });
+  if (acledToken.refresh) {
+    form.set('grant_type', 'refresh_token');
+    form.set('refresh_token', acledToken.refresh);
+  } else {
+    form.set('grant_type', 'password');
+    form.set('username', env.ACLED_EMAIL);
+    form.set('password', env.ACLED_PASSWORD);
+    form.set('scope', 'authenticated');
+  }
+
+  let res = await fetch('https://acleddata.com/oauth/token', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: form,
+  });
+
+  // An expired or rejected refresh token falls back to a full re-auth once.
+  if (!res.ok && acledToken.refresh) {
+    acledToken = { access: null, refresh: null, expires: 0 };
+    return acledAuth(env);
+  }
+  if (!res.ok) throw new Error(`acled auth ${res.status}`);
+
+  const d = await res.json();
+  acledToken = {
+    access: d.access_token,
+    refresh: d.refresh_token || acledToken.refresh,
+    expires: Date.now() + (d.expires_in || 86400) * 1000 - 120000,
+  };
+  return acledToken.access;
+}
+
 async function acled(request, env) {
-  if (!env.ACLED_KEY || !env.ACLED_EMAIL) return json({ configured: false, data: [] });
+  if (!env.ACLED_EMAIL || !env.ACLED_PASSWORD) return json({ configured: false, data: [] });
 
   const p = new URL(request.url).searchParams;
   const days = Math.min(parseInt(p.get('days') || '7', 10), 30);
   const since = new Date(Date.now() - days * 86400000).toISOString().slice(0, 10);
 
-  const url = new URL('https://api.acleddata.com/acled/read');
-  url.searchParams.set('key', env.ACLED_KEY);
-  url.searchParams.set('email', env.ACLED_EMAIL);
+  let token;
+  try {
+    token = await acledAuth(env);
+  } catch (e) {
+    return json({ configured: true, error: e.message, data: [] });
+  }
+
+  const url = new URL('https://acleddata.com/api/acled/read');
   url.searchParams.set('event_date', since);
   url.searchParams.set('event_date_where', '>=');
   url.searchParams.set('limit', p.get('limit') || '300');
+  if (p.get('iso3')) url.searchParams.set('iso3', p.get('iso3'));
 
-  const res = await fetch(url.toString(), { headers: { Accept: 'application/json' } });
+  const res = await fetch(url.toString(), {
+    headers: { Authorization: `Bearer ${token}`, Accept: 'application/json' },
+  });
   if (!res.ok) return json({ configured: true, error: `acled ${res.status}`, data: [] }, 200);
 
   const data = await res.json();
@@ -612,7 +663,7 @@ export default {
             opensky: Boolean(env.OPENSKY_CLIENT_ID && env.OPENSKY_CLIENT_SECRET),
             aisstream: Boolean(env.AISSTREAM_KEY),
             gfw: Boolean(env.GFW_TOKEN),
-            acled: Boolean(env.ACLED_KEY && env.ACLED_EMAIL),
+            acled: Boolean(env.ACLED_EMAIL && env.ACLED_PASSWORD),
             firms: Boolean(env.FIRMS_KEY),
           },
         });

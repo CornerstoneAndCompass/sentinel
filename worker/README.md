@@ -81,10 +81,18 @@ npx wrangler secret put AISSTREAM_KEY
 # Free token at https://globalfishingwatch.org/our-apis/tokens
 npx wrangler secret put GFW_TOKEN
 
-# ACLED — armed conflict events, fills the currently-empty conflict layer.
-# Free account at https://acleddata.com/register
-npx wrangler secret put ACLED_KEY
+# ACLED — armed conflict events, fills the "recorded incidents" section of
+# every country brief. Free account at https://acleddata.com/register
+#
+# ACLED retired the old key+email API on 15 September 2025. It is now OAuth2,
+# and their only grant type is the password grant — so this is your account
+# password, not an API key. Set it yourself with the command below; it is typed
+# straight into wrangler, stored as a Cloudflare secret, and never reaches the
+# browser. The Worker uses the 14-day refresh token where it can so the password
+# is replayed rarely. If you would rather not store it, leave these unset — the
+# brief says "no ACLED key configured" and everything else works.
 npx wrangler secret put ACLED_EMAIL
+npx wrangler secret put ACLED_PASSWORD
 
 # NASA FIRMS — real thermal hotspots instead of the EONET fallback.
 # Free key at https://firms.modaps.eosdis.nasa.gov/api/area/

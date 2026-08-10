@@ -261,6 +261,17 @@ html,body{width:100%;height:100%;overflow:hidden;background:#050a12;font-family:
 .cb-b{flex:2;color:var(--tm);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .cb-c{flex:1;color:var(--td);text-align:right;white-space:nowrap}
 .cb-foot{margin-top:12px;padding-top:8px;border-top:1px solid var(--brd);font-size:9px;color:var(--td);line-height:1.5}
+#cbWatch{margin-left:12px;background:transparent;border:1px solid var(--brd);color:var(--td);
+  font-family:inherit;font-size:9px;letter-spacing:1px;padding:3px 9px;cursor:pointer;white-space:nowrap}
+#cbWatch:hover{border-color:var(--c);color:var(--c)}
+#cbWatch.on{border-color:var(--y);color:var(--y)}
+.watch-row{padding:6px 4px;border-bottom:1px solid var(--brd);cursor:pointer;display:grid;
+  grid-template-columns:auto 1fr auto;gap:6px;align-items:baseline}
+.watch-row:hover{background:rgba(0,232,255,.07)}
+.watch-flag{font-size:13px}
+.watch-name{font-size:11px;color:var(--tp);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.watch-lvl{font-size:9px;letter-spacing:1px}
+.watch-sub{grid-column:1/-1;font-size:9px;color:var(--td)}
 #contactTip{position:absolute;z-index:460;pointer-events:none;display:none;
   background:rgba(8,12,20,.92);border:1px solid var(--brd);color:var(--tp);
   font-family:'Share Tech Mono',monospace;font-size:11px;padding:3px 7px;white-space:nowrap}
@@ -622,6 +633,10 @@ html,body{width:100%;height:100%;overflow:hidden;background:#050a12;font-family:
 
 <!-- LEFT PANEL -->
 <div class="left-panel" id="panelL">
+<div class="card" id="cardWatch" style="display:none">
+<div class="card-title">Watchlist</div>
+<div id="watchBody"></div>
+</div>
 <div class="mob-panel-head"><div><div class="mob-panel-title">CONTROL PANEL</div><div class="mob-panel-sub">Live counts, map layers &amp; navigation</div></div><button class="mob-panel-x" onclick="toggleMobPanel('left')">&#x2715;</button></div>
 <div class="card" id="cardTracking">
 <div class="card-title">Live Tracking</div>
@@ -838,6 +853,7 @@ html,body{width:100%;height:100%;overflow:hidden;background:#050a12;font-family:
 <div class="status-box country-box" onclick="event.stopPropagation()">
 <div class="sitrep-header">
   <span class="sitrep-title" id="countryTitle">COUNTRY BRIEF</span>
+  <button id="cbWatch" onclick="toggleWatch(_briefCountry.iso||_briefCountry.name,_briefCountry.name)"></button>
   <select id="cbPicker" onchange="if(this.value)openCountryBrief(this.value)" title="Jump to another country"></select>
   <button class="article-close" onclick="closeCountryBrief()">CLOSE</button>
 </div>
@@ -3328,7 +3344,12 @@ function notifyPermission(){
   return Notification.requestPermission();
 }
 function desktopNotify(level,text,meta){
-  if(level!=='red')return;
+  // Red always notifies. Anything in a country you have pinned also notifies,
+  // because a moderate warning where you have people matters more than a red
+  // one on the other side of the world.
+  const watched=(typeof watchedCountryFor==='function')?watchedCountryFor(meta):null;
+  if(level!=='red'&&!(watched&&level==='orange'))return;
+  if(watched)text=watched.name.toUpperCase()+' — '+text;
   if(!('Notification'in window)||Notification.permission!=='granted')return;
   if(localStorage.getItem('sentinel_notify')==='off')return;
   try{
@@ -4287,6 +4308,7 @@ async function openCountryBrief(isoOrName,lat,lon){
     if(!c){body.innerHTML='<div style="padding:24px;text-align:center;color:var(--td);font-size:11px">No country at that location — open water or unmapped territory.</div>';return;}
     _briefCountry=c;
     renderCountryBrief();
+    renderWatchlist();
     if(!document.getElementById('cbPicker').options.length)populateCountryPicker();
     document.getElementById('cbPicker').value=c.iso||c.name;
   }catch(e){
@@ -4310,6 +4332,12 @@ function renderCountryBrief(){
   const esc=s=>String(s==null?'':s).replace(/[<>&]/g,m=>({'<':'&lt;','>':'&gt;','&':'&amp;'}[m]));
   const totalContacts=b.contacts.military.length+b.contacts.heli.length+b.contacts.vessel.length+b.contacts.gov.length;
 
+  const wb=document.getElementById('cbWatch');
+  if(wb){
+    const on=isWatched(c.iso||c.name);
+    wb.textContent=on?'★ WATCHING':'☆ WATCH';
+    wb.classList.toggle('on',on);
+  }
   document.getElementById('countryTitle').innerHTML=
     `${countryFlag(c.iso)} ${esc(c.name)}<span class="cb-risk" style="background:${b.color}22;border-color:${b.color};color:${b.color}">${b.level} · ${b.score}</span>`;
 
@@ -4391,6 +4419,80 @@ async function populateCountryPicker(){
   sel.innerHTML='<option value="">SELECT COUNTRY…</option>'
     +list.map(c=>`<option value="${c.iso||c.name}">${c.name}</option>`).join('');
 }
+
+/* ==================== COUNTRY WATCHLIST ====================
+   Pin the countries you actually care about. They get a permanent card at the
+   top of the left panel showing live security and hazard levels, and alerts
+   inside them are promoted to desktop notifications even when they are not
+   red — a moderate warning in a country you are responsible for matters more
+   than a red one on the other side of the world.
+*/
+function loadWatch(){
+  try{return JSON.parse(localStorage.getItem('sentinel_watch')||'[]');}catch(e){return[];}
+}
+function saveWatch(w){localStorage.setItem('sentinel_watch',JSON.stringify(w));}
+
+function isWatched(iso){return loadWatch().some(w=>w.iso===iso);}
+function toggleWatch(iso,name){
+  let w=loadWatch();
+  if(w.some(x=>x.iso===iso))w=w.filter(x=>x.iso!==iso);
+  else w.push({iso,name});
+  saveWatch(w);
+  renderWatchlist();
+  if(_briefCountry)renderCountryBrief();
+}
+
+// Which watched country, if any, does this alert fall inside?
+function watchedCountryFor(meta){
+  if(!meta||meta.lat==null||!_countries)return null;
+  const w=loadWatch();
+  if(!w.length)return null;
+  for(const entry of w){
+    const c=_countries.find(x=>(x.iso||x.name)===entry.iso);
+    if(c&&pointInCountry(meta.lat,meta.lon,c))return c;
+  }
+  return null;
+}
+
+function renderWatchlist(){
+  const card=document.getElementById('cardWatch');
+  const body=document.getElementById('watchBody');
+  if(!card||!body)return;
+  const w=loadWatch();
+  if(!w.length){
+    card.style.display='none';
+    return;
+  }
+  card.style.display='';
+  if(!_countries){
+    body.innerHTML='<div class="cb-empty">Open a country brief once to load border data.</div>';
+    return;
+  }
+  body.innerHTML=w.map(entry=>{
+    const c=_countries.find(x=>(x.iso||x.name)===entry.iso);
+    if(!c)return '';
+    const b=buildCountryBrief(c);
+    const worst=Math.max(b.security,b.hazard);
+    const col=worst>=70?'#ff0033':worst>=45?'#ff5522':worst>=22?'#ffaa00':'#3fb950';
+    const bits=[];
+    if(b.gdacs.length)bits.push(b.gdacs.length+' disaster');
+    if(b.bom.length)bits.push(b.bom.length+' BOM');
+    if(b.wx.length)bits.push(b.wx.length+' wx');
+    if(b.conflicts.length)bits.push(b.conflicts.length+' conflict');
+    const contacts=b.contacts.military.length+b.contacts.heli.length;
+    if(contacts)bits.push(contacts+' mil air');
+    return `<div class="watch-row" onclick="openCountryBrief('${entry.iso}')" title="Open the full brief">
+      <span class="watch-flag">${countryFlag(c.iso)}</span>
+      <span class="watch-name">${c.name}</span>
+      <span class="watch-lvl" style="color:${col}">${b.level}</span>
+      <div class="watch-sub">${bits.length?bits.join(' · '):'nothing active'}</div>
+    </div>`;
+  }).join('');
+}
+
+// Watchlist levels are derived from data that is already in memory, so this is
+// cheap — but border data has to exist first.
+setInterval(()=>{if(_countries&&loadWatch().length)renderWatchlist();},20000);
 
 // --- SITREP GENERATOR ---
 function generateSitrep(){
@@ -4637,6 +4739,7 @@ async function boot(){
   setTimeout(()=>{ensureMapSized();renderMarkers();},120);
   updateNotifyBtn();
   restorePanels();
+  renderWatchlist();
 }
 boot();
 
