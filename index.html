@@ -283,6 +283,8 @@ html,body{width:100%;height:100%;overflow:hidden;background:#050a12;font-family:
 .wx-band.on{border-color:var(--y);color:var(--y)}
 .wx-bands{gap:4px}
 .wx-note{color:var(--td);font-size:8px;letter-spacing:1px;margin:-1px 0 5px}
+.wx-sel{width:100%;background:var(--bg2);border:1px solid var(--brd);color:var(--tm);
+  font-family:inherit;font-size:9px;padding:2px 5px;letter-spacing:1px}
 @media(max-width:900px){#wxPanel{bottom:150px;min-width:0;width:92vw}}
 /* A world dashboard should say when a number is really one country's. */
 .scope-tag{font-size:8px;letter-spacing:1px;border:1px solid var(--brd);color:var(--td);
@@ -956,12 +958,20 @@ Use the bar below: <b>LAYERS</b> picks what's on the map, <b>INTEL</b> has alert
       <span class="wx-time" id="wxSatTime">--</span>
       <input type="range" min="0" max="100" value="65" class="wx-op" oninput="setLayerOpacity('sat',this.value)" title="Cloud opacity">
     </div>
-    <div class="wx-row wx-bands">
+    <div class="wx-row">
+      <select id="wxDisk" class="wx-sel" onchange="_satDisk=this.value;_lastDiskId=null;showSatFrame(_satIdx);syncWxButtons();" title="Which geostationary satellite to use">
+        <option value="auto">DISK: AUTO</option>
+        <option value="himawari">HIMAWARI-9</option>
+        <option value="goes-west">GOES-WEST</option>
+        <option value="goes-east">GOES-EAST</option>
+      </select>
+    </div>
+    <div class="wx-row wx-bands" id="wxBandRow">
       <button class="wx-band on" data-band="B13" onclick="setSatBand('B13')">IR</button>
       <button class="wx-band" data-band="REP" onclick="setSatBand('REP')">COLOUR</button>
       <button class="wx-band" data-band="B03" onclick="setSatBand('B03')">VISIBLE</button>
     </div>
-    <div class="wx-note">Asia-Pacific only · Himawari-9 · 10 min</div>
+    <div class="wx-note" id="wxSatNote">—</div>
     <div class="wx-row"><button id="wxLoopBtn" class="wx-tog wide" onclick="toggleWxLoop()">▶ LOOP</button></div>
   </div>
 </div>
@@ -1639,6 +1649,13 @@ async function onViewChanged(){
   renderAll();
   if(dropped)console.debug('pruned',dropped,'out-of-view contacts');
 }
+map.on('moveend',()=>{
+  if(state.layers.satimg&&_satDisk==='auto'){
+    const d=activeDisk();
+    if((d&&d.id)!==_lastDiskId){_lastDiskId=d&&d.id;showSatFrame(_satIdx);}
+  }
+});
+let _lastDiskId=null;
 map.on('moveend zoomend',()=>{
   clearTimeout(_viewTimer);
   _viewTimer=setTimeout(onViewChanged,500);   // debounce drag/zoom flurries
@@ -4329,6 +4346,33 @@ addAlert=function(level,text,meta){
    Bands: B13 infrared works day and night and is the sensible default; B03 is
    visible light and goes black over the night side; REP is a colour composite.
 */
+/* Three geostationary satellites see the whole world between them, and which
+   one you need depends on where you are looking. The disk is chosen from the
+   map centre and can be overridden.
+
+   Europe and Africa have no entry here on purpose: that sector belongs to
+   Meteosat, NASA GIBS carries no Meteosat layer, and EUMETSAT requires
+   registration. Rather than silently showing nothing, the panel says so. */
+const SAT_DISKS=[
+  {id:'himawari',label:'HIMAWARI-9',covers:'Asia-Pacific · Australia',lonMin:80,lonMax:180,src:'jma'},
+  {id:'goes-west',label:'GOES-WEST',covers:'Pacific · western Americas',lonMin:-180,lonMax:-100,src:'gibs',layer:'GOES-West_ABI_GeoColor'},
+  {id:'goes-east',label:'GOES-EAST',covers:'Americas · Atlantic',lonMin:-100,lonMax:-20,src:'gibs',layer:'GOES-East_ABI_GeoColor'}
+];
+function diskForLon(lon){
+  let l=lon;while(l>180)l-=360;while(l<-180)l+=360;
+  return SAT_DISKS.find(d=>l>=d.lonMin&&l<=d.lonMax)||null;
+}
+let _satDisk='auto';
+function activeDisk(){
+  if(_satDisk!=='auto')return SAT_DISKS.find(d=>d.id===_satDisk)||null;
+  return diskForLon(map.getCenter().lng);
+}
+// GIBS advertises a 10-minute grid but does not populate every slot: a
+// timestamp of 10:20Z 404s while 10:00Z and 09:00Z serve fine. Rather than
+// guess and retry, ask for "default", which GIBS resolves to the most recent
+// frame it actually holds.
+const GIBS_TIME='default';
+
 const HIMA_BANDS={
   B13:{path:'B13/TBB',label:'INFRARED',note:'day + night'},
   REP:{path:'REP/ETC',label:'COLOUR',note:'daylight only'},
@@ -4348,15 +4392,26 @@ async function fetchSatellite(){
 }
 
 function showSatFrame(i){
-  if(!_satTimes.length)return;
-  _satIdx=(i+_satTimes.length)%_satTimes.length;
-  const f=_satTimes[_satIdx];
-  const band=HIMA_BANDS[_satBand]||HIMA_BANDS.B13;
-  const url=`https://www.jma.go.jp/bosai/himawari/data/satimg/${f.basetime}/fd/${f.validtime}/${band.path}/{z}/{x}/{y}.jpg`;
+  const disk=activeDisk();
+  if(!disk){                       // Meteosat sector — nothing free to show
+    if(_satLayer){map.removeLayer(_satLayer);_satLayer=null;}
+    updateWxBar();return;
+  }
+  let url;
+  if(disk.src==='gibs'){
+    url=`https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/${disk.layer}/default/${GIBS_TIME}/GoogleMapsCompatible_Level7/{z}/{y}/{x}.png`;
+    _satIdx=0;
+  }else{
+    if(!_satTimes.length)return;
+    _satIdx=(i+_satTimes.length)%_satTimes.length;
+    const f=_satTimes[_satIdx];
+    const band=HIMA_BANDS[_satBand]||HIMA_BANDS.B13;
+    url=`https://www.jma.go.jp/bosai/himawari/data/satimg/${f.basetime}/fd/${f.validtime}/${band.path}/{z}/{x}/{y}.jpg`;
+  }
   if(_satLayer)map.removeLayer(_satLayer);
   _satLayer=L.tileLayer(url,{
     opacity:state.satOpacity!=null?state.satOpacity:0.65,
-    zIndex:150,maxNativeZoom:6,maxZoom:20,crossOrigin:true,
+    zIndex:150,maxNativeZoom:disk.src==='gibs'?7:6,maxZoom:20,crossOrigin:true,
     // Outside the Himawari disk every tile 404s; silence rather than console spam.
     errorTileUrl:'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7'
   });
@@ -4387,10 +4442,23 @@ function updateWxBar(){
   if(r)r.textContent=_radarFrames.length&&_radarIdx>=0
     ? new Date(_radarFrames[_radarIdx].time*1000).toISOString().slice(11,16)+'Z ('+(_radarIdx+1)+'/'+_radarFrames.length+')'
     : '--';
+  const disk=(typeof activeDisk==='function')?activeDisk():null;
   const s=document.getElementById('wxSatTime');
-  if(s)s.textContent=_satTimes.length&&_satIdx>=0
-    ? _satTimes[_satIdx].validtime.slice(8,10)+':'+_satTimes[_satIdx].validtime.slice(10,12)+'Z ('+(_satIdx+1)+'/'+_satTimes.length+')'
-    : '--';
+  if(s){
+    if(!disk)s.textContent='no coverage here';
+    else if(disk.src==='gibs')s.textContent='latest';
+    else s.textContent=_satTimes.length&&_satIdx>=0
+      ? _satTimes[_satIdx].validtime.slice(8,10)+':'+_satTimes[_satIdx].validtime.slice(10,12)+'Z ('+(_satIdx+1)+'/'+_satTimes.length+')'
+      : '--';
+  }
+  const note=document.getElementById('wxSatNote');
+  if(note)note.textContent=disk
+    ? disk.label+' · '+disk.covers
+    : 'Europe & Africa: no free satellite source (Meteosat needs EUMETSAT registration)';
+  const bands=document.getElementById('wxBandRow');
+  if(bands)bands.style.display=(disk&&disk.src==='jma')?'':'none';
+  const dsel=document.getElementById('wxDisk');
+  if(dsel&&dsel.value!==_satDisk)dsel.value=_satDisk;
 }
 function syncWxButtons(){
   const rb=document.getElementById('wxRadarBtn');
