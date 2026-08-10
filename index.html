@@ -268,6 +268,11 @@ html,body{width:100%;height:100%;overflow:hidden;background:#050a12;font-family:
   font-size:9px;padding:2px 7px;cursor:pointer;letter-spacing:1px}
 #radarPlay:hover{background:var(--c);color:#000}
 @media(max-width:900px){#radarBar{bottom:150px}}
+.cb-advisory{border:1px solid;padding:8px 10px;margin:10px 0 2px;background:rgba(255,255,255,.02)}
+.cb-adv-h{font-family:'Orbitron',sans-serif;font-size:10px;letter-spacing:2px}
+.cb-adv-sub{color:var(--tm);font-size:10px;margin-top:4px;line-height:1.45}
+.cb-adv-link{display:inline-block;margin-top:5px;font-size:9px;color:var(--c);text-decoration:none;letter-spacing:1px}
+.cb-adv-link:hover{text-decoration:underline}
 .cb-quiet{opacity:.55}
 .cb-quiet .cb-sec-h{color:var(--td)}
 /* At phone width the header wrapped mid-chip, the country picker ran off the
@@ -986,7 +991,7 @@ const state={
   alerts:[],news:[],gdeltEvents:[],earthquakes:[],fires:[],notamMarkers:[],cableLines:[],nukeMarkers:[],piracyMarkers:[],wildfireMarkers:[],cyberMarkers:[],refugeeMarkers:[],milbaseMarkers:[],rfMarkers:[],droneMarkers:[],ntestMarkers:[],conflictMarkers:[],volcanoMarkers:[],tsunamiMarkers:[],
   threats:{},defcon:4,threatScore:0,
   proxyHealth:null,darkEvents:[],darkMarkers:[],reliefEvents:[],acledEvents:[],
-  visible:[],gdacs:[],gdacsMarkers:[],bom:[],bomMarkers:[],
+  visible:[],gdacs:[],gdacsMarkers:[],bom:[],bomMarkers:[],who:[],fcdo:null,
   sources:{},refreshInterval:30,countdown:30,lastFetch:null
 };
 
@@ -1029,7 +1034,8 @@ const FEEDS=[
   {id:'f36',code:'RELIEF',name:'Humanitarian',desc:'Disaster declarations & humanitarian alerts (ReliefWeb)'},
   {id:'f37',code:'GDACS',name:'Global Disasters',desc:'Worldwide disaster alerts \u2014 cyclones, floods, fires, drought (GDACS)'},
   {id:'f38',code:'BOM',name:'Australia Warnings',desc:'Flood, marine and severe weather warnings (Bureau of Meteorology)'},
-  {id:'f39',code:'RADAR',name:'Weather Radar',desc:'Live global precipitation radar, last 2 hours (RainViewer)'}
+  {id:'f39',code:'RADAR',name:'Weather Radar',desc:'Live global precipitation radar, last 2 hours (RainViewer)'},
+  {id:'f40',code:'WHO',name:'Health Emergencies',desc:'Disease outbreak news (World Health Organization)'}
 ];
 document.getElementById('feedsBar').innerHTML=
   '<span class="feeds-chip" onclick="event.stopPropagation();toggleFeedsBar()" title="Click to show or hide every feed; click the bar for full status"><span class="fd ok" style="animation:none"></span><span id="feedSummary">FEEDS --/--</span></span>'+
@@ -3878,7 +3884,7 @@ async function fetchAll(){
   // WAVE 3: Intel overlays (static + slow feeds)
   try{
     await Promise.allSettled([fetchNOTAMs(),fetchWildfires(),fetchVolcanoes(),fetchTsunami(),fetchNuclearTests(),fetchRefugees(),
-      fetchGDELTGeo(),fetchDarkVessels(),fetchReliefWeb(),fetchACLED(),fetchGDACS(),fetchBOM(),fetchRadar()]);
+      fetchGDELTGeo(),fetchDarkVessels(),fetchReliefWeb(),fetchACLED(),fetchGDACS(),fetchBOM(),fetchRadar(),fetchWHO()]);
   }catch(e){}
   renderAll();
   try{cleanStaleAssets();}catch(e){}
@@ -4280,6 +4286,113 @@ addAlert=function(level,text,meta){
   // Timeline renders on its own 60s interval — no DOM rebuild per alert
 };
 
+/* ==================== CIVIL WARNINGS ====================
+   Official government travel advice and WHO health emergencies — the part of
+   the International SOS model that is not weather or conflict tracking.
+
+   FCDO publishes UK government travel advice for ~230 countries through the
+   GOV.UK content API: free, no key, CORS enabled, and it carries a structured
+   alert_status rather than only prose. Fetched per country when a brief opens
+   (each is ~75KB) and cached for the session.
+*/
+const FCDO_LEVELS={
+  avoid_all_travel_to_whole_country:{score:60,label:'ADVISE AGAINST ALL TRAVEL',color:'#ff0033'},
+  avoid_all_travel_to_parts:{score:30,label:'ALL TRAVEL — PARTS OF COUNTRY',color:'#ff5522'},
+  avoid_all_but_essential_travel_to_whole_country:{score:40,label:'ESSENTIAL TRAVEL ONLY',color:'#ff8800'},
+  avoid_all_but_essential_travel_to_parts:{score:18,label:'ESSENTIAL TRAVEL ONLY — PARTS',color:'#ffaa00'}
+};
+// Natural Earth names and FCDO slugs mostly agree once slugified; these are the
+// ones that do not.
+const FCDO_SLUGS={
+  'United States of America':'usa','United Kingdom':'uk','Russia':'russia',
+  'Dem. Rep. Congo':'democratic-republic-of-the-congo','Congo':'congo',
+  'Dominican Rep.':'dominican-republic','Central African Rep.':'central-african-republic',
+  'S. Sudan':'south-sudan','Eq. Guinea':'equatorial-guinea','W. Sahara':'western-sahara',
+  'Bosnia and Herz.':'bosnia-and-herzegovina','Macedonia':'north-macedonia',
+  'Czechia':'czech-republic','Côte d\'Ivoire':'ivory-coast','Myanmar':'myanmar-burma',
+  'Solomon Is.':'solomon-islands','Timor-Leste':'east-timor','Brunei':'brunei',
+  'Lao PDR':'laos','Korea':'south-korea','Dem. Rep. Korea':'north-korea',
+  'Falkland Is.':'falkland-islands','Fr. S. Antarctic Lands':null,'Antarctica':null,
+  'N. Cyprus':'cyprus','Somaliland':'somalia','Palestine':'the-occupied-palestinian-territories',
+  'eSwatini':'eswatini','Vatican':'vatican-city'
+};
+function fcdoSlug(name){
+  if(name in FCDO_SLUGS)return FCDO_SLUGS[name];
+  return name.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'')
+    .replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'');
+}
+
+const _fcdoCache=new Map();
+async function fetchFCDO(country){
+  const slug=fcdoSlug(country.name);
+  if(!slug)return null;
+  if(_fcdoCache.has(slug))return _fcdoCache.get(slug);
+  try{
+    const d=await fetchJ(`https://www.gov.uk/api/content/foreign-travel-advice/${slug}`,15000);
+    const det=d.details||{};
+    const statuses=(det.alert_status||[]).map(s=>FCDO_LEVELS[s]).filter(Boolean);
+    // Worst-case wins when a country carries several.
+    statuses.sort((a,b)=>b.score-a.score);
+    const out={
+      slug,
+      statuses,
+      top:statuses[0]||null,
+      change:(det.change_description||'').replace(/<[^>]+>/g,' ').trim(),
+      updated:d.public_updated_at||det.updated_at||'',
+      url:'https://www.gov.uk'+(d.base_path||'')
+    };
+    _fcdoCache.set(slug,out);
+    return out;
+  }catch(e){
+    // A 404 means FCDO publishes no advice for that territory, which is itself
+    // an answer — cache it so the brief does not retry on every render.
+    _fcdoCache.set(slug,null);
+    return null;
+  }
+}
+
+/* ---- WHO Disease Outbreak News ----
+   Global health emergencies. The API returns 50 entries in no useful order and
+   reaching back to 2006, so it is sorted and windowed here.
+*/
+async function fetchWHO(){
+  feedWait('f40');
+  try{
+    // Without $orderby the API returns an arbitrary 50 reaching back to 2006 —
+    // only one of which was inside the two-year window.
+    const d=await fetchJ('https://www.who.int/api/news/diseaseoutbreaknews?$orderby=PublicationDateAndTime%20desc&$top=40',20000);
+    const items=(d.value||[])
+      .map(i=>({
+        title:(i.Title||i.OverrideTitle||'').trim(),
+        date:i.PublicationDate||i.DateCreated||'',
+        summary:(i.Summary||i.Overview||'').replace(/<[^>]+>/g,' ').trim(),
+        url:i.ItemDefaultUrl?('https://www.who.int'+i.ItemDefaultUrl):''
+      }))
+      .filter(i=>i.title&&i.date)
+      .sort((a,b)=>new Date(b.date)-new Date(a.date));
+    // Two years is long enough to catch a slow-burning outbreak without
+    // resurfacing avian influenza from 2006.
+    const cutoff=Date.now()-730*86400000;
+    state.who=items.filter(i=>new Date(i.date).getTime()>cutoff).slice(0,40);
+    state.sources.who=state.who.length;
+    feedDot('f40',state.who.length>0);
+  }catch(e){console.warn('WHO error:',e);feedDot('f40',false);}
+}
+
+// WHO titles name the country in prose ("Cholera – Democratic Republic of the
+// Congo"), so matching is by name rather than any code.
+function whoForCountry(c){
+  if(!state.who)return[];
+  const names=[c.name.toLowerCase()];
+  if(c.name==='United States of America')names.push('united states');
+  if(c.name==='Dem. Rep. Congo')names.push('democratic republic of the congo');
+  if(c.name==='Korea')names.push('republic of korea');
+  return state.who.filter(i=>{
+    const t=i.title.toLowerCase();
+    return names.some(n=>t.includes(n));
+  });
+}
+
 /* ==================== COUNTRY BRIEF ====================
    A map of everything at once is not a briefing. This treats the country as the
    unit of analysis: pick Australia, get every active warning inside Australia —
@@ -4413,6 +4526,9 @@ function buildCountryBrief(c){
   for(const z of b.conflicts)sec+=z.intensity==='WAR'?60:z.intensity==='HIGH'?38:z.intensity==='MODERATE'?20:9;
   sec+=Math.min(b.acled.reduce((s,e)=>s+(e.fatalities>=10?6:e.fatalities>0?3:1),0),35);
   sec+=Math.min(b.dark.length*3,12);
+  // Official advice is a considered judgement by people with sources we do not
+  // have, so it carries real weight rather than being decoration.
+  if(state.fcdo&&state.fcdo.top)sec+=state.fcdo.top.score;
   let haz=0;
   for(const q of b.quakes)haz+=q.mag>=7?35:q.mag>=6?18:q.mag>=5?6:1;
   haz+=Math.min(b.wx.filter(w=>w.severity==='Extreme').length*8,24)+Math.min(b.wx.length*1.5,12);
@@ -4443,8 +4559,13 @@ async function openCountryBrief(isoOrName,lat,lon){
     if(!c&&lat!=null)c=countryAt(lat,lon);
     if(!c){body.innerHTML='<div style="padding:24px;text-align:center;color:var(--td);font-size:11px">No country at that location — open water or unmapped territory.</div>';return;}
     _briefCountry=c;
+    state.fcdo=null;
     renderCountryBrief();
     renderWatchlist();
+    fetchFCDO(c).then(f=>{
+      // Guard against a slow response landing after the user moved on.
+      if(_briefCountry===c){state.fcdo=f;renderCountryBrief();}
+    });
     if(!document.getElementById('cbPicker').options.length)populateCountryPicker();
     document.getElementById('cbPicker').value=c.iso||c.name;
   }catch(e){
@@ -4503,7 +4624,20 @@ function renderCountryBrief(){
       <span class="cb-c">${typeof a.alt==='number'&&a.alt?esc(a.alt.toLocaleString())+'ft':(a.gs?Math.round(a.gs)+'kts':'')}</span></div>`;
 
   document.getElementById('countryBody').innerHTML=
-    `<div class="cb-summary">
+    (state.fcdo&&state.fcdo.top
+      ? `<div class="cb-advisory" style="border-color:${state.fcdo.top.color};color:${state.fcdo.top.color}">
+           <div class="cb-adv-h">FCDO · ${state.fcdo.top.label}</div>
+           ${state.fcdo.statuses.length>1?`<div class="cb-adv-sub">${state.fcdo.statuses.slice(1).map(x=>esc(x.label)).join(' · ')}</div>`:''}
+           ${state.fcdo.change?`<div class="cb-adv-sub">${esc(state.fcdo.change.slice(0,190))}</div>`:''}
+           <a href="${state.fcdo.url}" target="_blank" rel="noopener" class="cb-adv-link">Full advice · updated ${esc((state.fcdo.updated||'').slice(0,10))}</a>
+         </div>`
+      : state.fcdo
+        ? `<div class="cb-advisory" style="border-color:#3fb950;color:#3fb950">
+             <div class="cb-adv-h">FCDO · NO TRAVEL RESTRICTIONS</div>
+             <a href="${state.fcdo.url}" target="_blank" rel="noopener" class="cb-adv-link">Full advice · updated ${esc((state.fcdo.updated||'').slice(0,10))}</a>
+           </div>`
+        : '')
+    +`<div class="cb-summary">
        <div class="cb-stat"><div class="cb-stat-n" style="color:${b.security>=45?'#ff5522':b.security>=22?'#ffaa00':'#3fb950'}">${b.security}</div><div class="cb-stat-l">SECURITY</div></div>
        <div class="cb-stat"><div class="cb-stat-n" style="color:${b.hazard>=45?'#ff5522':b.hazard>=22?'#ffaa00':'#3fb950'}">${b.hazard}</div><div class="cb-stat-l">HAZARD</div></div>
        <div class="cb-stat"><div class="cb-stat-n">${totalContacts}</div><div class="cb-stat-l">CONTACTS</div></div>
@@ -4546,6 +4680,11 @@ function renderCountryBrief(){
        `<div class="cb-row" onclick="closeCountryBrief();focusAlert({lat:${d.lat},lon:${d.lon},zoom:8})">
           <span class="cb-a">${esc(d.type)}</span><span class="cb-b">${esc(d.vessel)}</span><span class="cb-c"></span></div>`,
        'No Global Fishing Watch token configured')
+    +briefSection('Health emergencies (WHO)',whoForCountry(c),w=>
+       `<div class="cb-row" onclick="window.open('${esc(w.url)}','_blank','noopener')">
+          <span class="cb-a">${esc(w.title.slice(0,58))}</span>
+          <span class="cb-c">${esc((w.date||'').slice(0,10))}</span></div>`,
+       'No WHO outbreak news in the last 2 years')
     +briefSection('In the news',b.news,n=>
        `<div class="cb-row" onclick="window.open('${esc(n.url)}','_blank','noopener')">
           <span class="cb-a" style="flex:3">${esc((n.title||'').slice(0,72))}</span><span class="cb-c">${esc(n.source||'')}</span></div>`)
