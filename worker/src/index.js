@@ -27,6 +27,7 @@ const ALLOWED_HOSTS = new Set([
   // events / hazards
   'api.gdeltproject.org',
   'www.gdacs.org',                 // global disaster alerts, EU JRC + UN OCHA
+  'www.nhc.noaa.gov',              // tropical cyclones, Atlantic + E Pacific
   'api.weather.bom.gov.au',        // Australian warnings
   'earthquake.usgs.gov',
   'eonet.gsfc.nasa.gov',

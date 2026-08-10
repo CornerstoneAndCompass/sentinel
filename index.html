@@ -4350,7 +4350,7 @@ async function fetchConditions(c){
       const d=await fetchJ('https://api.open-meteo.com/v1/forecast'
         +'?latitude='+pts.map(p=>p[1]).join(',')
         +'&longitude='+pts.map(p=>p[2]).join(',')
-        +'&current=temperature_2m,wind_speed_10m,wind_gusts_10m,precipitation,weather_code'
+        +'&current=temperature_2m,wind_speed_10m,wind_gusts_10m,precipitation,weather_code,cape,lightning_potential'
         +'&daily=precipitation_sum,wind_gusts_10m_max,temperature_2m_max,temperature_2m_min'
         +'&forecast_days=3&timezone=UTC',20000);
       const arr=Array.isArray(d)?d:[d];
@@ -4361,6 +4361,7 @@ async function fetchConditions(c){
           lat:pts[i]?pts[i][1]:r.latitude,lon:pts[i]?pts[i][2]:r.longitude,
           temp:cur.temperature_2m,wind:cur.wind_speed_10m,gust:cur.wind_gusts_10m,
           precip:cur.precipitation,code:cur.weather_code,desc:WMO_CODE[cur.weather_code]||'—',
+          cape:cur.cape,lpi:cur.lightning_potential,
           daily:(day.time||[]).map((t,j)=>({date:t,
             rain:day.precipitation_sum?day.precipitation_sum[j]:null,
             gust:day.wind_gusts_10m_max?day.wind_gusts_10m_max[j]:null,
@@ -4376,7 +4377,7 @@ async function fetchConditions(c){
   try{
     const d=await fetchJ('https://api.open-meteo.com/v1/forecast'
       +`?latitude=${lat.toFixed(3)}&longitude=${lon.toFixed(3)}`
-      +'&current=temperature_2m,wind_speed_10m,wind_gusts_10m,precipitation,weather_code'
+      +'&current=temperature_2m,wind_speed_10m,wind_gusts_10m,precipitation,weather_code,cape,lightning_potential'
       +'&daily=precipitation_sum,wind_gusts_10m_max,temperature_2m_max,temperature_2m_min'
       +'&forecast_days=3&timezone=UTC',15000);
     const cur=d.current||{},day=d.daily||{};
@@ -4385,6 +4386,7 @@ async function fetchConditions(c){
       temp:cur.temperature_2m,wind:cur.wind_speed_10m,gust:cur.wind_gusts_10m,
       precip:cur.precipitation,
       code:cur.weather_code,desc:WMO_CODE[cur.weather_code]||'—',
+      cape:cur.cape,lpi:cur.lightning_potential,
       daily:(day.time||[]).map((t,i)=>({
         date:t,
         rain:day.precipitation_sum?day.precipitation_sum[i]:null,
@@ -4401,6 +4403,25 @@ async function fetchConditions(c){
 // Thresholds so a country with no warning service still surfaces obviously bad
 // weather. These are deliberately conservative — this is a prompt to look, not
 // a substitute for a national warning.
+/* Actual lightning strike data is not freely available: Blitzortung is the only
+   community network and its feed is 401-gated behind contributing a physical
+   detector station. CAPE and the lightning potential index are the honest
+   substitute — they say where storms are likely rather than where lightning has
+   struck, and they carry the same global coverage as everything else here. */
+function stormRisk(p){
+  const cape=p&&p.cape!=null?p.cape:null;
+  const lpi=p&&p.lpi!=null?p.lpi:null;
+  if(cape==null)return null;
+  let level='Stable',col='#3fb950';
+  if(cape>=4000){level='Extreme instability';col='#ff0033';}
+  else if(cape>=2500){level='Strong instability';col='#ff5522';}
+  else if(cape>=1000){level='Moderate instability';col='#ffaa00';}
+  else if(cape>=300){level='Marginal';col='#88cc44';}
+  const storming=p.code>=95;
+  return{cape,lpi,level,col,storming,
+    text:level+' · CAPE '+Math.round(cape)+'J/kg'+(lpi?' · LPI '+Math.round(lpi):'')+(storming?' · THUNDERSTORM NOW':'')};
+}
+
 function conditionFlags(w){
   if(!w)return[];
   if(w.multi){
@@ -4418,6 +4439,8 @@ function conditionFlags(w){
     if(d.tmax!=null&&d.tmax>=40)f.push({t:'Extreme heat '+Math.round(d.tmax)+'°C',d:d.date,sev:'high'});
   }
   if(w.code>=95)f.push({t:WMO_CODE[w.code]||'Thunderstorm',d:'now',sev:'high'});
+  const sr=stormRisk(w);
+  if(sr&&sr.cape>=1000)f.push({t:sr.level+' (CAPE '+Math.round(sr.cape)+')',d:'now',sev:sr.cape>=2500?'high':'mod'});
   return f.slice(0,6);
 }
 
@@ -4797,7 +4820,7 @@ function renderCountryBrief(){
              const d0=(p.daily||[])[0]||{},d1=(p.daily||[])[1]||{};
              return `<div class="cb-row" onclick="closeCountryBrief();focusAlert({lat:${p.lat},lon:${p.lon},zoom:9})">
                <span class="cb-a">${esc(p.name)} · ${p.temp!=null?Math.round(p.temp)+'°C':'—'}</span>
-               <span class="cb-b">${esc(p.desc)}${p.wind!=null?' · wind '+Math.round(p.wind):''}${p.gust!=null?' gust '+Math.round(p.gust):''}km/h</span>
+               <span class="cb-b">${esc(p.desc)}${p.wind!=null?' · wind '+Math.round(p.wind):''}${p.gust!=null?' gust '+Math.round(p.gust):''}km/h${(()=>{const sr=stormRisk(p);return sr&&sr.cape>=300?` · <span style="color:${sr.col}">${esc(sr.level)}</span>`:'';})()}</span>
                <span class="cb-c">${d0.rain!=null?Math.round(d0.rain)+'mm':''}${d1.rain!=null?' / '+Math.round(d1.rain)+'mm':''}</span></div>`;
            }).join('')
            +(flags.length?`<div class="cb-row" style="cursor:default;flex-wrap:wrap">
