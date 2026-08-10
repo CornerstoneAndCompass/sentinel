@@ -261,13 +261,29 @@ html,body{width:100%;height:100%;overflow:hidden;background:#050a12;font-family:
 .cb-b{flex:2;color:var(--tm);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .cb-c{flex:1;color:var(--td);text-align:right;white-space:nowrap}
 .cb-foot{margin-top:12px;padding-top:8px;border-top:1px solid var(--brd);font-size:9px;color:var(--td);line-height:1.5}
-#radarBar{position:fixed;left:50%;transform:translateX(-50%);bottom:88px;z-index:5000;display:flex;align-items:center;gap:8px;
-  background:rgba(8,12,20,.85);border:1px solid var(--brd);padding:4px 8px;
-  font-family:'Share Tech Mono',monospace;font-size:10px;color:var(--tm);letter-spacing:1px}
-#radarPlay{background:transparent;border:1px solid var(--brd);color:var(--c);font-family:inherit;
-  font-size:9px;padding:2px 7px;cursor:pointer;letter-spacing:1px}
-#radarPlay:hover{background:var(--c);color:#000}
-@media(max-width:900px){#radarBar{bottom:150px}}
+#wxPanel{position:fixed;left:50%;transform:translateX(-50%);bottom:88px;z-index:5000;
+  background:rgba(8,12,20,.9);border:1px solid var(--brd);
+  font-family:'Share Tech Mono',monospace;font-size:10px;color:var(--tm);min-width:290px}
+.wx-head{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:4px 9px;
+  cursor:pointer;letter-spacing:2px;font-family:'Orbitron',sans-serif;font-size:9px;color:var(--c)}
+.wx-head:hover{background:rgba(0,232,255,.08)}
+.wx-caret{transition:transform .18s}
+#wxPanel.open .wx-caret{transform:rotate(180deg)}
+.wx-body{display:none;padding:2px 9px 8px}
+#wxPanel.open .wx-body{display:block}
+.wx-row{display:flex;align-items:center;gap:7px;margin:4px 0}
+.wx-tog{background:transparent;border:1px solid var(--brd);color:var(--td);font-family:inherit;
+  font-size:9px;letter-spacing:1px;padding:3px 8px;cursor:pointer;white-space:nowrap}
+.wx-tog.on{border-color:var(--c);color:var(--c)}
+.wx-tog.wide{width:100%;text-align:center}
+.wx-time{flex:1;color:var(--tm);font-size:9px;white-space:nowrap}
+.wx-op{width:74px;accent-color:var(--c);height:3px}
+.wx-band{background:transparent;border:1px solid var(--brd);color:var(--td);font-family:inherit;
+  font-size:8px;letter-spacing:1px;padding:2px 7px;cursor:pointer}
+.wx-band.on{border-color:var(--y);color:var(--y)}
+.wx-bands{gap:4px}
+.wx-note{color:var(--td);font-size:8px;letter-spacing:1px;margin:-1px 0 5px}
+@media(max-width:900px){#wxPanel{bottom:150px;min-width:0;width:92vw}}
 /* A world dashboard should say when a number is really one country's. */
 .scope-tag{font-size:8px;letter-spacing:1px;border:1px solid var(--brd);color:var(--td);
   padding:0 3px;margin-left:4px;vertical-align:middle}
@@ -926,7 +942,29 @@ Use the bar below: <b>LAYERS</b> picks what's on the map, <b>INTEL</b> has alert
 
 <button class="panel-rail" id="railL" onclick="togglePanel('L')" title="Hide or show the left panel  [ ">‹</button>
 <button class="panel-rail" id="railR" onclick="togglePanel('R')" title="Hide or show the right panel  ] ">›</button>
-<div id="radarBar"><span id="radarTime">RADAR --</span><button id="radarPlay" onclick="toggleRadarPlay()">▶ LOOP</button></div>
+<div id="wxPanel">
+  <div class="wx-head" onclick="toggleWxPanel()"><span>WEATHER</span><span class="wx-caret">▾</span></div>
+  <div class="wx-body">
+    <div class="wx-row">
+      <button id="wxRadarBtn" class="wx-tog on" onclick="toggleRadar();syncWxButtons()">RAIN RADAR</button>
+      <span class="wx-time" id="wxRadarTime">--</span>
+      <input type="range" min="0" max="100" value="55" class="wx-op" oninput="setLayerOpacity('radar',this.value)" title="Radar opacity">
+    </div>
+    <div class="wx-note">Global · RainViewer · 10 min</div>
+    <div class="wx-row">
+      <button id="wxSatBtn" class="wx-tog" onclick="toggleSat()">CLOUD</button>
+      <span class="wx-time" id="wxSatTime">--</span>
+      <input type="range" min="0" max="100" value="65" class="wx-op" oninput="setLayerOpacity('sat',this.value)" title="Cloud opacity">
+    </div>
+    <div class="wx-row wx-bands">
+      <button class="wx-band on" data-band="B13" onclick="setSatBand('B13')">IR</button>
+      <button class="wx-band" data-band="REP" onclick="setSatBand('REP')">COLOUR</button>
+      <button class="wx-band" data-band="B03" onclick="setSatBand('B03')">VISIBLE</button>
+    </div>
+    <div class="wx-note">Asia-Pacific only · Himawari-9 · 10 min</div>
+    <div class="wx-row"><button id="wxLoopBtn" class="wx-tog wide" onclick="toggleWxLoop()">▶ LOOP</button></div>
+  </div>
+</div>
 <div class="zoom-badge" id="zoomBadge">ZOOM: -- | SHOWING: ALL</div>
 
 <div class="bottom-bar">
@@ -990,12 +1028,13 @@ const state={
   quakeMarkers:[],gdeltMarkers:[],fireMarkers:[],chokeMarkers:[],
   filters:{aircraft:true,heli:true,ship:true,satellite:true},
   categories:{military:true,coastguard:true,police:true,government:true,sar:true,tanker:false,cargo:false,passenger:false,fishing:false},
-  layers:{radar:true,bom:true,gdacs:true,quakes:true,fires:true,gdelt:true,chokes:true,notams:true,piracy:true,volcanoes:true,tsunami:true,cyber:true,cables:false,nukes:false,bases:false,conflict:true,rf:true,drones:true,refugees:true,dark:true},
+  layers:{radar:true,satimg:false,bom:true,gdacs:true,quakes:true,fires:true,gdelt:true,chokes:true,notams:true,piracy:true,volcanoes:true,tsunami:true,cyber:true,cables:false,nukes:false,bases:false,conflict:true,rf:true,drones:true,refugees:true,dark:true},
   countryFilter:'',searchTerm:'',selectedId:null,
   alerts:[],news:[],gdeltEvents:[],earthquakes:[],fires:[],notamMarkers:[],cableLines:[],nukeMarkers:[],piracyMarkers:[],wildfireMarkers:[],cyberMarkers:[],refugeeMarkers:[],milbaseMarkers:[],rfMarkers:[],droneMarkers:[],ntestMarkers:[],conflictMarkers:[],volcanoMarkers:[],tsunamiMarkers:[],
   threats:{},defcon:4,threatScore:0,
   proxyHealth:null,darkEvents:[],darkMarkers:[],reliefEvents:[],acledEvents:[],
   visible:[],gdacs:[],gdacsMarkers:[],bom:[],bomMarkers:[],who:[],fcdo:null,conditions:null,
+  radarOpacity:0.55,satOpacity:0.65,
   sources:{},refreshInterval:30,countdown:30,lastFetch:null
 };
 
@@ -1039,7 +1078,8 @@ const FEEDS=[
   {id:'f37',code:'GDACS',name:'Global Disasters',desc:'Worldwide disaster alerts \u2014 cyclones, floods, fires, drought (GDACS)'},
   {id:'f38',code:'BOM',name:'Australia Warnings',desc:'Flood, marine and severe weather warnings (Bureau of Meteorology)'},
   {id:'f39',code:'RADAR',name:'Weather Radar',desc:'Live global precipitation radar, last 2 hours (RainViewer)'},
-  {id:'f40',code:'WHO',name:'Health Emergencies',desc:'Disease outbreak news (World Health Organization)'}
+  {id:'f40',code:'WHO',name:'Health Emergencies',desc:'Disease outbreak news (World Health Organization)'},
+  {id:'f41',code:'SATIMG',name:'Cloud Imagery',desc:'Himawari-9 satellite \u2014 Asia-Pacific and Australia only'}
 ];
 document.getElementById('feedsBar').innerHTML=
   '<span class="feeds-chip" onclick="event.stopPropagation();toggleFeedsBar()" title="Click to show or hide every feed; click the bar for full status"><span class="fd ok" style="animation:none"></span><span id="feedSummary">FEEDS --/--</span></span>'+
@@ -2284,40 +2324,22 @@ function showRadarFrame(i){
   // 512px tiles at scheme 4 (universal blue/green/red), smoothed, snow shown.
   const url=`${f.url}/512/{z}/{x}/{y}/4/1_1.png`;
   if(_radarLayer)map.removeLayer(_radarLayer);
-  _radarLayer=L.tileLayer(url,{opacity:0.55,zIndex:200,maxNativeZoom:10,crossOrigin:true});
+  _radarLayer=L.tileLayer(url,{opacity:state.radarOpacity!=null?state.radarOpacity:0.55,zIndex:200,maxNativeZoom:10,maxZoom:20,crossOrigin:true});
   if(state.layers.radar!==false)_radarLayer.addTo(map);
-  const el=document.getElementById('radarTime');
-  if(el){
-    const t=new Date(f.time*1000);
-    el.textContent='RADAR '+t.toISOString().slice(11,16)+'Z'+(f.forecast?' FCST':'')
-      +' ('+(_radarIdx+1)+'/'+_radarFrames.length+')';
-  }
+  if(typeof updateWxBar==='function')updateWxBar();
 }
 
-// Stepping through the two-hour loop is what shows a front actually moving.
-function toggleRadarPlay(){
-  const btn=document.getElementById('radarPlay');
-  if(_radarTimer){
-    clearInterval(_radarTimer);_radarTimer=null;
-    if(btn)btn.textContent='▶ LOOP';
-    showRadarFrame(_radarFrames.length-1);
-  }else{
-    if(btn)btn.textContent='❚❚ STOP';
-    _radarTimer=setInterval(()=>showRadarFrame(_radarIdx+1),550);
-  }
-}
+// Looping is handled by toggleWxLoop in the weather panel, which steps radar
+// and cloud together so the two stay time-aligned.
 function toggleRadar(){
   state.layers.radar=!state.layers.radar;
   const btn=document.getElementById('fRadar');
   if(btn)btn.classList.toggle('on',state.layers.radar);
-  const bar=document.getElementById('radarBar');
-  if(bar)bar.style.display=state.layers.radar?'':'none';
   if(!state.layers.radar){
-    if(_radarTimer){clearInterval(_radarTimer);_radarTimer=null;
-      const p=document.getElementById('radarPlay');if(p)p.textContent='▶ LOOP';}
     if(_radarLayer)map.removeLayer(_radarLayer);
   }else if(_radarLayer){_radarLayer.addTo(map);}
   else fetchRadar();
+  if(typeof syncWxButtons==='function')syncWxButtons();
 }
 
 /* ---- BOM warnings on the map ----
@@ -3888,7 +3910,7 @@ async function fetchAll(){
   // WAVE 3: Intel overlays (static + slow feeds)
   try{
     await Promise.allSettled([fetchNOTAMs(),fetchWildfires(),fetchVolcanoes(),fetchTsunami(),fetchNuclearTests(),fetchRefugees(),
-      fetchGDELTGeo(),fetchDarkVessels(),fetchReliefWeb(),fetchACLED(),fetchGDACS(),fetchBOM(),fetchRadar(),fetchWHO()]);
+      fetchGDELTGeo(),fetchDarkVessels(),fetchReliefWeb(),fetchACLED(),fetchGDACS(),fetchBOM(),fetchRadar(),fetchWHO(),fetchSatellite()]);
   }catch(e){}
   renderAll();
   try{cleanStaleAssets();}catch(e){}
@@ -4297,6 +4319,112 @@ addAlert=function(level,text,meta){
   if(state.timeline.length>100)state.timeline.length=100;
   // Timeline renders on its own 60s interval — no DOM rebuild per alert
 };
+
+/* ==================== HIMAWARI SATELLITE ====================
+   Cloud imagery from JMA's Himawari-9, free and CORS-enabled at a 10-minute
+   cadence. Note the coverage honestly: Himawari is geostationary at 140.7°E, so
+   this is a full disk over Asia-Pacific — excellent over Australia, nothing over
+   the Atlantic or Europe. It is labelled as regional in the UI for that reason.
+
+   Bands: B13 infrared works day and night and is the sensible default; B03 is
+   visible light and goes black over the night side; REP is a colour composite.
+*/
+const HIMA_BANDS={
+  B13:{path:'B13/TBB',label:'INFRARED',note:'day + night'},
+  REP:{path:'REP/ETC',label:'COLOUR',note:'daylight only'},
+  B03:{path:'B03/ALBD',label:'VISIBLE',note:'daylight only'}
+};
+let _satLayer=null,_satTimes=[],_satIdx=-1,_satBand='B13';
+
+async function fetchSatellite(){
+  feedWait('f41');
+  try{
+    const t=await fetchJ('https://www.jma.go.jp/bosai/himawari/data/satimg/targetTimes_fd.json',15000);
+    _satTimes=(Array.isArray(t)?t:[]).slice(-12);   // last two hours
+    state.sources.satimg=_satTimes.length;
+    if(_satTimes.length){showSatFrame(_satTimes.length-1);feedDot('f41',true);}
+    else feedDot('f41',false);
+  }catch(e){console.warn('Himawari error:',e);feedDot('f41',false);}
+}
+
+function showSatFrame(i){
+  if(!_satTimes.length)return;
+  _satIdx=(i+_satTimes.length)%_satTimes.length;
+  const f=_satTimes[_satIdx];
+  const band=HIMA_BANDS[_satBand]||HIMA_BANDS.B13;
+  const url=`https://www.jma.go.jp/bosai/himawari/data/satimg/${f.basetime}/fd/${f.validtime}/${band.path}/{z}/{x}/{y}.jpg`;
+  if(_satLayer)map.removeLayer(_satLayer);
+  _satLayer=L.tileLayer(url,{
+    opacity:state.satOpacity!=null?state.satOpacity:0.65,
+    zIndex:150,maxNativeZoom:6,maxZoom:20,crossOrigin:true,
+    // Outside the Himawari disk every tile 404s; silence rather than console spam.
+    errorTileUrl:'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7'
+  });
+  if(state.layers.satimg)_satLayer.addTo(map);
+  updateWxBar();
+}
+
+function toggleSat(){
+  state.layers.satimg=!state.layers.satimg;
+  if(!state.layers.satimg){if(_satLayer)map.removeLayer(_satLayer);}
+  else if(_satLayer)_satLayer.addTo(map);
+  else fetchSatellite();
+  syncWxButtons();
+}
+function setSatBand(b){_satBand=b;if(_satTimes.length)showSatFrame(_satIdx);syncWxButtons();}
+function setLayerOpacity(which,v){
+  const o=Math.max(0,Math.min(1,v/100));
+  if(which==='radar'){state.radarOpacity=o;if(_radarLayer)_radarLayer.setOpacity(o);}
+  else{state.satOpacity=o;if(_satLayer)_satLayer.setOpacity(o);}
+}
+
+/* ---- weather controls ----
+   Radar and satellite each have a source, a time and an opacity, and the loop
+   needs somewhere to live. A single timestamp label could not carry that.
+*/
+function updateWxBar(){
+  const r=document.getElementById('wxRadarTime');
+  if(r)r.textContent=_radarFrames.length&&_radarIdx>=0
+    ? new Date(_radarFrames[_radarIdx].time*1000).toISOString().slice(11,16)+'Z ('+(_radarIdx+1)+'/'+_radarFrames.length+')'
+    : '--';
+  const s=document.getElementById('wxSatTime');
+  if(s)s.textContent=_satTimes.length&&_satIdx>=0
+    ? _satTimes[_satIdx].validtime.slice(8,10)+':'+_satTimes[_satIdx].validtime.slice(10,12)+'Z ('+(_satIdx+1)+'/'+_satTimes.length+')'
+    : '--';
+}
+function syncWxButtons(){
+  const rb=document.getElementById('wxRadarBtn');
+  if(rb)rb.classList.toggle('on',!!state.layers.radar);
+  const sb=document.getElementById('wxSatBtn');
+  if(sb)sb.classList.toggle('on',!!state.layers.satimg);
+  document.querySelectorAll('.wx-band').forEach(b=>b.classList.toggle('on',b.dataset.band===_satBand));
+}
+function toggleWxPanel(){
+  const p=document.getElementById('wxPanel');
+  if(!p)return;
+  const open=p.classList.toggle('open');
+  localStorage.setItem('sentinel_wxpanel',open?'open':'shut');
+}
+
+// One loop control drives whichever layers are switched on, so radar and cloud
+// step together and stay time-aligned.
+let _wxTimer=null;
+function toggleWxLoop(){
+  const btn=document.getElementById('wxLoopBtn');
+  if(_wxTimer){
+    clearInterval(_wxTimer);_wxTimer=null;
+    if(btn){btn.textContent='▶ LOOP';btn.classList.remove('on');}
+    if(_radarFrames.length)showRadarFrame(_radarFrames.length-1);
+    if(_satTimes.length)showSatFrame(_satTimes.length-1);
+  }else{
+    if(btn){btn.textContent='❚❚ STOP';btn.classList.add('on');}
+    _wxTimer=setInterval(()=>{
+      if(state.layers.radar&&_radarFrames.length)showRadarFrame(_radarIdx+1);
+      if(state.layers.satimg&&_satTimes.length)showSatFrame(_satIdx+1);
+      updateWxBar();
+    },600);
+  }
+}
 
 /* ==================== UNIFORM GLOBAL WEATHER ====================
    Most of the warning feeds are national, and the national ones with the best
@@ -5231,6 +5359,8 @@ async function boot(){
   updateNotifyBtn();
   restorePanels();
   renderWatchlist();
+  if(localStorage.getItem('sentinel_wxpanel')!=='shut')document.getElementById('wxPanel').classList.add('open');
+  syncWxButtons();updateWxBar();
   if(loadWatch().length){loadCountries().then(renderWatchlist).catch(()=>{});}
 }
 boot();
