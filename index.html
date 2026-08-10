@@ -925,16 +925,31 @@ const FEEDS=[
   {id:'f36',code:'RELIEF',name:'Humanitarian',desc:'Disaster declarations & humanitarian alerts (ReliefWeb)'}
 ];
 document.getElementById('feedsBar').innerHTML=
-  '<span class="feeds-chip"><span class="fd ok" style="animation:none"></span><span id="feedSummary">FEEDS --/--</span></span>'+
-  FEEDS.map(f=>`<div class="feed" title="${f.name} — ${f.desc}"><div class="fd wait" id="${f.id}"></div>${f.code}</div>`).join('');
+  '<span class="feeds-chip" onclick="event.stopPropagation();toggleFeedsBar()" title="Click to show or hide every feed; click the bar for full status"><span class="fd ok" style="animation:none"></span><span id="feedSummary">FEEDS --/--</span></span>'+
+  FEEDS.map(f=>`<div class="feed" id="w_${f.id}" title="${f.name} — ${f.desc}"><div class="fd wait" id="${f.id}"></div>${f.code}</div>`).join('');
+// 35 chips along the bottom is noise when 29 of them are green and the status
+// panel already carries the detail. Show what needs attention; click the
+// summary to see everything.
+let _feedsExpanded=false;
+function toggleFeedsBar(){_feedsExpanded=!_feedsExpanded;applyFeedBarMode();}
+function applyFeedBarMode(){
+  for(const f of FEEDS){
+    const w=document.getElementById('w_'+f.id);
+    if(!w)continue;
+    const st=feedState(f);
+    w.style.display=(_feedsExpanded||st==='err'||st==='wait')?'':'none';
+  }
+}
 
 function feedState(f){const e=document.getElementById(f.id);if(!e)return'wait';return e.classList.contains('ok')?'ok':e.classList.contains('err')?'err':e.classList.contains('idle')?'idle':'wait';}
 function feedNote(f){const e=document.getElementById(f.id);return e?(e.dataset.note||''):'';}
 function updateFeedSummary(){
   const ok=FEEDS.filter(f=>feedState(f)==='ok').length;
   const live=FEEDS.filter(f=>feedState(f)!=='idle').length;
+  const bad=FEEDS.filter(f=>feedState(f)==='err').length;
   const el=document.getElementById('feedSummary');
-  if(el)el.textContent='FEEDS '+ok+'/'+live;
+  if(el)el.textContent='FEEDS '+ok+'/'+live+(bad?'  ·  '+bad+' DOWN':(ok===live?'  ·  ALL NOMINAL':''));
+  applyFeedBarMode();
   if(document.getElementById('statusOverlay').classList.contains('show'))renderStatusPanel();
 }
 function renderStatusPanel(){
@@ -1574,9 +1589,30 @@ function renderMarkers(){
 }
 
 // --- ASSET LIST ---
+// Ranks what you would actually want to look at first. The old sort was
+// altitude descending, which meant 146 satellites at 100,000,000ft permanently
+// filled the panel and every aircraft and vessel sat below the fold — the main
+// panel of the app was a list of GOES weather satellites.
+function assetRank(a,centre){
+  let score=0;
+  if(a.squawk==='7500'||a.squawk==='7600'||a.squawk==='7700')score+=10000;  // emergencies first
+  if(a.id===state.selectedId)score+=5000;
+  if(a.cat==='military')score+=800;
+  else if(a.cat==='coastguard'||a.cat==='sar')score+=600;
+  else if(a.cat==='police'||a.cat==='government')score+=400;
+  if(a.type==='satellite')score-=500;                                       // interesting, rarely urgent
+  // Nearer the middle of what you are looking at wins ties.
+  if(centre&&isFinite(a.lat)){
+    const d=Math.hypot(a.lat-centre.lat,(a.lon-centre.lng)*Math.cos(a.lat*Math.PI/180));
+    score-=Math.min(d,180);
+  }
+  return score;
+}
 function renderAssetList(){
   const el=document.getElementById('tabAssets');
-  const sorted=[...state.assets.values()].filter(a=>shouldShow(a)).sort((a,b)=>(b.alt||0)-(a.alt||0)).slice(0,100);
+  const centre=map.getCenter();
+  const sorted=[...state.assets.values()].filter(a=>shouldShow(a))
+    .sort((a,b)=>assetRank(b,centre)-assetRank(a,centre)).slice(0,100);
   if(!sorted.length){el.innerHTML='<div style="padding:12px;color:var(--td);font-size:11px;text-align:center">No assets match filters</div>';return;}
   let html='';
   for(const a of sorted){
@@ -2658,13 +2694,13 @@ async function fetchEarthquakes(){
         const radius=Math.max(mag*4,6);const color=mag>=6?'#ff0000':mag>=5?'#ff4400':mag>=4?'#ff8800':'#ffcc00';
         const m=L.marker([lat,lon],{icon:overlayIcon('quake',color,Math.max(20,radius*2.5))});
         m.bindTooltip(`M${mag.toFixed(1)} \u2014 ${place}`,{className:'quake-tooltip',direction:'top',offset:[0,-10]});
-        m.on('click',()=>{map.setView([lat,lon],8);addAlert('red',`M${mag.toFixed(1)} EARTHQUAKE: ${place} | Depth: ${depth?.toFixed(0)}km`);});
+        m.on('click',()=>{map.setView([lat,lon],8);addAlert('red',`M${mag.toFixed(1)} EARTHQUAKE: ${place} | Depth: ${depth?.toFixed(0)}km`,{lat,lon,zoom:6,kind:'EARTHQUAKE'});});
         m.addTo(map);state.quakeMarkers.push(m);
       }
     }
     document.getElementById('sQuake').textContent=features.length;
     state.sources.quakes=features.length;feedDot('f8',true);
-    for(const q of state.earthquakes){if(q.mag>=5){addAlert('red',`SEISMIC: M${q.mag.toFixed(1)} \u2014 ${q.place}`);flashAlert();}}
+    for(const q of state.earthquakes){if(q.mag>=5){addAlert('red',`SEISMIC: M${q.mag.toFixed(1)} \u2014 ${q.place}`,{lat:q.lat,lon:q.lon,zoom:6,kind:'EARTHQUAKE'});flashAlert();}}
   }catch(e){feedDot('f8',false);}
 }
 
@@ -2902,7 +2938,7 @@ async function fetchFIRMS(){
       if(state.layers.fires){
         const m=L.marker([lat,lon],{icon:overlayIcon('wildfire','#ff6600',20)});
         m.bindTooltip(`\ud83d\udd25 ${title}`,{className:'fire-tooltip',direction:'top',offset:[0,-8]});
-        m.on('click',()=>{map.setView([lat,lon],7);addAlert('orange',`FIRE: ${title}`);});
+        m.on('click',()=>{map.setView([lat,lon],7);addAlert('orange',`FIRE: ${title}`,{lat,lon,zoom:7,kind:'FIRE'});});
         m.addTo(map);state.fireMarkers.push(m);
       }
     }
@@ -2962,7 +2998,7 @@ function renderChokepoints(){
       const color=cp.status==='CRITICAL'?'#ff3355':cp.status==='ELEVATED'?'#ffcc00':'#00ff88';
       const m=L.marker([cp.lat,cp.lon],{icon:overlayIcon('choke',color,24)});
       m.bindTooltip(`\u2693 ${cp.name} [${cp.status}]`,{className:'choke-tooltip',direction:'top',offset:[0,-12]});
-      m.on('click',()=>{map.setView([cp.lat,cp.lon],cp.zoom);addAlert(cp.status==='CRITICAL'?'red':'orange',`CHOKEPOINT: ${cp.name} \u2014 ${cp.desc}`);});
+      m.on('click',()=>{map.setView([cp.lat,cp.lon],cp.zoom);addAlert(cp.status==='CRITICAL'?'red':'orange',`CHOKEPOINT: ${cp.name} \u2014 ${cp.desc}`,{lat:cp.lat,lon:cp.lon,zoom:cp.zoom||6,kind:'CHOKEPOINT'});});
       m.addTo(map);state.chokeMarkers.push(m);
     }
   });
@@ -3144,15 +3180,23 @@ function updateNotifyBtn(){
 // Fly to whatever an alert refers to and open its detail panel.
 function focusAlert(meta){
   if(!meta)return;
+  // flyTo projects through the container size and produces NaN when that size
+  // is zero, which is a state this map genuinely reaches (hidden pane, mobile
+  // tab switch). Correct the size first and fall back to a plain setView.
+  ensureMapSized();
+  const sized=map.getSize().x>0&&map.getSize().y>0;
+  const go=(lat,lon,z)=>{
+    if(!isFinite(lat)||!isFinite(lon))return;
+    if(sized)map.flyTo([lat,lon],z,{duration:0.8});
+    else map.setView([lat,lon],z,{animate:false});
+  };
   if(meta.assetId&&state.assets.has(meta.assetId)){
     const a=state.assets.get(meta.assetId);
-    map.flyTo([a.lat,a.lon],Math.max(map.getZoom(),7),{duration:0.8});
+    go(a.lat,a.lon,Math.max(map.getZoom(),7));
     showDetail(meta.assetId);
     return;
   }
-  if(meta.lat!=null&&meta.lon!=null){
-    map.flyTo([meta.lat,meta.lon],meta.zoom||6,{duration:0.8});
-  }
+  if(meta.lat!=null&&meta.lon!=null)go(meta.lat,meta.lon,meta.zoom||6);
 }
 function focusAlertIdx(i){
   const a=state.alerts[i];
@@ -3351,6 +3395,15 @@ function updateStats(){
   document.getElementById('sTanker').textContent=tanker;document.getElementById('sCargo').textContent=cargo;
   document.getElementById('sPax').textContent=pax;document.getElementById('sFish').textContent=fish;
   document.getElementById('sSrc').textContent=FEEDS.filter(f=>feedState(f)==='ok').length+'/'+FEEDS.length;
+  // Most of these counters read zero most of the time — coast guard, tankers,
+  // fishing. Thirteen rows of mostly-nothing pushes the rows that do carry a
+  // number off the top of the panel. Hide the empty ones.
+  [['sCG'],['sTanker'],['sCargo'],['sPax'],['sFish'],['sPol'],['sHeli']].forEach(([id])=>{
+    const cell=document.getElementById(id);
+    if(!cell)return;
+    const row=cell.closest('.stat-row');
+    if(row)row.style.display=(cell.textContent==='0')?'none':'';
+  });
   const sorted=Object.entries(nations).sort((a,b)=>b[1]-a[1]).slice(0,8);
   document.getElementById('nationStats').innerHTML=sorted.map(([cc,n])=>`<div class="stat-row"><span class="stat-label">${countryFlag(cc)} ${cc}</span><span class="stat-val cc" style="font-size:12px">${n}</span></div>`).join('');
   const sel=document.getElementById('countryFilter');const cur=sel.value;
@@ -3527,7 +3580,7 @@ function renderJammingZones(){
     const fillOp=jz.severity==='SEVERE'?0.12:jz.severity==='HIGH'?0.08:0.05;
     const m=L.circle([jz.lat,jz.lon],{radius:jz.radius,color,fillColor:color,fillOpacity:fillOp,weight:1.5,opacity:0.5,dashArray:'6 4',className:'jam-pulse'});
     m.bindTooltip('\u26a0 GPS JAM: '+jz.name+' ['+jz.severity+']',{className:'jam-tooltip',direction:'top'});
-    m.on('click',()=>{map.setView([jz.lat,jz.lon],7);addAlert('purple',`GPS JAMMING: ${jz.name} — ${jz.desc}`);});
+    m.on('click',()=>{map.setView([jz.lat,jz.lon],7);addAlert('purple',`GPS JAMMING: ${jz.name} — ${jz.desc}`,{lat:jz.lat,lon:jz.lon,zoom:7,kind:'GPS JAMMING'});});
     m.addTo(map);state.jamMarkers.push(m);
   }
   document.getElementById('sJam').textContent=GPS_JAM_ZONES.length;
@@ -3561,7 +3614,7 @@ function checkSanctioned(){
       a._sanctioned=true;count++;
       if(!state._sanctionedAlerted.has(mmsi)){
         state._sanctionedAlerted.add(mmsi);
-        addAlert('red',`SANCTIONED VESSEL: ${a.cs} (MMSI: ${mmsi}) detected at ${a.lat.toFixed(2)}N, ${a.lon.toFixed(2)}E`);
+        addAlert('red',`SANCTIONED VESSEL: ${a.cs} (MMSI: ${mmsi}) detected at ${a.lat.toFixed(2)}N, ${a.lon.toFixed(2)}E`,{assetId:a.id,lat:a.lat,lon:a.lon,zoom:8,kind:'SANCTIONED VESSEL'});
         flashAlert();
       }
     }else{a._sanctioned=false;}
@@ -3589,7 +3642,7 @@ function detectDarkVessels(){
         // Only alert for interesting vessels (military, tanker, sanctioned) — ONCE
         if(!state.darkVessels.get(mmsi).alerted&&(a.cat==='military'||a.cat==='coastguard'||a._sanctioned||PRIORITY_CATS.has(a.cat))){
           state.darkVessels.get(mmsi).alerted=true;
-          addAlert('red',`DARK VESSEL: ${a.cs} went AIS-silent. Last pos: ${a.lat.toFixed(2)}N, ${a.lon.toFixed(2)}E`);
+          addAlert('red',`DARK VESSEL: ${a.cs} went AIS-silent. Last pos: ${a.lat.toFixed(2)}N, ${a.lon.toFixed(2)}E`,{assetId:a.id,lat:a.lat,lon:a.lon,zoom:8,kind:'DARK VESSEL'});
           flashAlert();
         }
       }
@@ -3599,7 +3652,7 @@ function detectDarkVessels(){
       if(state.darkVessels.has(mmsi)){
         const dv=state.darkVessels.get(mmsi);
         const darkMins=Math.round((now-dv.lastSeen)/60000);
-        if(darkMins>10){addAlert('orange',`VESSEL REAPPEARED: ${a.cs} back on AIS after ${darkMins}m dark`);}
+        if(darkMins>10){addAlert('orange',`VESSEL REAPPEARED: ${a.cs} back on AIS after ${darkMins}m dark`,{assetId:a.id,lat:a.lat,lon:a.lon,zoom:8});}
         state.darkVessels.delete(mmsi);
       }
     }
@@ -3663,7 +3716,7 @@ function checkGeofences(){
         if(a.cat==='military'||a._sanctioned){
           if(!a._geoAlerted){
             a._geoAlerted=gi;
-            addAlert('red',`GEOFENCE BREACH: ${a.cs} (${a.cat}) entered zone #${gi+1}`);
+            addAlert('red',`GEOFENCE BREACH: ${a.cs} (${a.cat}) entered zone #${gi+1}`,{assetId:a.id,lat:a.lat,lon:a.lon,zoom:8,kind:'GEOFENCE BREACH'});
             flashAlert();
           }
         }
@@ -3851,12 +3904,20 @@ function renderTimeline(){
   }
   el.innerHTML=html;
 }
-// Hook into alert system to feed timeline
+// Hook into alert system to feed timeline.
+// This wrapper used to take (level,text) and forward only those two, which
+// silently swallowed the third argument — so every location attached to an
+// alert was discarded here and both the alert list and the timeline lost their
+// click-to-locate. Forward everything.
 const _origAddAlert=addAlert;
-addAlert=function(level,text){
-  _origAddAlert(level,text);
+addAlert=function(level,text,meta){
+  _origAddAlert(level,text,meta);
   const tlLevel=level==='red'?'critical':level==='orange'?'warning':'info';
-  state.timeline.unshift({time:new Date().toISOString(),level:tlLevel,text});
+  state.timeline.unshift({
+    time:new Date().toISOString(),level:tlLevel,text,
+    lat:meta&&meta.lat!=null?meta.lat:undefined,
+    lon:meta&&meta.lon!=null?meta.lon:undefined
+  });
   if(state.timeline.length>100)state.timeline.length=100;
   // Timeline renders on its own 60s interval — no DOM rebuild per alert
 };
