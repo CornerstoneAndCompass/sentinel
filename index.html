@@ -202,6 +202,12 @@ html,body{width:100%;height:100%;overflow:hidden;background:#050a12;font-family:
 .fd.err{background:var(--r);box-shadow:0 0 6px var(--r)}
 .fd.wait{background:var(--y);box-shadow:0 0 6px var(--y)}
 .fd.idle{background:var(--td);box-shadow:none;animation:none}
+/* Sits above Leaflet's panes; clicks fall through to the map, which does the
+   hit-testing against the drawn contact list. */
+.contact-canvas{position:absolute;top:0;left:0;pointer-events:none;z-index:450}
+#contactTip{position:absolute;z-index:460;pointer-events:none;display:none;
+  background:rgba(8,12,20,.92);border:1px solid var(--brd);color:var(--tp);
+  font-family:'Share Tech Mono',monospace;font-size:11px;padding:3px 7px;white-space:nowrap}
 
 /* SEARCH */
 .search-wrap{position:fixed;top:46px;left:50%;transform:translateX(-50%);z-index:5000}
@@ -860,6 +866,7 @@ const state={
   alerts:[],news:[],gdeltEvents:[],earthquakes:[],fires:[],notamMarkers:[],cableLines:[],nukeMarkers:[],piracyMarkers:[],wildfireMarkers:[],cyberMarkers:[],refugeeMarkers:[],milbaseMarkers:[],rfMarkers:[],droneMarkers:[],ntestMarkers:[],conflictMarkers:[],volcanoMarkers:[],tsunamiMarkers:[],
   threats:{},defcon:4,threatScore:0,
   proxyHealth:null,darkEvents:[],darkMarkers:[],reliefEvents:[],acledEvents:[],
+  visible:[],
   sources:{},refreshInterval:30,countdown:30,lastFetch:null
 };
 
@@ -1195,6 +1202,230 @@ function makeIcon(a,s){
   return ic;
 }
 
+/* ==================== CONTACT RENDERER ====================
+   Every contact used to be an L.divIcon — a DOM node holding inline SVG. At
+   1300 contacts that is 1300 nodes, and renderMarkers() called setIcon() on
+   all of them every pass whether or not anything changed. One canvas draws the
+   same scene in a couple of milliseconds, which is what makes it affordable to
+   repaint at 60fps and dead-reckon positions between polls.
+*/
+const DPR=Math.min(window.devicePixelRatio||1,2);
+const _sprites=new Map();
+
+// Contacts are drawn from a pre-rendered sprite, rotated at blit time. Building
+// the shape once per (type, colour, size) rather than per contact per frame is
+// the difference between 2ms and 200ms a frame.
+function contactSprite(type,color,s){
+  const key=type+'|'+color+'|'+s;
+  let c=_sprites.get(key);
+  if(c)return c;
+  c=document.createElement('canvas');
+  c.width=c.height=Math.ceil(s*DPR);
+  const g=c.getContext('2d');
+  g.scale(DPR,DPR);
+  const h=s/2;
+  g.fillStyle=color;g.strokeStyle=color;
+  g.shadowColor=color;g.shadowBlur=5;
+  g.globalAlpha=0.95;
+  if(type==='ship'){
+    g.beginPath();
+    g.moveTo(h,h*0.25);g.lineTo(h+h*0.3,h*0.7);g.lineTo(h+h*0.3,h*1.4);
+    g.lineTo(h+h*0.18,h*1.7);g.lineTo(h-h*0.18,h*1.7);g.lineTo(h-h*0.3,h*1.4);
+    g.lineTo(h-h*0.3,h*0.7);g.closePath();g.fill();
+  }else if(type==='heli'){
+    g.beginPath();g.ellipse(h,h,h*0.3,h*0.55,0,0,Math.PI*2);g.fill();
+    g.lineWidth=1.5;
+    g.beginPath();g.moveTo(h*0.2,h*0.6);g.lineTo(h*1.8,h*0.6);g.stroke();
+    g.lineWidth=1.2;
+    g.beginPath();g.moveTo(h,h*1.55);g.lineTo(h,h*1.85);g.stroke();
+    g.beginPath();g.moveTo(h*0.6,h*1.85);g.lineTo(h*1.4,h*1.85);g.stroke();
+  }else if(type==='satellite'){
+    g.fillRect(h-3,h-3,6,6);
+    g.globalAlpha=0.7;
+    g.fillRect(h-h*0.7,h-2,h*0.45,4);
+    g.fillRect(h+h*0.25,h-2,h*0.45,4);
+  }else{
+    g.beginPath();
+    g.moveTo(h,h*0.2);g.lineTo(h+h*0.15,h*0.6);g.lineTo(h+h*0.15,h*1.2);
+    g.lineTo(h,h*1.5);g.lineTo(h-h*0.15,h*1.2);g.lineTo(h-h*0.15,h*0.6);
+    g.closePath();g.fill();
+    g.beginPath();
+    g.moveTo(h-h*0.75,h*0.85);g.lineTo(h+h*0.75,h*0.85);
+    g.lineTo(h+h*0.65,h*1.0);g.lineTo(h-h*0.65,h*1.0);g.closePath();g.fill();
+    g.beginPath();
+    g.moveTo(h-h*0.3,h*1.35);g.lineTo(h+h*0.3,h*1.35);
+    g.lineTo(h+h*0.22,h*1.45);g.lineTo(h-h*0.22,h*1.45);g.closePath();g.fill();
+  }
+  _sprites.set(key,c);
+  if(_sprites.size>500)_sprites.clear();
+  return c;
+}
+
+/* ---- dead reckoning ----
+   A poll every 30s with no interpolation is why the map felt frozen: contacts
+   teleport, then sit still. Advancing each one along its own track at its own
+   speed between updates is what makes traffic look alive. Extrapolation is
+   capped so a contact that stops reporting drifts a little and then holds
+   rather than sailing off across the map.
+*/
+const MAX_DR_MS=120000;
+function projectContact(a,now){
+  if(!a.gs||!a.track||!a._lastSeen||a.type==='satellite')return[a.lat,a.lon];
+  const dt=Math.min(now-a._lastSeen,MAX_DR_MS)/1000;
+  if(dt<=0)return[a.lat,a.lon];
+  const nm=(a.gs*dt)/3600;              // knots -> nautical miles
+  const rad=a.track*Math.PI/180;
+  const dLat=(nm/60)*Math.cos(rad);
+  const cosLat=Math.cos(a.lat*Math.PI/180);
+  const dLon=Math.abs(cosLat)<1e-6?0:(nm/60)*Math.sin(rad)/cosLat;
+  return[a.lat+dLat,a.lon+dLon];
+}
+
+const contactCanvas=document.createElement('canvas');
+contactCanvas.className='contact-canvas';
+document.getElementById('map').appendChild(contactCanvas);
+const cctx=contactCanvas.getContext('2d');
+// Lives inside the map container so Leaflet's containerPoint coordinates line
+// up with CSS offsets without any extra arithmetic.
+const contactTip=document.createElement('div');
+contactTip.id='contactTip';
+document.getElementById('map').appendChild(contactTip);
+let _drawn=[];        // [{id,x,y,r}] for hit-testing
+let _needsResize=true;
+
+function resizeContactCanvas(){
+  const s=map.getSize();
+  if(!s.x||!s.y)return false;
+  contactCanvas.width=s.x*DPR;
+  contactCanvas.height=s.y*DPR;
+  contactCanvas.style.width=s.x+'px';
+  contactCanvas.style.height=s.y+'px';
+  _needsResize=false;
+  return true;
+}
+
+function drawContacts(){
+  if(_needsResize&&!resizeContactCanvas())return;
+  const s=map.getSize();
+  if(!s.x||!s.y)return;
+  cctx.setTransform(DPR,0,0,DPR,0,0);
+  cctx.clearRect(0,0,s.x,s.y);
+
+  const now=Date.now();
+  const zoom=map.getZoom();
+  const sz=markerSize(zoom);
+  _drawn.length=0;
+
+  for(const a of state.visible){
+    const[lat,lon]=projectContact(a,now);
+    const p=map.latLngToContainerPoint([lat,lon]);
+    if(p.x<-40||p.y<-40||p.x>s.x+40||p.y>s.y+40)continue;
+    const sel=a.id===state.selectedId;
+    const size=sel?34:sz;
+    const spr=contactSprite(a.type,markerColor(a),size);
+
+    cctx.save();
+    cctx.translate(p.x,p.y);
+    if(a.type!=='satellite')cctx.rotate((a.track||0)*Math.PI/180);
+    cctx.drawImage(spr,-size/2,-size/2,size,size);
+    cctx.restore();
+
+    if(sel){
+      cctx.save();
+      cctx.strokeStyle='#ffffff';cctx.lineWidth=1.5;cctx.globalAlpha=0.9;
+      cctx.beginPath();cctx.arc(p.x,p.y,size*0.78,0,Math.PI*2);cctx.stroke();
+      cctx.restore();
+    }
+    _drawn.push({id:a.id,x:p.x,y:p.y,r:Math.max(size*0.6,9)});
+  }
+
+  // Trails only for the selected contact — drawing every trail was a large part
+  // of the old cost and almost none of it was ever looked at.
+  const selA=state.selectedId?state.assets.get(state.selectedId):null;
+  if(selA&&selA.trail&&selA.trail.length>1){
+    cctx.save();
+    cctx.strokeStyle=markerColor(selA);cctx.globalAlpha=0.5;
+    cctx.lineWidth=1.5;cctx.setLineDash([4,6]);
+    cctx.beginPath();
+    selA.trail.forEach((pt,i)=>{
+      const q=map.latLngToContainerPoint(pt);
+      i?cctx.lineTo(q.x,q.y):cctx.moveTo(q.x,q.y);
+    });
+    cctx.stroke();
+    cctx.restore();
+  }
+}
+
+// One rAF loop drives every repaint. Pausing when the tab is hidden keeps a
+// backgrounded dashboard from burning CPU.
+let _rafPaused=false;
+function contactLoop(){
+  if(!_rafPaused){
+    try{drawContacts();}catch(e){}
+  }
+  requestAnimationFrame(contactLoop);
+}
+requestAnimationFrame(contactLoop);
+document.addEventListener('visibilitychange',()=>{_rafPaused=document.hidden;});
+
+map.on('resize zoomstart zoomend movestart moveend viewreset',()=>{_needsResize=true;});
+
+// Hit-testing replaces per-marker click handlers.
+function contactAt(containerPoint){
+  let best=null,bestD=Infinity;
+  for(const d of _drawn){
+    const dx=d.x-containerPoint.x,dy=d.y-containerPoint.y;
+    const dist=dx*dx+dy*dy;
+    if(dist<=d.r*d.r&&dist<bestD){bestD=dist;best=d.id;}
+  }
+  return best;
+}
+map.on('click',e=>{
+  const id=contactAt(e.containerPoint);
+  if(id)showDetail(id);
+});
+map.on('mousemove',e=>{
+  const id=contactAt(e.containerPoint);
+  const el=map.getContainer();
+  el.style.cursor=id?'pointer':'';
+  const tip=document.getElementById('contactTip');
+  if(id){
+    const a=state.assets.get(id);
+    if(a){
+      tip.textContent=(a.cs||a.hex||'???')+(a.t?' · '+a.t:'');
+      tip.style.left=(e.containerPoint.x+14)+'px';
+      tip.style.top=(e.containerPoint.y-10)+'px';
+      tip.style.display='block';
+    }
+  }else{tip.style.display='none';}
+});
+map.on('mouseout',()=>{const t=document.getElementById('contactTip');if(t)t.style.display='none';});
+
+/* ---- map sizing ----
+   Leaflet caches container size. If the container is resized while hidden — a
+   mobile tab switch, a collapsed pane, loading in a background tab — the cached
+   size stays wrong, getBounds() returns a degenerate box, and because
+   renderMarkers gated every contact on bounds.contains() the map silently
+   rendered nothing at all. That was the "0 VISIBLE" bug.
+*/
+function ensureMapSized(){
+  const el=map.getContainer();
+  const r=el.getBoundingClientRect();
+  const s=map.getSize();
+  if(r.width>0&&r.height>0&&(Math.abs(r.width-s.x)>1||Math.abs(r.height-s.y)>1)){
+    map.invalidateSize({animate:false});
+    _needsResize=true;
+    return true;
+  }
+  return false;
+}
+if(window.ResizeObserver){
+  new ResizeObserver(()=>ensureMapSized()).observe(map.getContainer());
+}
+window.addEventListener('resize',ensureMapSized);
+document.addEventListener('visibilitychange',()=>{if(!document.hidden)setTimeout(ensureMapSized,50);});
+setInterval(ensureMapSized,2000);
+
 // --- RENDER ---
 // Priority categories ALWAYS render regardless of density
 const PRIORITY_CATS=new Set(['military','coastguard','police','government','sar']);
@@ -1207,52 +1438,47 @@ function shouldShow(a){
 }
 // LOD: density grid limits per zoom — like FlightRadar24
 // At low zoom, only N civilian vessels per grid cell; military always shows
+// Retuned upward now that drawing is canvas-based rather than one DOM node per
+// contact. The old strategic tier allowed one civilian vessel per 5-degree
+// cell, which is why the world view looked empty even when it was working.
 function getLODConfig(zoom){
-  if(zoom>=12)return{gridSize:0.02,maxPerCell:100}; // close-in: show almost everything
-  if(zoom>=10)return{gridSize:0.05,maxPerCell:30};
-  if(zoom>=8) return{gridSize:0.2,maxPerCell:12};
-  if(zoom>=6) return{gridSize:0.5,maxPerCell:6};
-  if(zoom>=4) return{gridSize:2,maxPerCell:3};
-  return{gridSize:5,maxPerCell:1}; // strategic: 1 per 5-degree cell
+  if(zoom>=12)return{gridSize:0.02,maxPerCell:400};
+  if(zoom>=10)return{gridSize:0.05,maxPerCell:150};
+  if(zoom>=8) return{gridSize:0.2,maxPerCell:60};
+  if(zoom>=6) return{gridSize:0.5,maxPerCell:30};
+  if(zoom>=4) return{gridSize:1.5,maxPerCell:14};
+  return{gridSize:3,maxPerCell:8};
 }
+// Decides *what* is on screen; the canvas loop decides how it is drawn. This no
+// longer touches the DOM at all, so it is cheap enough to call freely.
 function renderMarkers(){
-  const zoom=map.getZoom(),bounds=map.getBounds(),sz=markerSize(zoom);
+  ensureMapSized();
+  const zoom=map.getZoom();
+  const b=safeBounds();
   const lod=getLODConfig(zoom);
-  const densityGrid=new Map(); // grid cell key -> count of civilian vessels placed
-  let vis=0,culled=0;
+  const densityGrid=new Map();
+  const vis=[];
+  let culled=0;
+  // A margin keeps contacts alive just outside the view so dead reckoning can
+  // walk them in rather than having them pop into existence at the edge.
+  const mLat=(b.north-b.south)*0.15,mLon=(b.east-b.west)*0.15;
   for(const[id,a]of state.assets){
-    if(!shouldShow(a)||!bounds.contains([a.lat,a.lon])){
-      // Hide off-screen or filtered
-      const m=state.markers.get(id);if(m&&map.hasLayer(m))map.removeLayer(m);
-      const rt=state.routes.get(id);if(rt&&map.hasLayer(rt))map.removeLayer(rt);
-      continue;
-    }
-    // Priority assets (military, CG, police, gov, SAR) + selected + aircraft/helis always render
+    if(!shouldShow(a))continue;
+    if(a.lat<b.south-mLat||a.lat>b.north+mLat||a.lon<b.west-mLon||a.lon>b.east+mLon)continue;
     const isPriority=PRIORITY_CATS.has(a.cat)||a.type==='aircraft'||a.type==='heli'||a.type==='satellite'||id===state.selectedId;
-    let showOnMap=true;
     if(!isPriority){
-      // Density-limit civilian vessels per grid cell
       const cellKey=Math.floor(a.lat/lod.gridSize)+'_'+Math.floor(a.lon/lod.gridSize);
       const count=densityGrid.get(cellKey)||0;
-      if(count>=lod.maxPerCell){showOnMap=false;culled++;}
-      else{densityGrid.set(cellKey,count+1);}
+      if(count>=lod.maxPerCell){culled++;continue;}
+      densityGrid.set(cellKey,count+1);
     }
-    let m=state.markers.get(id);
-    if(showOnMap){
-      vis++;
-      if(!m){m=L.marker([a.lat,a.lon],{icon:makeIcon(a,sz)});m.bindTooltip(a.cs||a.hex||'???',{permanent:false,direction:'top',offset:[0,-sz/2],className:'marker-tooltip'});m.on('click',()=>showDetail(id));m.addTo(map);state.markers.set(id,m);}
-      else{m.setLatLng([a.lat,a.lon]);m.setIcon(makeIcon(a,id===state.selectedId?34:sz));if(!map.hasLayer(m))m.addTo(map);}
-      if(a.trail&&a.trail.length>1&&zoom>=6){let rt=state.routes.get(id);if(!rt){rt=L.polyline(a.trail,{color:markerColor(a),weight:1,opacity:0.3,dashArray:'4 6'}).addTo(map);state.routes.set(id,rt);}else{rt.setLatLngs(a.trail);if(!map.hasLayer(rt))rt.addTo(map);}}
-      else{const rt=state.routes.get(id);if(rt&&map.hasLayer(rt))map.removeLayer(rt);}
-    }else{
-      if(m&&map.hasLayer(m))map.removeLayer(m);
-      const rt=state.routes.get(id);if(rt&&map.hasLayer(rt))map.removeLayer(rt);
-    }
+    vis.push(a);
   }
-  document.getElementById('sVis').textContent=vis;
-  let label=zoom<4?'STRATEGIC':zoom<7?'OPERATIONAL':zoom<10?'TACTICAL':'CLOSE-IN';
+  state.visible=vis;
+  document.getElementById('sVis').textContent=vis.length;
+  const label=zoom<4?'STRATEGIC':zoom<7?'OPERATIONAL':zoom<10?'TACTICAL':'CLOSE-IN';
   const lodNote=culled>0?' | '+culled+' LOD':'';
-  document.getElementById('zoomBadge').textContent='ZOOM '+zoom+' | '+label+' | '+vis+' VISIBLE'+lodNote;
+  document.getElementById('zoomBadge').textContent='ZOOM '+zoom+' | '+label+' | '+vis.length+' VISIBLE'+lodNote;
 }
 
 // --- ASSET LIST ---
@@ -1286,23 +1512,21 @@ async function liveTrackAsset(){
     if(a.type==='aircraft'||a.type==='heli'){
       const data=await fetchJ(`${AL_BASE}/hex/${a.hex}`,6000);
       const ac=(data.ac||[])[0];
-      if(ac&&ac.lat&&ac.lon){const old=state.assets.get(state.selectedId);const trail=old?.trail?[...old.trail.slice(-30),[ac.lat,ac.lon]]:[[ac.lat,ac.lon]];state.assets.set(state.selectedId,{...old,lat:ac.lat,lon:ac.lon,alt:ac.alt_baro||ac.alt_geom||old.alt,gs:ac.gs??old.gs,track:ac.track??old.track,vrate:ac.baro_rate??old.vrate,squawk:ac.squawk??old.squawk,t:ac.t||old.t,trail,_lastSeen:Date.now()});const mk=state.markers.get(state.selectedId);if(mk)mk.setLatLng([ac.lat,ac.lon]);const rt=state.routes.get(state.selectedId);if(rt)rt.setLatLngs(trail);}
+      if(ac&&ac.lat&&ac.lon){const old=state.assets.get(state.selectedId);const trail=old?.trail?[...old.trail.slice(-30),[ac.lat,ac.lon]]:[[ac.lat,ac.lon]];state.assets.set(state.selectedId,{...old,lat:ac.lat,lon:ac.lon,alt:ac.alt_baro||ac.alt_geom||old.alt,gs:ac.gs??old.gs,track:ac.track??old.track,vrate:ac.baro_rate??old.vrate,squawk:ac.squawk??old.squawk,t:ac.t||old.t,trail,_lastSeen:Date.now()});}
     }else if(a.type==='ship'){
-      try{const data=await fetchJ(`https://meri.digitraffic.fi/api/ais/v1/locations?mmsi=${a.hex}`,6000);const f=(data.features||[])[0];if(f?.geometry?.coordinates){const[lon,lat]=f.geometry.coordinates;const old=state.assets.get(state.selectedId);const trail=old?.trail?[...old.trail.slice(-30),[lat,lon]]:[[lat,lon]];state.assets.set(state.selectedId,{...old,lat,lon,gs:f.properties?.sog??old.gs,track:f.properties?.cog??old.track,trail,_lastSeen:Date.now()});const mk=state.markers.get(state.selectedId);if(mk)mk.setLatLng([lat,lon]);}}catch(e){}
+      try{const data=await fetchJ(`https://meri.digitraffic.fi/api/ais/v1/locations?mmsi=${a.hex}`,6000);const f=(data.features||[])[0];if(f?.geometry?.coordinates){const[lon,lat]=f.geometry.coordinates;const old=state.assets.get(state.selectedId);const trail=old?.trail?[...old.trail.slice(-30),[lat,lon]]:[[lat,lon]];state.assets.set(state.selectedId,{...old,lat,lon,gs:f.properties?.sog??old.gs,track:f.properties?.cog??old.track,trail,_lastSeen:Date.now()});}}catch(e){}
     }
   }catch(e){}
   updateDetailPanel();
 }
 function showDetail(id){
   state.selectedId=id;const a=state.assets.get(id);if(!a)return;a._lastSeen=Date.now();
-  const mk=state.markers.get(id);if(mk&&a)mk.setIcon(makeIcon(a,34));
   document.getElementById('detailPanel').classList.add('show');updateDetailPanel();
   if(liveTrackInterval)clearInterval(liveTrackInterval);
   liveTrackInterval=setInterval(liveTrackAsset,4000);liveTrackAsset();
 }
 function closeDetail(){
   document.getElementById('detailPanel').classList.remove('show');
-  if(state.selectedId){const a=state.assets.get(state.selectedId);const mk=state.markers.get(state.selectedId);if(mk&&a)mk.setIcon(makeIcon(a,markerSize(map.getZoom())));}
   state.selectedId=null;if(liveTrackInterval){clearInterval(liveTrackInterval);liveTrackInterval=null;}
 }
 function focusAsset(id){const a=state.assets.get(id);if(a){map.setView([a.lat,a.lon],Math.max(map.getZoom(),8),{animate:true});showDetail(id);}}
@@ -3058,8 +3282,6 @@ function cleanStaleAssets(){
   for(const[id,a]of state.assets){
     if(a._lastSeen&&a._lastSeen<cutoff){
       state.assets.delete(id);
-      const mk=state.markers.get(id);if(mk){map.removeLayer(mk);state.markers.delete(id);}
-      const rt=state.routes.get(id);if(rt){map.removeLayer(rt);state.routes.delete(id);}
     }
   }
 }
@@ -3305,13 +3527,9 @@ function spaceView(){
     });
     if(state.jamMarkers)state.jamMarkers.forEach(m=>{try{map.removeLayer(m);}catch(e){}});
 
-    // Remove non-satellite asset markers
-    for(const[id,a]of state.assets){
-      if(a.type!=='satellite'){
-        const mk=state.markers.get(id);if(mk)try{map.removeLayer(mk);}catch(e){}
-        const rt=state.routes.get(id);if(rt)try{map.removeLayer(rt);}catch(e){}
-      }
-    }
+    // Contacts are canvas-drawn, so hiding them is a filter change rather than
+    // layer removal — renderMarkers() rebuilds the visible set on next pass.
+    state.visible=[];
 
     // Sync ALL button visuals to OFF
     document.querySelectorAll('.fbtn').forEach(btn=>{
