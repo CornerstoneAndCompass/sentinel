@@ -26,6 +26,7 @@ const ALLOWED_HOSTS = new Set([
   'meri.digitraffic.fi',
   // events / hazards
   'api.gdeltproject.org',
+  'api.rainviewer.com',            // precipitation radar index
   'www.gdacs.org',                 // global disaster alerts, EU JRC + UN OCHA
   'www.nhc.noaa.gov',              // tropical cyclones, Atlantic + E Pacific
   'api.weather.bom.gov.au',        // Australian warnings
@@ -62,6 +63,7 @@ const TTL = [
   [/digitraffic/, 20],
   [/gdeltproject/, 300],
   [/rss|feeds\.|xml|reliefweb|news\.google/, 180],
+  [/rainviewer/, 60],
   [/gdacs|bom\.gov\.au/, 300],
   [/rfs\.nsw|emergency\.vic/, 120],
   [/firms|eonet|usgs|swpc|weather|tsunami|volcano/, 120],

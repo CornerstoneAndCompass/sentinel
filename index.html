@@ -285,6 +285,11 @@ html,body{width:100%;height:100%;overflow:hidden;background:#050a12;font-family:
 .wx-note{color:var(--td);font-size:8px;letter-spacing:1px;margin:-1px 0 5px}
 .wx-sel{width:100%;background:var(--bg2);border:1px solid var(--brd);color:var(--tm);
   font-family:inherit;font-size:9px;padding:2px 5px;letter-spacing:1px}
+.wx-scrub{gap:5px}
+#wxFrame{flex:1;accent-color:var(--c);height:3px}
+.wx-step{background:transparent;border:1px solid var(--brd);color:var(--c);font-family:inherit;
+  font-size:9px;padding:1px 6px;cursor:pointer}
+.wx-step:hover{background:var(--c);color:#000}
 @media(max-width:900px){#wxPanel{bottom:150px;min-width:0;width:92vw}}
 /* A world dashboard should say when a number is really one country's. */
 .scope-tag{font-size:8px;letter-spacing:1px;border:1px solid var(--brd);color:var(--td);
@@ -973,6 +978,12 @@ Use the bar below: <b>LAYERS</b> picks what's on the map, <b>INTEL</b> has alert
       <button class="wx-band" data-band="B03" onclick="setSatBand('B03')">VISIBLE</button>
     </div>
     <div class="wx-note" id="wxSatNote">—</div>
+    <div class="wx-row wx-scrub">
+      <button class="wx-step" onclick="stepWxFrame(-1)" title="Previous frame">◀</button>
+      <input type="range" id="wxFrame" min="0" max="0" value="0" oninput="setWxFrame(+this.value)" title="Scrub through the last two hours">
+      <button class="wx-step" onclick="stepWxFrame(1)" title="Next frame">▶</button>
+    </div>
+    <div class="wx-note" id="wxFrameLabel">—</div>
     <div class="wx-row"><button id="wxLoopBtn" class="wx-tog wide" onclick="toggleWxLoop()">▶ LOOP</button></div>
   </div>
 </div>
@@ -2326,30 +2337,85 @@ let _radarLayer=null,_radarFrames=[],_radarIdx=-1,_radarTimer=null;
 async function fetchRadar(){
   feedWait('f39');
   try{
-    const d=await fetchR('https://api.rainviewer.com/public/weather-maps.json',1,12000);
+    // no-store matters: the index is small and changes every 10 minutes, and a
+    // cached copy pins the whole layer to an old frame. That is what made the
+    // radar look stale rather than live.
+    //
+    // RainViewer also rate-limits a busy client and starts refusing outright,
+    // at which point a direct fetch throws while the same request from
+    // elsewhere succeeds. Fall back to the Worker, which has its own egress and
+    // a 60s cache, rather than leaving the layer empty.
+    const IDX='https://api.rainviewer.com/public/weather-maps.json';
+    let d;
+    try{
+      const r=await fetch(IDX,{cache:'no-store'});
+      if(!r.ok)throw new Error('HTTP '+r.status);
+      d=await r.json();
+    }catch(e){
+      if(!hasProxy())throw e;
+      d=await fetchR(corsUrl(IDX),1,15000);
+    }
     const host=d.host||'https://tilecache.rainviewer.com';
-    _radarFrames=(d.radar&&d.radar.past?d.radar.past:[]).map(f=>({time:f.time,url:host+f.path}));
-    if(d.radar&&d.radar.nowcast)_radarFrames=_radarFrames.concat(d.radar.nowcast.map(f=>({time:f.time,url:host+f.path,forecast:true})));
+    const next=(d.radar&&d.radar.past?d.radar.past:[]).map(f=>({time:f.time,url:host+f.path}));
+    if(d.radar&&d.radar.nowcast)for(const f of d.radar.nowcast)next.push({time:f.time,url:host+f.path,forecast:true});
+    // Only rebuild when the frame set actually moved on, otherwise a refresh
+    // every 30s would throw away warmed tiles for nothing.
+    const changed=next.length!==_radarFrames.length
+      ||next.some((f,i)=>!_radarFrames[i]||_radarFrames[i].time!==f.time);
+    if(changed){
+      const wasLatest=_radarIdx<0||_radarIdx===_radarFrames.length-1;
+      clearRadarLayers();
+      _radarFrames=next;
+      _radarIdx=-1;
+      if(_radarFrames.length)showRadarFrame(wasLatest?_radarFrames.length-1:_radarIdx);
+      buildWxScrubber();
+    }
     state.sources.radar=_radarFrames.length;
-    if(_radarFrames.length){showRadarFrame(_radarFrames.length-1);feedDot('f39',true);}
-    else feedDot('f39',false);
+    feedDot('f39',_radarFrames.length>0);
   }catch(e){console.warn('Radar error:',e);feedDot('f39',false);}
 }
 
+/* One tile layer per frame, created on demand and kept.
+   The previous version destroyed and rebuilt the layer on every step, so each
+   frame of the loop re-downloaded all of its tiles from scratch and never
+   finished before the next swap 600ms later — which is why the loop looked
+   broken. Holding the layers and cross-fading opacity means a frame is fetched
+   once and every subsequent pass is instant. */
+const _radarLayers=new Map();
+function radarLayerFor(i){
+  if(_radarLayers.has(i))return _radarLayers.get(i);
+  const f=_radarFrames[i];
+  if(!f)return null;
+  // 512px tiles, scheme 4 (universal blue/green/red), smoothed, snow shown.
+  // RainViewer caps at z7 for both tile sizes; past that it answers HTTP 200
+  // with a "Zoom Level Not Supported" image, so nothing errors and Leaflet
+  // would tile the placeholder across the map.
+  const l=L.tileLayer(`${f.url}/512/{z}/{x}/{y}/4/1_1.png`,
+    {opacity:0,zIndex:200,maxNativeZoom:7,maxZoom:20,crossOrigin:true});
+  _radarLayers.set(i,l);
+  return l;
+}
+function clearRadarLayers(){
+  _radarLayers.forEach(l=>{if(map.hasLayer(l))map.removeLayer(l);});
+  _radarLayers.clear();
+}
 function showRadarFrame(i){
   if(!_radarFrames.length)return;
   _radarIdx=(i+_radarFrames.length)%_radarFrames.length;
-  const f=_radarFrames[_radarIdx];
-  // 512px tiles at scheme 4 (universal blue/green/red), smoothed, snow shown.
-  const url=`${f.url}/512/{z}/{x}/{y}/4/1_1.png`;
-  if(_radarLayer)map.removeLayer(_radarLayer);
-  // RainViewer caps at z7 for both 256px and 512px tiles. Past that it answers
-  // HTTP 200 with a "Zoom Level Not Supported" image — byte-identical from z8
-  // upward — so nothing errors and Leaflet tiles the placeholder across the map.
-  // maxNativeZoom was 10, which is why zooming in filled the screen with it.
-  _radarLayer=L.tileLayer(url,{opacity:state.radarOpacity!=null?state.radarOpacity:0.55,zIndex:200,maxNativeZoom:7,maxZoom:20,crossOrigin:true});
-  if(state.layers.radar!==false)_radarLayer.addTo(map);
+  if(!state.layers.radar){if(typeof updateWxBar==='function')updateWxBar();return;}
+  const want=radarLayerFor(_radarIdx);
+  if(want&&!map.hasLayer(want))want.addTo(map);
+  const op=state.radarOpacity!=null?state.radarOpacity:0.55;
+  _radarLayers.forEach((l,idx)=>{if(map.hasLayer(l))l.setOpacity(idx===_radarIdx?op:0);});
   if(typeof updateWxBar==='function')updateWxBar();
+}
+// Warm every frame so the first pass of the loop is not a slideshow of blanks.
+function preloadRadarFrames(){
+  for(let i=0;i<_radarFrames.length;i++){
+    const l=radarLayerFor(i);
+    if(l&&!map.hasLayer(l))l.addTo(map);
+    if(l)l.setOpacity(i===_radarIdx?(state.radarOpacity!=null?state.radarOpacity:0.55):0);
+  }
 }
 
 // Looping is handled by toggleWxLoop in the weather panel, which steps radar
@@ -2358,9 +2424,8 @@ function toggleRadar(){
   state.layers.radar=!state.layers.radar;
   const btn=document.getElementById('fRadar');
   if(btn)btn.classList.toggle('on',state.layers.radar);
-  if(!state.layers.radar){
-    if(_radarLayer)map.removeLayer(_radarLayer);
-  }else if(_radarLayer){_radarLayer.addTo(map);}
+  if(!state.layers.radar)clearRadarLayers();
+  else if(_radarFrames.length)showRadarFrame(_radarIdx>=0?_radarIdx:_radarFrames.length-1);
   else fetchRadar();
   if(typeof syncWxButtons==='function')syncWxButtons();
 }
@@ -4513,11 +4578,14 @@ let _satLayer=null,_satTimes=[],_satIdx=-1,_satBand='B13';
 async function fetchSatellite(){
   feedWait('f41');
   try{
-    const t=await fetchJ('https://www.jma.go.jp/bosai/himawari/data/satimg/targetTimes_fd.json',15000);
+    // Same reasoning as the radar index: cached, it pins the layer to an old frame.
+    const r=await fetch('https://www.jma.go.jp/bosai/himawari/data/satimg/targetTimes_fd.json',{cache:'no-store'});
+    const t=await r.json();
     _satTimes=(Array.isArray(t)?t:[]).slice(-12);   // last two hours
     state.sources.satimg=_satTimes.length;
     if(_satTimes.length){showSatFrame(_satTimes.length-1);feedDot('f41',true);}
     else feedDot('f41',false);
+    buildWxScrubber();
   }catch(e){console.warn('Himawari error:',e);feedDot('f41',false);}
 }
 
@@ -4610,6 +4678,60 @@ function toggleWxPanel(){
   localStorage.setItem('sentinel_wxpanel',open?'open':'shut');
 }
 
+/* Frame selection. Radar drives the scrubber because it has the finer cadence;
+   the cloud layer is stepped to the nearest matching index so the two stay
+   roughly aligned rather than drifting apart. */
+function buildWxScrubber(){
+  const el=document.getElementById('wxFrame');
+  if(!el)return;
+  const n=Math.max(_radarFrames.length,_satTimes.length);
+  el.max=Math.max(0,n-1);
+  el.value=_radarIdx>=0?_radarIdx:Math.max(0,n-1);
+  updateWxFrameLabel();
+}
+function updateWxFrameLabel(){
+  const el=document.getElementById('wxFrameLabel');
+  if(!el)return;
+  const f=_radarFrames[_radarIdx];
+  if(f){
+    const age=Math.round((Date.now()-f.time*1000)/60000);
+    el.textContent=new Date(f.time*1000).toISOString().slice(11,16)+'Z · '
+      +(f.forecast?'forecast':(age<=0?'now':age+' min ago'))
+      +'  ('+(_radarIdx+1)+'/'+_radarFrames.length+')';
+    return;
+  }
+  // Radar can be unavailable while cloud is fine — RainViewer rate-limits and
+  // drops out. Fall back to the cloud clock rather than showing a dash.
+  const t=_satTimes[_satIdx];
+  if(t){
+    const iso=t.validtime;
+    const d=Date.UTC(+iso.slice(0,4),+iso.slice(4,6)-1,+iso.slice(6,8),+iso.slice(8,10),+iso.slice(10,12));
+    const age=Math.round((Date.now()-d)/60000);
+    el.textContent=iso.slice(8,10)+':'+iso.slice(10,12)+'Z · cloud only · '
+      +(age<=0?'now':age+' min ago')+'  ('+(_satIdx+1)+'/'+_satTimes.length+')';
+    return;
+  }
+  el.textContent='no frames available';
+}
+function setWxFrame(i){
+  if(_wxTimer)toggleWxLoop();            // scrubbing implies you want manual control
+  const nR=_radarFrames.length,nS=_satTimes.length;
+  const span=Math.max(nR,nS);
+  if(!span)return;
+  const ratio=span>1?Math.max(0,Math.min(i,span-1))/(span-1):1;
+  if(nR)showRadarFrame(Math.round(ratio*(nR-1)));
+  if(nS)showSatFrame(Math.round(ratio*(nS-1)));
+  const el=document.getElementById('wxFrame');
+  if(el)el.value=nR?_radarIdx:_satIdx;
+  updateWxFrameLabel();
+}
+function stepWxFrame(d){
+  const span=Math.max(_radarFrames.length,_satTimes.length);
+  if(!span)return;
+  const cur=_radarFrames.length?_radarIdx:_satIdx;
+  setWxFrame((cur+d+span)%span);
+}
+
 // One loop control drives whichever layers are switched on, so radar and cloud
 // step together and stay time-aligned.
 let _wxTimer=null;
@@ -4620,13 +4742,22 @@ function toggleWxLoop(){
     if(btn){btn.textContent='▶ LOOP';btn.classList.remove('on');}
     if(_radarFrames.length)showRadarFrame(_radarFrames.length-1);
     if(_satTimes.length)showSatFrame(_satTimes.length-1);
+    const el=document.getElementById('wxFrame');if(el)el.value=_radarIdx;
+    updateWxFrameLabel();
   }else{
     if(btn){btn.textContent='❚❚ STOP';btn.classList.add('on');}
+    if(state.layers.radar)preloadRadarFrames();     // warm every frame first
     _wxTimer=setInterval(()=>{
-      if(state.layers.radar&&_radarFrames.length)showRadarFrame(_radarIdx+1);
-      if(state.layers.satimg&&_satTimes.length)showSatFrame(_satIdx+1);
-      updateWxBar();
-    },600);
+      const disk=typeof activeDisk==='function'?activeDisk():null;
+      const stepR=state.layers.radar&&_radarFrames.length;
+      const stepS=state.layers.satimg&&_satTimes.length&&disk&&disk.src==='jma';
+      if(stepR)showRadarFrame(_radarIdx+1);
+      if(stepS)showSatFrame(_satIdx+1);
+      if(!stepR&&!stepS){toggleWxLoop();return;}   // nothing to animate
+      const el=document.getElementById('wxFrame');
+      if(el)el.value=stepR?_radarIdx:_satIdx;
+      updateWxFrameLabel();updateWxBar();
+    },700);
   }
 }
 
@@ -5578,7 +5709,7 @@ async function boot(){
   restorePanels();
   renderWatchlist();
   if(localStorage.getItem('sentinel_wxpanel')!=='shut')document.getElementById('wxPanel').classList.add('open');
-  syncWxButtons();updateWxBar();
+  syncWxButtons();updateWxBar();buildWxScrubber();
   if(loadWatch().length){loadCountries().then(renderWatchlist).catch(()=>{});}
 }
 boot();
@@ -5592,6 +5723,10 @@ setInterval(fetchSpaceWeather,120000);
 setInterval(fetchSevereWeather,300000);
 setInterval(updateThreatBanner,60000);
 setInterval(fetchGlobalAIS,45000); // global AIS snapshot for the current viewport
+// Both publish every 10 minutes; poll a little faster so a new frame appears
+// promptly rather than waiting on the general refresh.
+setInterval(()=>{if(state.layers.radar)fetchRadar();},240000);
+setInterval(()=>{if(state.layers.satimg)fetchSatellite();},240000);
 setInterval(()=>{calculateDefcon();},120000);
 setInterval(detectDarkVessels,60000); // Check for dark vessels every minute
 setInterval(checkSanctioned,120000); // Recheck sanctions every 2 min
