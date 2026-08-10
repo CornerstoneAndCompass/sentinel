@@ -2343,7 +2343,11 @@ function showRadarFrame(i){
   // 512px tiles at scheme 4 (universal blue/green/red), smoothed, snow shown.
   const url=`${f.url}/512/{z}/{x}/{y}/4/1_1.png`;
   if(_radarLayer)map.removeLayer(_radarLayer);
-  _radarLayer=L.tileLayer(url,{opacity:state.radarOpacity!=null?state.radarOpacity:0.55,zIndex:200,maxNativeZoom:10,maxZoom:20,crossOrigin:true});
+  // RainViewer caps at z7 for both 256px and 512px tiles. Past that it answers
+  // HTTP 200 with a "Zoom Level Not Supported" image — byte-identical from z8
+  // upward — so nothing errors and Leaflet tiles the placeholder across the map.
+  // maxNativeZoom was 10, which is why zooming in filled the screen with it.
+  _radarLayer=L.tileLayer(url,{opacity:state.radarOpacity!=null?state.radarOpacity:0.55,zIndex:200,maxNativeZoom:7,maxZoom:20,crossOrigin:true});
   if(state.layers.radar!==false)_radarLayer.addTo(map);
   if(typeof updateWxBar==='function')updateWxBar();
 }
@@ -4537,7 +4541,13 @@ function showSatFrame(i){
   if(_satLayer)map.removeLayer(_satLayer);
   _satLayer=L.tileLayer(url,{
     opacity:state.satOpacity!=null?state.satOpacity:0.65,
-    zIndex:150,maxNativeZoom:disk.src==='gibs'?7:6,maxZoom:20,crossOrigin:true,
+    // JMA's full-disk product stops at z5 and GIBS Level7 stops at z7. Going one
+    // past either is not a harmless 404: JMA answers 404 with a valid JPEG that
+    // reads "Zoom Level Not Supported", and because that image *loads*, no error
+    // event fires and errorTileUrl never gets a chance — Leaflet just tiles the
+    // placeholder across the map. Measured, not assumed: JMA z5 serves real
+    // imagery, z6/z7/z8 all return the same 2203-byte placeholder.
+    zIndex:150,maxNativeZoom:disk.src==='gibs'?7:5,maxZoom:20,crossOrigin:true,
     // Outside the Himawari disk every tile 404s; silence rather than console spam.
     errorTileUrl:'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7'
   });
