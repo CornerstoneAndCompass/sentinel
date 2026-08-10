@@ -23,7 +23,9 @@ html,body{width:100%;height:100%;overflow:hidden;background:#050a12;font-family:
 --brd:rgba(0,232,255,0.12);--brdh:rgba(0,232,255,0.35);
 --td:#7a8a9a;--tm:#b0c0d0;--th:#e0e8f0;
 }
-#map{width:100%;height:100%;z-index:1}
+/* Leaflet's default container background is #ddd, so any area the tile grid
+   has not painted yet renders as a bright grey rectangle over a dark UI. */
+#map{width:100%;height:100%;z-index:1;background:#050a12}
 .leaflet-control-attribution,.leaflet-control-zoom{display:none!important}
 .vehicle-icon{background:none!important;border:none!important}
 .overlay-icon{background:none!important;border:none!important}
@@ -205,6 +207,20 @@ html,body{width:100%;height:100%;overflow:hidden;background:#050a12;font-family:
 /* Sits above Leaflet's panes; clicks fall through to the map, which does the
    hit-testing against the drawn contact list. */
 .contact-canvas{position:absolute;top:0;left:0;pointer-events:none;z-index:450}
+/* Group-level layer controls — 18 individual buttons meant clearing the map
+   took 18 clicks. */
+.fgroup{display:flex;align-items:center;gap:6px}
+.grp-ctl{margin-left:auto;display:flex;gap:3px}
+.grp-ctl button{background:transparent;border:1px solid var(--brd);color:var(--td);
+  font-family:inherit;font-size:8px;letter-spacing:1px;padding:1px 5px;cursor:pointer;line-height:1.5}
+.grp-ctl button:hover{border-color:var(--c);color:var(--c)}
+.card-title{display:flex;align-items:center}
+.alert-item.clickable{cursor:pointer}
+.alert-item.clickable:hover{background:rgba(0,232,255,.07)}
+.alert-go{color:var(--c);letter-spacing:1px;opacity:.75}
+#notifyBtn{background:transparent;border:1px solid var(--brd);color:var(--td);
+  font-family:inherit;font-size:9px;letter-spacing:1px;padding:2px 7px;cursor:pointer}
+#notifyBtn.on{border-color:var(--g);color:var(--g)}
 #contactTip{position:absolute;z-index:460;pointer-events:none;display:none;
   background:rgba(8,12,20,.92);border:1px solid var(--brd);color:var(--tp);
   font-family:'Share Tech Mono',monospace;font-size:11px;padding:3px 7px;white-space:nowrap}
@@ -606,39 +622,39 @@ html,body{width:100%;height:100%;overflow:hidden;background:#050a12;font-family:
 <div class="stat-row" title="Major military installations"><span class="stat-label">MILITARY BASES</span><span class="stat-val cc" style="font-size:12px" id="sMilBase">--</span></div>
 </div>
 <div class="card" id="cardLayers">
-<div class="card-title">Map Layers</div>
-<div class="fgroup">Asset types</div>
-<div style="display:flex;flex-wrap:wrap">
+<div class="card-title">Map Layers<span class="grp-ctl" style="margin-left:auto"><button onclick="setAllGroups(true)" title="Turn every map layer on">ALL ON</button><button onclick="setAllGroups(false)" title="Turn every map layer off">ALL OFF</button></span></div>
+<div class="fgroup">Asset types<span class="grp-ctl"><button onclick="setGroup('grpAssets',true)" title="Turn every layer in this group on">ALL</button><button onclick="setGroup('grpAssets',false)" title="Turn every layer in this group off">NONE</button></span></div>
+<div id="grpAssets" style="display:flex;flex-wrap:wrap">
 <button class="fbtn on" id="fAir" onclick="togF('aircraft')" title="Show or hide fixed-wing aircraft">AIRCRAFT</button>
 <button class="fbtn on-y" id="fHeli" onclick="togF('heli')" title="Show or hide helicopters">HELICOPTERS</button>
 <button class="fbtn on-o" id="fShip" onclick="togF('ship')" title="Show or hide ships and vessels">SHIPS</button>
 <button class="fbtn on-p" id="fSat" onclick="togF('satellite')" title="Show or hide satellites">SATELLITES</button>
 <button class="fbtn on-p" id="fOrbit" onclick="toggleOrbits()" title="Draw the orbital path each satellite follows over the ground">ORBIT PATHS</button>
 </div>
-<div class="fgroup">Operators</div>
-<div style="display:flex;flex-wrap:wrap">
+<div class="fgroup">Operators<span class="grp-ctl"><button onclick="setGroup('grpOps',true)" title="Turn every layer in this group on">ALL</button><button onclick="setGroup('grpOps',false)" title="Turn every layer in this group off">NONE</button></span></div>
+<div id="grpOps" style="display:flex;flex-wrap:wrap">
 <button class="fbtn on-g" id="cMil" onclick="togC('military')" title="Armed forces aircraft and vessels">MILITARY</button>
 <button class="fbtn on-g" id="cCG" onclick="togC('coastguard')" title="Coast guard aircraft and vessels">COAST GUARD</button>
 <button class="fbtn on-g" id="cPol" onclick="togC('police')" title="Police aircraft">POLICE</button>
 <button class="fbtn on-g" id="cGov" onclick="togC('government')" title="Government and state aircraft">GOVERNMENT</button>
 <button class="fbtn on-g" id="cSar" onclick="togC('sar')" title="Search-and-rescue aircraft and vessels">RESCUE</button>
 </div>
-<div class="fgroup">Civilian shipping</div>
-<div style="display:flex;flex-wrap:wrap">
+<div class="fgroup">Civilian shipping<span class="grp-ctl"><button onclick="setGroup('grpCivil',true)" title="Turn every layer in this group on">ALL</button><button onclick="setGroup('grpCivil',false)" title="Turn every layer in this group off">NONE</button></span></div>
+<div id="grpCivil" style="display:flex;flex-wrap:wrap">
 <button class="fbtn" id="cTanker" onclick="togC('tanker')" title="Oil, gas and chemical tankers">TANKERS</button>
 <button class="fbtn" id="cCargo" onclick="togC('cargo')" title="Cargo and container ships">CARGO</button>
 <button class="fbtn" id="cPassenger" onclick="togC('passenger')" title="Cruise ships and ferries">CRUISE</button>
 <button class="fbtn" id="cFishing" onclick="togC('fishing')" title="Fishing vessels">FISHING</button>
 </div>
-<div class="fgroup">Hazards</div>
-<div style="display:flex;flex-wrap:wrap">
+<div class="fgroup">Hazards<span class="grp-ctl"><button onclick="setGroup('grpHaz',true)" title="Turn every layer in this group on">ALL</button><button onclick="setGroup('grpHaz',false)" title="Turn every layer in this group off">NONE</button></span></div>
+<div id="grpHaz" style="display:flex;flex-wrap:wrap">
 <button class="fbtn on-r" id="fQuake" onclick="togLayer('quakes')" title="Earthquakes from the last 24 hours (USGS)">EARTHQUAKES</button>
 <button class="fbtn on-o" id="fFire" onclick="togLayer('fires')" title="Fire hotspots detected by satellite (NASA)">FIRES</button>
 <button class="fbtn on-o" id="fVolcano" onclick="togLayer('volcanoes')" title="Volcanoes with elevated activity">VOLCANOES</button>
 <button class="fbtn on-r" id="fTsunami" onclick="togLayer('tsunami')" title="Active tsunami warnings (NOAA)">TSUNAMI</button>
 </div>
-<div class="fgroup">Security &amp; intel</div>
-<div style="display:flex;flex-wrap:wrap">
+<div class="fgroup">Security &amp; intel<span class="grp-ctl"><button onclick="setGroup('grpIntel',true)" title="Turn every layer in this group on">ALL</button><button onclick="setGroup('grpIntel',false)" title="Turn every layer in this group off">NONE</button></span></div>
+<div id="grpIntel" style="display:flex;flex-wrap:wrap">
 <button class="fbtn on" id="fGdelt" onclick="togLayer('gdelt')" title="Geolocated world news events (GDELT)">NEWS EVENTS</button>
 <button class="fbtn on-y" id="fChoke" onclick="togLayer('chokes')" title="Strategic straits and canals — Hormuz, Suez, Malacca…">CHOKEPOINTS</button>
 <button class="fbtn on-p" id="fJam" onclick="togLayer('jamming')" title="Zones with known GPS signal jamming">GPS JAMMING</button>
@@ -650,8 +666,8 @@ html,body{width:100%;height:100%;overflow:hidden;background:#050a12;font-family:
 <button class="fbtn on-o" id="fDrone" onclick="togLayer('drones')" title="Reported drone and UAS activity">DRONES</button>
 <button class="fbtn on-y" id="fRefugee" onclick="togLayer('refugees')" title="Refugee and displacement movements (UNHCR)">REFUGEES</button>
 </div>
-<div class="fgroup">Infrastructure</div>
-<div style="display:flex;flex-wrap:wrap">
+<div class="fgroup">Infrastructure<span class="grp-ctl"><button onclick="setGroup('grpInfra',true)" title="Turn every layer in this group on">ALL</button><button onclick="setGroup('grpInfra',false)" title="Turn every layer in this group off">NONE</button></span></div>
+<div id="grpInfra" style="display:flex;flex-wrap:wrap">
 <button class="fbtn" id="fCables" onclick="togLayer('cables')" title="Undersea internet cable routes">SEA CABLES</button>
 <button class="fbtn" id="fNuke" onclick="togLayer('nukes')" title="Nuclear facilities and test sites">NUCLEAR</button>
 <button class="fbtn" id="fBases" onclick="togLayer('bases')" title="Major military installations">MIL BASES</button>
@@ -803,7 +819,7 @@ Use the bar below: <b>LAYERS</b> picks what's on the map, <b>INTEL</b> has alert
 <div class="bottom-bar">
 <div class="feeds" id="feedsBar" onclick="toggleStatusPanel()" title="Data feed health — click for the full system status"></div>
 <div title="Time until the next automatic data refresh, and when data last arrived"><span style="color:var(--td)">REFRESH </span><span id="countdown" style="color:var(--c)">30s</span><span style="color:var(--td)"> | </span><span id="lastUp" style="color:var(--g)">--:--:--</span></div>
-<div style="display:flex;align-items:center;gap:10px"><span style="letter-spacing:3px;color:var(--td);font-family:'Orbitron',sans-serif;font-size:9px">SENTINEL v20.3</span><span style="color:var(--td);font-size:10px;cursor:pointer" onclick="document.getElementById('shortcutsOverlay').classList.toggle('show')" title="Keyboard shortcuts">[?]</span></div>
+<div style="display:flex;align-items:center;gap:10px"><button id="notifyBtn" onclick="toggleNotifications()" title="Desktop notifications for critical alerts">ALERTS: OFF</button><span style="letter-spacing:3px;color:var(--td);font-family:'Orbitron',sans-serif;font-size:9px">SENTINEL v20.3</span><span style="color:var(--td);font-size:10px;cursor:pointer" onclick="document.getElementById('shortcutsOverlay').classList.toggle('show')" title="Keyboard shortcuts">[?]</span></div>
 </div>
 
 <script>
@@ -1401,6 +1417,61 @@ map.on('mousemove',e=>{
 });
 map.on('mouseout',()=>{const t=document.getElementById('contactTip');if(t)t.style.display='none';});
 
+/* ==================== VIEWPORT-DRIVEN DATA ====================
+   Everything used to be fetched globally regardless of where you were looking,
+   and nothing refetched when you moved. Zooming into a region now narrows the
+   query to that region and discards what you have panned away from, so a
+   Middle East view carries Middle East traffic at full density rather than a
+   thin global sample.
+*/
+const LOCAL_ZOOM=6;        // at or above this, the view drives the data
+let _viewTimer=null,_lastViewKey='';
+
+function viewKey(){
+  const b=safeBounds();
+  return [map.getZoom(),b.south.toFixed(1),b.west.toFixed(1),b.north.toFixed(1),b.east.toFixed(1)].join(',');
+}
+
+// Bulk civilian traffic outside the view is dropped; military, coastguard,
+// government, SAR and satellites are kept worldwide.
+//
+// The reason is coverage, not preference. These are crowd-sourced ADS-B and AIS
+// networks and their receiver density follows population, not geopolitics: a
+// 250nm sweep centred on Baghdad returns 2 aircraft. Dropping the global
+// picture on zoom would therefore empty the map over precisely the regions
+// worth watching. Priority contacts are only ~150 objects worldwide, so holding
+// them costs nothing; the thousands of cargo vessels are what needed culling.
+function pruneOutOfView(){
+  const b=safeBounds();
+  const padLat=(b.north-b.south)*0.6,padLon=(b.east-b.west)*0.6;
+  let dropped=0;
+  for(const[id,a]of state.assets){
+    if(a.type==='satellite'||id===state.selectedId)continue;
+    if(PRIORITY_CATS.has(a.cat))continue;
+    if(a.lat<b.south-padLat||a.lat>b.north+padLat||a.lon<b.west-padLon||a.lon>b.east+padLon){
+      state.assets.delete(id);dropped++;
+    }
+  }
+  return dropped;
+}
+
+async function onViewChanged(){
+  const key=viewKey();
+  if(key===_lastViewKey)return;
+  _lastViewKey=key;
+  renderMarkers();                       // re-cull immediately, no network wait
+  if(map.getZoom()<LOCAL_ZOOM)return;    // strategic view keeps the global sweep
+  const dropped=pruneOutOfView();
+  document.getElementById('mainStatus').textContent='SCANNING AREA';
+  await Promise.allSettled([fetchADSBRegion(),fetchOpenSky(),fetchGlobalAIS()]);
+  renderAll();
+  if(dropped)console.debug('pruned',dropped,'out-of-view contacts');
+}
+map.on('moveend zoomend',()=>{
+  clearTimeout(_viewTimer);
+  _viewTimer=setTimeout(onViewChanged,500);   // debounce drag/zoom flurries
+});
+
 /* ---- map sizing ----
    Leaflet caches container size. If the container is resized while hidden — a
    mobile tab switch, a collapsed pane, loading in a background tab — the cached
@@ -1408,17 +1479,31 @@ map.on('mouseout',()=>{const t=document.getElementById('contactTip');if(t)t.styl
    renderMarkers gated every contact on bounds.contains() the map silently
    rendered nothing at all. That was the "0 VISIBLE" bug.
 */
+// renderMarkers() calls this on entry and this calls renderMarkers() back when
+// it corrects a stale size, so the re-entry has to be broken explicitly.
+let _sizing=false;
 function ensureMapSized(){
+  if(_sizing)return false;
   const el=map.getContainer();
   const r=el.getBoundingClientRect();
   const s=map.getSize();
   if(r.width>0&&r.height>0&&(Math.abs(r.width-s.x)>1||Math.abs(r.height-s.y)>1)){
+    _sizing=true;
     map.invalidateSize({animate:false});
+    // invalidateSize alone can leave the tile grid laid out for the old size,
+    // so the new area stays unpainted. Force the base layer to re-tile.
+    try{if(typeof _baseTile!=='undefined'&&_baseTile.redraw)_baseTile.redraw();}catch(e){}
     _needsResize=true;
+    // The visible set was computed against the wrong bounds, so recompute it.
+    // Without this the map stays empty until the next fetch cycle happens to
+    // call renderAll — which is exactly how the "0 VISIBLE" state persisted.
+    try{renderMarkers();}catch(e){}
+    _sizing=false;
     return true;
   }
   return false;
 }
+map.on('resize',()=>{_needsResize=true;if(!_sizing)try{renderMarkers();}catch(e){}});
 if(window.ResizeObserver){
   new ResizeObserver(()=>ensureMapSized()).observe(map.getContainer());
 }
@@ -1478,7 +1563,14 @@ function renderMarkers(){
   document.getElementById('sVis').textContent=vis.length;
   const label=zoom<4?'STRATEGIC':zoom<7?'OPERATIONAL':zoom<10?'TACTICAL':'CLOSE-IN';
   const lodNote=culled>0?' | '+culled+' LOD':'';
-  document.getElementById('zoomBadge').textContent='ZOOM '+zoom+' | '+label+' | '+vis.length+' VISIBLE'+lodNote;
+  // ADS-B and AIS here are crowd-sourced, and receiver density follows
+  // population rather than strategic interest — a sweep over Iraq returns a
+  // couple of aircraft. Saying so beats leaving someone staring at a blank map
+  // wondering whether the app is broken.
+  const sparse=zoom>=LOCAL_ZOOM&&vis.length<=3?' | SPARSE RECEIVER COVERAGE HERE':'';
+  const badge=document.getElementById('zoomBadge');
+  badge.textContent='ZOOM '+zoom+' | '+label+' | '+vis.length+' VISIBLE'+lodNote+sparse;
+  badge.style.color=sparse?'var(--y)':'';
 }
 
 // --- ASSET LIST ---
@@ -1613,11 +1705,18 @@ async function fetchADSBMil(){
     catch(e2){feedDot('f1',false);}
   }
 }
+// Radius follows the view: at country zoom a 250nm sweep pulls in hundreds of
+// contacts you cannot see, which cost time to fetch and memory to hold.
+function viewRadiusNm(){
+  const b=safeBounds();
+  const spanKm=Math.max(b.north-b.south,(b.east-b.west)*Math.cos(((b.north+b.south)/2)*Math.PI/180))*111;
+  return Math.max(60,Math.min(250,Math.round(spanKm*0.62)));
+}
 async function fetchADSBRegion(){
   feedWait('f2');
   try{
-    const c=map.getBounds().getCenter();
-    const d=await fetchR(`${AL_BASE}/point/${c.lat.toFixed(3)}/${c.lng.toFixed(3)}/250`,1,12000);
+    const c=map.getCenter();
+    const d=await fetchR(`${AL_BASE}/point/${c.lat.toFixed(3)}/${c.lng.toFixed(3)}/${viewRadiusNm()}`,1,12000);
     const mil=(d.ac||[]).filter(a=>{const cs=(a.flight||'').trim();return a.dbFlags===1||MIL_P.some(p=>p.test(cs))||CG_P.some(p=>p.test(cs))||POL_P.some(p=>p.test(cs))||GOV_P.some(p=>p.test(cs))||SAR_P.some(p=>p.test(cs));});
     const n=processAC(mil,'REGIONAL');state.sources.region=n;feedDot('f2',true);
   }catch(e){feedDot('f2',false);}
@@ -1655,7 +1754,8 @@ async function fetchSquawks(){
       for(const ac of d.ac||[]){
         if(!ac.lat||!ac.lon)continue;
         const cs=(ac.flight||ac.hex||'').trim();
-        addAlert(sq.sev,`SQUAWK ${sq.code} ${sq.label}: ${cs||'unknown'}`);
+        addAlert(sq.sev,`SQUAWK ${sq.code} ${sq.label}: ${cs||'unknown'}`,
+          {lat:ac.lat,lon:ac.lon,zoom:8,assetId:'a_'+ac.hex,kind:sq.label});
         n++;
       }
       processAC(d.ac||[],'SQUAWK-'+sq.code);
@@ -2984,7 +3084,82 @@ function toggleDefconPop(){
 }
 
 // --- ALERTS SYSTEM ---
-function addAlert(level,text){
+/* ---- layer group control ----
+   Reuses each button's own click handler rather than reimplementing the toggle
+   logic, so any side effects those handlers have still happen.
+*/
+const ON_CLASSES=['on','on-r','on-o','on-y','on-p','on-g'];
+function btnIsOn(btn){return ON_CLASSES.some(c=>btn.classList.contains(c));}
+function setGroup(wrapId,on){
+  const w=document.getElementById(wrapId);
+  if(!w)return;
+  w.querySelectorAll('.fbtn').forEach(btn=>{if(btnIsOn(btn)!==on)btn.click();});
+}
+function setAllGroups(on){
+  ['grpAssets','grpOps','grpCivil','grpHaz','grpIntel','grpInfra'].forEach(g=>setGroup(g,on));
+}
+
+/* ---- desktop notifications ----
+   Red-level alerts are the ones worth interrupting for. Everything else stays
+   in the panel.
+*/
+function notifyPermission(){
+  if(!('Notification'in window))return Promise.resolve('unsupported');
+  if(Notification.permission!=='default')return Promise.resolve(Notification.permission);
+  return Notification.requestPermission();
+}
+function desktopNotify(level,text,meta){
+  if(level!=='red')return;
+  if(!('Notification'in window)||Notification.permission!=='granted')return;
+  if(localStorage.getItem('sentinel_notify')==='off')return;
+  try{
+    const n=new Notification('SENTINEL — '+(meta&&meta.kind?meta.kind:'ALERT'),{
+      body:text,tag:text,icon:'data:image/svg+xml,'+encodeURIComponent(
+        '<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64"><circle cx="32" cy="32" r="28" fill="%23ff3355"/></svg>')
+    });
+    n.onclick=()=>{window.focus();if(meta&&(meta.assetId||meta.lat!=null))focusAlert(meta);n.close();};
+  }catch(e){}
+}
+function toggleNotifications(){
+  const off=localStorage.getItem('sentinel_notify')==='off';
+  if(off){
+    localStorage.removeItem('sentinel_notify');
+    notifyPermission().then(p=>{
+      if(p!=='granted')addAlert('orange','Desktop notifications blocked in browser settings');
+      updateNotifyBtn();
+    });
+  }else{
+    localStorage.setItem('sentinel_notify','off');
+    updateNotifyBtn();
+  }
+}
+function updateNotifyBtn(){
+  const b=document.getElementById('notifyBtn');
+  if(!b)return;
+  const on=localStorage.getItem('sentinel_notify')!=='off'&&('Notification'in window)&&Notification.permission==='granted';
+  b.textContent=on?'ALERTS: ON':'ALERTS: OFF';
+  b.classList.toggle('on',on);
+}
+
+// Fly to whatever an alert refers to and open its detail panel.
+function focusAlert(meta){
+  if(!meta)return;
+  if(meta.assetId&&state.assets.has(meta.assetId)){
+    const a=state.assets.get(meta.assetId);
+    map.flyTo([a.lat,a.lon],Math.max(map.getZoom(),7),{duration:0.8});
+    showDetail(meta.assetId);
+    return;
+  }
+  if(meta.lat!=null&&meta.lon!=null){
+    map.flyTo([meta.lat,meta.lon],meta.zoom||6,{duration:0.8});
+  }
+}
+function focusAlertIdx(i){
+  const a=state.alerts[i];
+  if(a&&a.meta)focusAlert(a.meta);
+}
+
+function addAlert(level,text,meta){
   // Suppress exact-duplicate alerts for 5 minutes so real events stay visible
   const now=Date.now();
   state._alertSeen=state._alertSeen||new Map();
@@ -2992,20 +3167,27 @@ function addAlert(level,text){
   if(last&&now-last<300000)return;
   state._alertSeen.set(text,now);
   if(state._alertSeen.size>500)state._alertSeen.clear();
-  state.alerts.unshift({time:ts(),text,level});
+  // meta carries where the alert happened, which is what makes it clickable.
+  state.alerts.unshift({time:ts(),text,level,meta:meta||null});
   if(state.alerts.length>50)state.alerts.length=50;
+  desktopNotify(level,text,meta);
   renderAlerts();
 }
 function generateAlerts(){
   const assets=[...state.assets.values()];
   for(const a of assets){
-    if(a.squawk==='7700'){addAlert('red',`EMERGENCY: ${a.cs} squawking 7700`);flashAlert();}
-    if(a.squawk==='7600'){addAlert('red',`COMMS FAILURE: ${a.cs} squawking 7600`);flashAlert();}
-    if(a.squawk==='7500'){addAlert('red',`HIJACK: ${a.cs} squawking 7500`);flashAlert();}
+    if(a.squawk==='7700'){addAlert('red',`EMERGENCY: ${a.cs} squawking 7700`,{assetId:a.id,kind:'EMERGENCY'});flashAlert();}
+    if(a.squawk==='7600'){addAlert('red',`COMMS FAILURE: ${a.cs} squawking 7600`,{assetId:a.id,kind:'COMMS FAILURE'});flashAlert();}
+    if(a.squawk==='7500'){addAlert('red',`HIJACK: ${a.cs} squawking 7500`,{assetId:a.id,kind:'HIJACK'});flashAlert();}
   }
   const zones={};
   for(const a of assets){if(a.type!=='aircraft'&&a.type!=='heli')continue;const k=Math.round(a.lat/2)+'_'+Math.round(a.lon/2);zones[k]=(zones[k]||0)+1;}
-  for(const[k,v]of Object.entries(zones)){if(v>=8){const[lat,lon]=k.split('_');addAlert('orange',`HIGH ACTIVITY: ${v} aircraft near ${lat*2}N/${lon*2}E`);}}
+  for(const[k,v]of Object.entries(zones)){
+    if(v>=8){
+      const[lat,lon]=k.split('_').map(Number);
+      addAlert('orange',`HIGH ACTIVITY: ${v} aircraft near ${lat*2}N/${lon*2}E`,{lat:lat*2,lon:lon*2,zoom:6});
+    }
+  }
   // Periodic status line — at most once every 5 minutes (the live numbers change constantly)
   const now=Date.now();
   if(!state._lastStatusAlert||now-state._lastStatusAlert>300000){
@@ -3024,7 +3206,14 @@ function renderAlerts(){
   }
   if(!state.alerts.length){el.innerHTML='<div style="padding:12px;color:var(--td);font-size:11px;text-align:center">No alerts</div>';return;}
   let html='';
-  for(const a of state.alerts.slice(0,40)){html+=`<div class="alert-item ${a.level||''}"><div class="alert-time">${a.time}</div><div class="alert-text">${a.text}</div></div>`;}
+  state.alerts.slice(0,40).forEach((a,i)=>{
+    // Alerts with a location fly the map there and open the contact; ones
+    // without stay inert rather than pretending to be clickable.
+    const go=a.meta&&(a.meta.assetId||a.meta.lat!=null);
+    html+=`<div class="alert-item ${a.level||''}${go?' clickable':''}"${go?` onclick="focusAlertIdx(${i})" title="Show on map"`:''}>`
+       +`<div class="alert-time">${a.time}${go?' <span class="alert-go">→ LOCATE</span>':''}</div>`
+       +`<div class="alert-text">${a.text}</div></div>`;
+  });
   el.innerHTML=html;
 }
 
@@ -3258,12 +3447,19 @@ function renderAll(){
 async function fetchAll(){
   state.lastFetch=new Date();
   document.getElementById('mainStatus').textContent='FETCHING';document.getElementById('mainDot').style.background='var(--y)';
-  // WAVE 1: Fast direct APIs (~1-3s) — render as soon as these land
+  const local=map.getZoom()>=LOCAL_ZOOM;
+  // WAVE 1: fast direct APIs — render as soon as these land.
+  // The worldwide military sweep runs at every zoom. It is one cheap request
+  // and it is the only thing that puts contacts on the map in regions where
+  // community ADS-B coverage is thin, which is most of the interesting ones.
+  // Only the bulk feeds — private aircraft — are dropped when zoomed in.
   try{
-    await Promise.allSettled([fetchADSBMil(),fetchSquawks(),fetchLADD(),fetchOSINT()]);
+    await Promise.allSettled(local
+      ?[fetchADSBMil(),fetchSquawks(),fetchOSINT()]
+      :[fetchADSBMil(),fetchSquawks(),fetchLADD(),fetchOSINT()]);
   }catch(e){}
   renderAll();
-  // WAVE 2: Slower APIs (CORS-proxied, large datasets) — render again when done
+  // WAVE 2: viewport-scoped and slower feeds
   try{
     await Promise.allSettled([fetchADSBRegion(),fetchOpenSky(),fetchAIS(),fetchGlobalAIS(),fetchSpaceWeather(),fetchSevereWeather(),fetchSats()]);
   }catch(e){}
@@ -3905,6 +4101,10 @@ async function boot(){
 
   }catch(e){console.warn('Boot error:',e);}
   dismissLoader();
+  // Leaflet caches its size while the loader is covering the map, so re-check
+  // once the real layout is visible.
+  setTimeout(()=>{ensureMapSized();renderMarkers();},120);
+  updateNotifyBtn();
 }
 boot();
 
