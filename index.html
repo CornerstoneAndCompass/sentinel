@@ -236,6 +236,31 @@ html,body{width:100%;height:100%;overflow:hidden;background:#050a12;font-family:
 #notifyBtn{background:transparent;border:1px solid var(--brd);color:var(--td);
   font-family:inherit;font-size:9px;letter-spacing:1px;padding:2px 7px;cursor:pointer}
 #notifyBtn.on{border-color:var(--g);color:var(--g)}
+#countryBtn{background:transparent;border:1px solid var(--c);color:var(--c);
+  font-family:inherit;font-size:9px;letter-spacing:1px;padding:2px 8px;cursor:pointer}
+#countryBtn:hover{background:var(--c);color:#000}
+/* --- country brief --- */
+.country-box{max-width:860px;width:92vw}
+.country-body{overflow-y:auto;max-height:calc(85vh - 60px);padding:0 2px}
+#cbPicker{margin-left:auto;margin-right:8px;background:var(--bg2);border:1px solid var(--brd);
+  color:var(--tp);font-family:inherit;font-size:10px;padding:3px 6px;max-width:190px}
+.cb-risk{margin-left:10px;font-size:10px;letter-spacing:2px;padding:2px 8px;border:1px solid}
+.cb-summary{display:flex;gap:8px;padding:10px 0 14px;border-bottom:1px solid var(--brd);margin-bottom:8px}
+.cb-stat{flex:1;text-align:center;background:var(--bg2);border:1px solid var(--brd);padding:8px 4px}
+.cb-stat-n{font-family:'Orbitron',sans-serif;font-size:20px;color:var(--tp)}
+.cb-stat-l{font-size:8px;letter-spacing:2px;color:var(--td);margin-top:3px}
+.cb-sec{margin-bottom:10px}
+.cb-sec-h{display:flex;align-items:center;gap:8px;font-family:'Orbitron',sans-serif;font-size:9px;
+  letter-spacing:2px;color:var(--tm);padding:5px 0;border-bottom:1px solid var(--brd);text-transform:uppercase}
+.cb-count{margin-left:auto;color:var(--c)}
+.cb-empty{padding:6px 2px;font-size:10px;color:var(--td)}
+.cb-more{padding:4px 2px;font-size:10px;color:var(--td)}
+.cb-row{display:flex;gap:10px;align-items:baseline;padding:4px 4px;font-size:11px;cursor:pointer;border-bottom:1px solid rgba(255,255,255,.04)}
+.cb-row:hover{background:rgba(0,232,255,.07)}
+.cb-a{flex:2;color:var(--tp);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.cb-b{flex:2;color:var(--tm);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.cb-c{flex:1;color:var(--td);text-align:right;white-space:nowrap}
+.cb-foot{margin-top:12px;padding-top:8px;border-top:1px solid var(--brd);font-size:9px;color:var(--td);line-height:1.5}
 #contactTip{position:absolute;z-index:460;pointer-events:none;display:none;
   background:rgba(8,12,20,.92);border:1px solid var(--brd);color:var(--tp);
   font-family:'Share Tech Mono',monospace;font-size:11px;padding:3px 7px;white-space:nowrap}
@@ -772,6 +797,7 @@ html,body{width:100%;height:100%;overflow:hidden;background:#050a12;font-family:
 <div class="shortcut-row"><span class="shortcut-key">[</span><span class="shortcut-desc">Hide or show the left panel</span></div>
 <div class="shortcut-row"><span class="shortcut-key">]</span><span class="shortcut-desc">Hide or show the right panel</span></div>
 <div class="shortcut-row"><span class="shortcut-key">F</span><span class="shortcut-desc">Focus mode — hide both panels for a clean map</span></div>
+<div class="shortcut-row"><span class="shortcut-key">C</span><span class="shortcut-desc">Country brief for the centre of the map</span></div>
 <div class="shortcut-row"><span class="shortcut-key">S</span><span class="shortcut-desc">Generate SITREP briefing</span></div>
 <div class="shortcut-row"><span class="shortcut-key">G</span><span class="shortcut-desc">Global view</span></div>
 <div class="shortcut-row"><span class="shortcut-key">F</span><span class="shortcut-desc">Toggle fullscreen</span></div>
@@ -808,6 +834,17 @@ html,body{width:100%;height:100%;overflow:hidden;background:#050a12;font-family:
 </div>
 
 <!-- SYSTEM STATUS PANEL -->
+<div class="status-overlay" id="countryOverlay" onclick="closeCountryBrief()">
+<div class="status-box country-box" onclick="event.stopPropagation()">
+<div class="sitrep-header">
+  <span class="sitrep-title" id="countryTitle">COUNTRY BRIEF</span>
+  <select id="cbPicker" onchange="if(this.value)openCountryBrief(this.value)" title="Jump to another country"></select>
+  <button class="article-close" onclick="closeCountryBrief()">CLOSE</button>
+</div>
+<div class="country-body" id="countryBody"></div>
+</div>
+</div>
+
 <div class="status-overlay" id="statusOverlay" onclick="closeStatusPanel()">
 <div class="status-box" onclick="event.stopPropagation()">
 <div class="sitrep-header"><span class="sitrep-title">SYSTEM STATUS</span><button class="article-close" onclick="closeStatusPanel()">CLOSE</button></div>
@@ -839,7 +876,7 @@ Use the bar below: <b>LAYERS</b> picks what's on the map, <b>INTEL</b> has alert
 <div class="bottom-bar">
 <div class="feeds" id="feedsBar" onclick="toggleStatusPanel()" title="Data feed health — click for the full system status"></div>
 <div title="Time until the next automatic data refresh, and when data last arrived"><span style="color:var(--td)">REFRESH </span><span id="countdown" style="color:var(--c)">30s</span><span style="color:var(--td)"> | </span><span id="lastUp" style="color:var(--g)">--:--:--</span></div>
-<div style="display:flex;align-items:center;gap:10px"><button id="notifyBtn" onclick="toggleNotifications()" title="Desktop notifications for critical alerts">ALERTS: OFF</button><span style="letter-spacing:3px;color:var(--td);font-family:'Orbitron',sans-serif;font-size:9px">SENTINEL v20.3</span><span style="color:var(--td);font-size:10px;cursor:pointer" onclick="document.getElementById('shortcutsOverlay').classList.toggle('show')" title="Keyboard shortcuts">[?]</span></div>
+<div style="display:flex;align-items:center;gap:10px"><button id="countryBtn" onclick="openCountryBrief(null,map.getCenter().lat,map.getCenter().lng)" title="Country brief for the centre of the map  (C)">COUNTRY BRIEF</button><button id="notifyBtn" onclick="toggleNotifications()" title="Desktop notifications for critical alerts">ALERTS: OFF</button><span style="letter-spacing:3px;color:var(--td);font-family:'Orbitron',sans-serif;font-size:9px">SENTINEL v20.3</span><span style="color:var(--td);font-size:10px;cursor:pointer" onclick="document.getElementById('shortcutsOverlay').classList.toggle('show')" title="Keyboard shortcuts">[?]</span></div>
 </div>
 
 <script>
@@ -2562,13 +2599,15 @@ async function fetchNuclearTests(){
       {name:'Ras Koh Hills',lat:28.82,lon:64.95,country:'PK',tests:6,lastTest:'1998-05-30',yield:'40 kt',desc:'Pakistani test site, Chagai-I/II tests in response to India'},
     ];
     // Cross-reference seismic events near test sites
-    let suspiciousCount=0;
+    let suspiciousCount=0,firstSuspicious=null;
     if(d&&d.features){
       d.features.forEach(f=>{
         const[lon,lat]=f.geometry.coordinates;
         TEST_SITES.forEach(ts=>{
           const dist=Math.sqrt(Math.pow(lat-ts.lat,2)+Math.pow(lon-ts.lon,2));
-          if(dist<2){suspiciousCount++;} // Within ~200km of a test site
+          // Within ~200km of a test site. Keep the first hit so the alert can
+          // actually take you to it.
+          if(dist<2){suspiciousCount++;if(!firstSuspicious)firstSuspicious={lat,lon,site:ts.name};}
         });
       });
     }
@@ -2579,7 +2618,8 @@ async function fetchNuclearTests(){
       state.ntestMarkers.push(m);
     });
     if(suspiciousCount>0){
-      addAlert('red','NUCLEAR ALERT: '+suspiciousCount+' seismic events detected near known test sites — verify CTBTO data');
+      addAlert('red','NUCLEAR ALERT: '+suspiciousCount+' seismic events detected near known test sites — verify CTBTO data',
+        firstSuspicious?{lat:firstSuspicious.lat,lon:firstSuspicious.lon,zoom:6,kind:'NUCLEAR SCREENING'}:undefined);
     }
     state.sources.ntests=TEST_SITES.length;
     feedDot('f30',true);
@@ -3249,11 +3289,19 @@ function focusAlertIdx(i){
 }
 
 function addAlert(level,text,meta){
-  // Suppress exact-duplicate alerts for 5 minutes so real events stay visible
   const now=Date.now();
   state._alertSeen=state._alertSeen||new Map();
   const last=state._alertSeen.get(text);
-  if(last&&now-last<300000)return;
+  // A standing condition — an ongoing tornado warning, a quake from an hour ago
+  // — re-fires on every poll. The old 5-minute window let the same line stack up
+  // four or five times in a 40-entry list, burying everything else. An hour is
+  // long enough that a genuinely recurring event still resurfaces.
+  if(last&&now-last<3600000){
+    // Refresh the existing entry's timestamp rather than adding a duplicate.
+    const existing=state.alerts.find(a=>a.text===text);
+    if(existing){existing.time=ts();if(meta&&!existing.meta)existing.meta=meta;}
+    return;
+  }
   state._alertSeen.set(text,now);
   if(state._alertSeen.size>500)state._alertSeen.clear();
   // meta carries where the alert happened, which is what makes it clickable.
@@ -3349,8 +3397,13 @@ async function fetchSpaceWeather(){
     kpEl.style.color=kp>=7?'var(--r)':kp>=5?'var(--o)':kp>=4?'var(--y)':'var(--g)';
     // Alert for major events
     if(kp>=5)addAlert('orange','SPACE WX: Geomagnetic storm Kp='+kp.toFixed(0)+' \u2014 GPS/comms may be affected');
-    if(state.spaceWeather.geoStorm&&state.spaceWeather.geoStorm!=='G0')addAlert('orange','SPACE WX: Geomagnetic storm level '+state.spaceWeather.geoStorm);
-    if(state.spaceWeather.radioBlackout&&state.spaceWeather.radioBlackout!=='R0')addAlert('red','SPACE WX: Radio blackout level '+state.spaceWeather.radioBlackout+' \u2014 HF comms degraded');
+    // NOAA reports these as bare digits ("0".."5"), not "G0"/"R0". Comparing
+    // against the prefixed form meant level 0 — nothing happening — passed the
+    // guard and raised an alert on every poll.
+    const gs=parseInt(state.spaceWeather.geoStorm,10)||0;
+    if(gs>0)addAlert('orange','SPACE WX: Geomagnetic storm level G'+gs,{kind:'SPACE WEATHER'});
+    const rb=parseInt(state.spaceWeather.radioBlackout,10)||0;
+    if(rb>0)addAlert('red','SPACE WX: Radio blackout level R'+rb+' \u2014 HF comms degraded',{kind:'SPACE WEATHER'});
     feedDot('f14',true);state.sources.solar=1;
   }catch(e){console.warn('Space weather fetch failed:',e);feedDot('f14',false);}
 }
@@ -3389,7 +3442,8 @@ async function fetchSevereWeather(){
     state.sources.wx=state.wxAlerts.length;feedDot('f15',true);
     // Major alerts to alert feed
     for(const wx of state.wxAlerts.slice(0,3)){
-      if(wx.severity==='Extreme')addAlert('red','WX: '+wx.event+' \u2014 '+wx.areas.substring(0,80));
+      if(wx.severity==='Extreme')addAlert('red','WX: '+wx.event+' \u2014 '+wx.areas.substring(0,80),
+        (wx.lat!=null&&wx.lon!=null)?{lat:wx.lat,lon:wx.lon,zoom:7,kind:wx.event}:undefined);
     }
   }catch(e){console.warn('Weather fetch failed:',e);feedDot('f15',false);}
 }
@@ -3499,13 +3553,14 @@ function switchTab(name,btn){document.querySelectorAll('.tab-btn').forEach(b=>b.
 // Keyboard shortcuts
 document.addEventListener('keydown',e=>{
   if(e.target.tagName==='INPUT')return;
-  if(e.key==='Escape'){closeArticle();closeDetail();document.getElementById('shortcutsOverlay').classList.remove('show');document.getElementById('statusOverlay').classList.remove('show');document.getElementById('defconPop').classList.remove('show');}
+  if(e.key==='Escape'){closeCountryBrief();closeArticle();closeDetail();document.getElementById('shortcutsOverlay').classList.remove('show');document.getElementById('statusOverlay').classList.remove('show');document.getElementById('defconPop').classList.remove('show');}
   if(e.key==='?')document.getElementById('shortcutsOverlay').classList.toggle('show');
   if(e.key==='/'){e.preventDefault();document.getElementById('searchInput').focus();}
   if(e.key==='r'||e.key==='R'){fetchAll();fetchEarthquakes();fetchGDELT();fetchNews();fetchFIRMS();}
   if(e.key==='[')togglePanel('L');
   if(e.key===']')togglePanel('R');
   if(e.key==='f'||e.key==='F')focusMode();
+  if(e.key==='c'||e.key==='C')openCountryBrief(null,map.getCenter().lat,map.getCenter().lng);
   if(e.key==='s'||e.key==='S')generateSitrep();
   if(e.key==='g'||e.key==='G')flyTo(20,0,2);
   if(e.key==='f'||e.key==='F'){if(!document.fullscreenElement)document.documentElement.requestFullscreen();else document.exitFullscreen();}
@@ -3969,6 +4024,247 @@ addAlert=function(level,text,meta){
   if(state.timeline.length>100)state.timeline.length=100;
   // Timeline renders on its own 60s interval — no DOM rebuild per alert
 };
+
+/* ==================== COUNTRY BRIEF ====================
+   A map of everything at once is not a briefing. This treats the country as the
+   unit of analysis: pick Australia, get every active warning inside Australia —
+   military air, vessels, weather, seismic, conflict, news — with a risk level
+   derived from what is actually there.
+
+   Borders are real polygons rather than bounding boxes. Boxes overlap badly
+   (a box around Indonesia swallows half of Malaysia) and this needs to be
+   trustworthy enough to brief from.
+*/
+const COUNTRY_SRC='https://raw.githubusercontent.com/nvkelso/natural-earth-vector/master/geojson/ne_110m_admin_0_countries.geojson';
+let _countries=null,_countriesPromise=null;
+
+async function loadCountries(){
+  if(_countries)return _countries;
+  if(_countriesPromise)return _countriesPromise;
+  _countriesPromise=(async()=>{
+    // ~840KB, fetched once and only when the country view is first opened.
+    const d=await fetchR(COUNTRY_SRC,1,30000);
+    _countries=(d.features||[]).map(f=>{
+      const p=f.properties||{};
+      const g=f.geometry||{};
+      const polys=g.type==='Polygon'?[g.coordinates]:g.type==='MultiPolygon'?g.coordinates:[];
+      let minLat=90,maxLat=-90,minLon=180,maxLon=-180;
+      for(const poly of polys)for(const[x,y]of poly[0]){
+        if(y<minLat)minLat=y;if(y>maxLat)maxLat=y;
+        if(x<minLon)minLon=x;if(x>maxLon)maxLon=x;
+      }
+      const iso=(p.ISO_A2&&p.ISO_A2!=='-99')?p.ISO_A2:(p.ISO_A2_EH||'');
+      return{name:p.NAME||p.ADMIN||'',iso,iso3:p.ISO_A3||'',polys,bbox:[minLat,minLon,maxLat,maxLon]};
+    }).filter(c=>c.name&&c.polys.length);
+    _countries.sort((a,b)=>a.name.localeCompare(b.name));
+    return _countries;
+  })();
+  return _countriesPromise;
+}
+
+function pointInRing(lat,lon,ring){
+  let inside=false;
+  for(let i=0,j=ring.length-1;i<ring.length;j=i++){
+    const xi=ring[i][0],yi=ring[i][1],xj=ring[j][0],yj=ring[j][1];
+    if(((yi>lat)!==(yj>lat))&&(lon<(xj-xi)*(lat-yi)/(yj-yi)+xi))inside=!inside;
+  }
+  return inside;
+}
+function pointInCountry(lat,lon,c){
+  if(!isFinite(lat)||!isFinite(lon))return false;
+  if(lat<c.bbox[0]||lat>c.bbox[2]||lon<c.bbox[1]||lon>c.bbox[3])return false;   // cheap reject first
+  for(const poly of c.polys){
+    if(pointInRing(lat,lon,poly[0])){
+      let inHole=false;
+      for(let i=1;i<poly.length;i++)if(pointInRing(lat,lon,poly[i])){inHole=true;break;}
+      if(!inHole)return true;
+    }
+  }
+  return false;
+}
+function countryAt(lat,lon){
+  if(!_countries)return null;
+  for(const c of _countries)if(pointInCountry(lat,lon,c))return c;
+  return null;
+}
+
+// Vessels sit offshore, so a strict land test misses a country's own navy.
+// This is a rough territorial-waters allowance, not a legal EEZ.
+function nearCountry(lat,lon,c,degrees){
+  const d=degrees||2;
+  if(lat<c.bbox[0]-d||lat>c.bbox[2]+d||lon<c.bbox[1]-d||lon>c.bbox[3]+d)return false;
+  return true;
+}
+
+function buildCountryBrief(c){
+  const b={country:c,contacts:{military:[],heli:[],vessel:[],gov:[]},quakes:[],wx:[],fires:[],
+           conflicts:[],acled:[],news:[],dark:[],notams:[]};
+  for(const a of state.assets.values()){
+    if(a.type==='satellite')continue;
+    const inside=pointInCountry(a.lat,a.lon,c);
+    const offshore=a.type==='ship'&&!inside&&nearCountry(a.lat,a.lon,c,2);
+    if(!inside&&!offshore)continue;
+    if(a.type==='ship')b.contacts.vessel.push(a);
+    else if(a.type==='heli')b.contacts.heli.push(a);
+    else if(a.cat==='military')b.contacts.military.push(a);
+    else if(PRIORITY_CATS.has(a.cat))b.contacts.gov.push(a);
+  }
+  const inC=(o)=>o&&isFinite(o.lat)&&pointInCountry(o.lat,o.lon,c);
+  b.quakes=(state.earthquakes||[]).filter(inC);
+  b.wx=(state.wxAlerts||[]).filter(inC);
+  b.fires=(state.fires||[]).filter(inC);
+  // Conflict zones are circles with a radius, not points. Testing only the
+  // centre meant Israel scored zero for the Gaza zone, whose centre sits inside
+  // the Palestine polygon. Treat a zone as relevant if its circle reaches the
+  // country at all.
+  b.conflicts=(typeof CONFLICT_ZONES!=='undefined'?CONFLICT_ZONES:[]).filter(z=>{
+    if(inC(z))return true;
+    const radDeg=(z.radius||0)/111000;
+    if(!radDeg)return false;
+    // Sample the circle rather than doing exact polygon-circle intersection.
+    for(let a=0;a<360;a+=30){
+      const r=a*Math.PI/180;
+      const la=z.lat+radDeg*Math.cos(r);
+      const lo=z.lon+radDeg*Math.sin(r)/Math.max(Math.cos(z.lat*Math.PI/180),0.1);
+      if(pointInCountry(la,lo,c))return true;
+    }
+    return false;
+  });
+  b.acled=(state.acledEvents||[]).filter(inC);
+  b.news=(state.gdeltEvents||[]).filter(inC);
+  b.dark=(state.darkEvents||[]).filter(e=>e&&isFinite(e.lat)&&nearCountry(e.lat,e.lon,c,2));
+
+  // Security and hazard are scored separately and deliberately.
+  //
+  // A single combined number is actively misleading here, because these feeds
+  // measure sensor density as much as danger. USGS, the National Weather
+  // Service and EONET are all US-heavy: a routine American storm day produces
+  // 21 weather warnings, 16 quakes and 30 fires, which on a naive combined
+  // score outranks an active war. Keeping them apart means "quiet but
+  // well-instrumented" cannot masquerade as "dangerous", and natural-hazard
+  // volume is capped so it cannot dominate on its own.
+  let sec=0;
+  for(const z of b.conflicts)sec+=z.intensity==='WAR'?60:z.intensity==='HIGH'?38:z.intensity==='MODERATE'?20:9;
+  sec+=Math.min(b.acled.reduce((s,e)=>s+(e.fatalities>=10?6:e.fatalities>0?3:1),0),35);
+  sec+=Math.min(b.dark.length*3,12);
+  let haz=0;
+  for(const q of b.quakes)haz+=q.mag>=7?35:q.mag>=6?18:q.mag>=5?6:1;
+  haz+=Math.min(b.wx.filter(w=>w.severity==='Extreme').length*8,24)+Math.min(b.wx.length*1.5,12);
+  haz+=Math.min(b.fires.length*1.5,15);
+  b.security=Math.min(Math.round(sec),100);
+  b.hazard=Math.min(Math.round(haz),100);
+  b.score=Math.max(b.security,b.hazard);
+  b.level=b.score>=70?'EXTREME':b.score>=45?'HIGH':b.score>=22?'MODERATE':b.score>0?'LOW':'MINIMAL';
+  b.color=b.score>=70?'#ff0033':b.score>=45?'#ff5522':b.score>=22?'#ffaa00':b.score>0?'#88cc44':'#3fb950';
+  return b;
+}
+
+let _briefCountry=null;
+async function openCountryBrief(isoOrName,lat,lon){
+  const ov=document.getElementById('countryOverlay');
+  const body=document.getElementById('countryBody');
+  ov.classList.add('show');
+  body.innerHTML='<div style="padding:24px;text-align:center;color:var(--tm);font-size:11px">LOADING BORDER DATA…</div>';
+  try{
+    const list=await loadCountries();
+    let c=null;
+    if(isoOrName)c=list.find(x=>x.iso===isoOrName||x.iso3===isoOrName||x.name.toLowerCase()===String(isoOrName).toLowerCase());
+    if(!c&&lat!=null)c=countryAt(lat,lon);
+    if(!c){body.innerHTML='<div style="padding:24px;text-align:center;color:var(--td);font-size:11px">No country at that location — open water or unmapped territory.</div>';return;}
+    _briefCountry=c;
+    renderCountryBrief();
+    if(!document.getElementById('cbPicker').options.length)populateCountryPicker();
+    document.getElementById('cbPicker').value=c.iso||c.name;
+  }catch(e){
+    body.innerHTML='<div style="padding:24px;text-align:center;color:var(--r);font-size:11px">Could not load border data — '+e.message+'</div>';
+  }
+}
+function closeCountryBrief(){document.getElementById('countryOverlay').classList.remove('show');}
+
+function briefSection(title,items,render,emptyNote){
+  if(!items.length)return `<div class="cb-sec"><div class="cb-sec-h">${title}<span class="cb-count">0</span></div>`
+    +`<div class="cb-empty">${emptyNote||'Nothing active'}</div></div>`;
+  return `<div class="cb-sec"><div class="cb-sec-h">${title}<span class="cb-count">${items.length}</span></div>`
+    +items.slice(0,12).map(render).join('')
+    +(items.length>12?`<div class="cb-more">+${items.length-12} more</div>`:'')+'</div>';
+}
+
+function renderCountryBrief(){
+  const c=_briefCountry;
+  if(!c)return;
+  const b=buildCountryBrief(c);
+  const esc=s=>String(s==null?'':s).replace(/[<>&]/g,m=>({'<':'&lt;','>':'&gt;','&':'&amp;'}[m]));
+  const totalContacts=b.contacts.military.length+b.contacts.heli.length+b.contacts.vessel.length+b.contacts.gov.length;
+
+  document.getElementById('countryTitle').innerHTML=
+    `${countryFlag(c.iso)} ${esc(c.name)}<span class="cb-risk" style="background:${b.color}22;border-color:${b.color};color:${b.color}">${b.level} · ${b.score}</span>`;
+
+  const contactRow=a=>`<div class="cb-row" onclick="closeCountryBrief();focusAlert({assetId:'${a.id}'})">
+      <span class="cb-a">${esc(a.cs||a.hex||'???')}</span>
+      <span class="cb-b">${esc(a.t||a.cat||'')}</span>
+      <span class="cb-c">${typeof a.alt==='number'&&a.alt?esc(a.alt.toLocaleString())+'ft':(a.gs?Math.round(a.gs)+'kts':'')}</span></div>`;
+
+  document.getElementById('countryBody').innerHTML=
+    `<div class="cb-summary">
+       <div class="cb-stat"><div class="cb-stat-n" style="color:${b.security>=45?'#ff5522':b.security>=22?'#ffaa00':'#3fb950'}">${b.security}</div><div class="cb-stat-l">SECURITY</div></div>
+       <div class="cb-stat"><div class="cb-stat-n" style="color:${b.hazard>=45?'#ff5522':b.hazard>=22?'#ffaa00':'#3fb950'}">${b.hazard}</div><div class="cb-stat-l">HAZARD</div></div>
+       <div class="cb-stat"><div class="cb-stat-n">${totalContacts}</div><div class="cb-stat-l">CONTACTS</div></div>
+       <div class="cb-stat"><div class="cb-stat-n">${b.conflicts.length+b.acled.length}</div><div class="cb-stat-l">INCIDENTS</div></div>
+     </div>`
+    +briefSection('Armed conflict',b.conflicts,z=>
+       `<div class="cb-row" onclick="closeCountryBrief();focusAlert({lat:${z.lat},lon:${z.lon},zoom:6})">
+          <span class="cb-a">${esc(z.name)}</span><span class="cb-b">${esc(z.intensity)}</span><span class="cb-c">${esc(z.fatalities)}</span></div>`)
+    +briefSection('Recorded incidents (ACLED)',b.acled,e=>
+       `<div class="cb-row" onclick="closeCountryBrief();focusAlert({lat:${e.lat},lon:${e.lon},zoom:8})">
+          <span class="cb-a">${esc(e.type)}</span><span class="cb-b">${esc(e.date)}</span><span class="cb-c">${e.fatalities?esc(e.fatalities)+' killed':''}</span></div>`,
+       'No ACLED key configured, or no incidents in the last 7 days')
+    +briefSection('Severe weather',b.wx,w=>
+       `<div class="cb-row" onclick="closeCountryBrief();focusAlert({lat:${w.lat},lon:${w.lon},zoom:7})">
+          <span class="cb-a">${esc(w.event)}</span><span class="cb-b">${esc(w.severity)}</span><span class="cb-c">${esc((w.areas||'').slice(0,28))}</span></div>`,
+       'No active warnings (US National Weather Service only)')
+    +briefSection('Seismic',b.quakes,q=>
+       `<div class="cb-row" onclick="closeCountryBrief();focusAlert({lat:${q.lat},lon:${q.lon},zoom:7})">
+          <span class="cb-a">M${Number(q.mag).toFixed(1)}</span><span class="cb-b">${esc(q.place)}</span><span class="cb-c">${q.depth!=null?Math.round(q.depth)+'km':''}</span></div>`)
+    +briefSection('Active fires',b.fires,f=>
+       `<div class="cb-row" onclick="closeCountryBrief();focusAlert({lat:${f.lat},lon:${f.lon},zoom:8})">
+          <span class="cb-a">${esc(f.title||'Fire')}</span><span class="cb-b"></span><span class="cb-c">${esc((f.date||'').slice(0,10))}</span></div>`)
+    +briefSection('Military aircraft',b.contacts.military,contactRow)
+    +briefSection('Helicopters',b.contacts.heli,contactRow)
+    +briefSection('Government / patrol',b.contacts.gov,contactRow)
+    +briefSection('Vessels in or near territorial waters',b.contacts.vessel,contactRow)
+    +briefSection('Dark vessel events',b.dark,d=>
+       `<div class="cb-row" onclick="closeCountryBrief();focusAlert({lat:${d.lat},lon:${d.lon},zoom:8})">
+          <span class="cb-a">${esc(d.type)}</span><span class="cb-b">${esc(d.vessel)}</span><span class="cb-c"></span></div>`,
+       'No Global Fishing Watch token configured')
+    +briefSection('In the news',b.news,n=>
+       `<div class="cb-row" onclick="window.open('${esc(n.url)}','_blank','noopener')">
+          <span class="cb-a" style="flex:3">${esc((n.title||'').slice(0,72))}</span><span class="cb-c">${esc(n.source||'')}</span></div>`)
+    +`<div class="cb-foot">Borders: Natural Earth 110m. Aircraft and vessel coverage depends on
+        community ADS-B and AIS receiver density, which is thin over much of the world —
+        an empty section means no reception, not necessarily no activity.</div>`;
+}
+
+// Refresh the open brief when new data lands, so it behaves like a live view
+// rather than a snapshot.
+setInterval(()=>{
+  if(document.getElementById('countryOverlay').classList.contains('show'))renderCountryBrief();
+},15000);
+
+// Clicking empty map opens the brief for whatever country is under the cursor.
+map.on('click',async e=>{
+  if(contactAt(e.containerPoint))return;               // a contact click wins
+  if(!_countries){try{await loadCountries();}catch(err){return;}}
+  const c=countryAt(e.latlng.lat,e.latlng.lng);
+  if(c)openCountryBrief(c.iso||c.name);
+});
+
+async function populateCountryPicker(){
+  const sel=document.getElementById('cbPicker');
+  if(!sel)return;
+  const list=await loadCountries();
+  sel.innerHTML='<option value="">SELECT COUNTRY…</option>'
+    +list.map(c=>`<option value="${c.iso||c.name}">${c.name}</option>`).join('');
+}
 
 // --- SITREP GENERATOR ---
 function generateSitrep(){
