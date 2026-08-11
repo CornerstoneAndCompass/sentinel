@@ -236,6 +236,9 @@ html,body{width:100%;height:100%;overflow:hidden;background:#050a12;font-family:
 #notifyBtn{background:transparent;border:1px solid var(--brd);color:var(--td);
   font-family:inherit;font-size:9px;letter-spacing:1px;padding:2px 7px;cursor:pointer}
 #notifyBtn.on{border-color:var(--g);color:var(--g)}
+#tzBtn{background:transparent;border:1px solid var(--brd);color:var(--tm);
+  font-family:inherit;font-size:9px;letter-spacing:1px;padding:2px 7px;cursor:pointer;min-width:44px}
+#tzBtn:hover{border-color:var(--c);color:var(--c)}
 #countryBtn{background:transparent;border:1px solid var(--c);color:var(--c);
   font-family:inherit;font-size:9px;letter-spacing:1px;padding:2px 8px;cursor:pointer}
 #countryBtn:hover{background:var(--c);color:#000}
@@ -994,7 +997,7 @@ Use the bar below: <b>LAYERS</b> picks what's on the map, <b>INTEL</b> has alert
 <div class="bottom-bar">
 <div class="feeds" id="feedsBar" onclick="toggleStatusPanel()" title="Data feed health — click for the full system status"></div>
 <div title="Time until the next automatic data refresh, and when data last arrived"><span style="color:var(--td)">REFRESH </span><span id="countdown" style="color:var(--c)">30s</span><span style="color:var(--td)"> | </span><span id="lastUp" style="color:var(--g)">--:--:--</span></div>
-<div style="display:flex;align-items:center;gap:10px"><button id="countryBtn" onclick="openCountryBrief(null,map.getCenter().lat,map.getCenter().lng)" title="Country brief for the centre of the map  (C)">COUNTRY BRIEF</button><button id="notifyBtn" onclick="toggleNotifications()" title="Desktop notifications for critical alerts">ALERTS: OFF</button><span style="letter-spacing:3px;color:var(--td);font-family:'Orbitron',sans-serif;font-size:9px">SENTINEL v20.3</span><span style="color:var(--td);font-size:10px;cursor:pointer" onclick="document.getElementById('shortcutsOverlay').classList.toggle('show')" title="Keyboard shortcuts">[?]</span></div>
+<div style="display:flex;align-items:center;gap:10px"><button id="countryBtn" onclick="openCountryBrief(null,map.getCenter().lat,map.getCenter().lng)" title="Country brief for the centre of the map  (C)">COUNTRY BRIEF</button><button id="tzBtn" onclick="toggleTZ()" title="Switch between local time and UTC">--</button><button id="notifyBtn" onclick="toggleNotifications()" title="Desktop notifications for critical alerts">ALERTS: OFF</button><span style="letter-spacing:3px;color:var(--td);font-family:'Orbitron',sans-serif;font-size:9px">SENTINEL v20.3</span><span style="color:var(--td);font-size:10px;cursor:pointer" onclick="document.getElementById('shortcutsOverlay').classList.toggle('show')" title="Keyboard shortcuts">[?]</span></div>
 </div>
 
 <script>
@@ -1212,7 +1215,64 @@ async function fetchR(url,retries=1,t=8000){
     }
   }
 }
-function ts(){return new Date().toISOString().slice(11,19)+' UTC';}
+/* ---- time display ----
+   Everything was hardcoded to UTC, which is the right lingua franca for
+   anything crossing borders but wrong for reading your own weather: 09:50Z is
+   19:50 in Melbourne and you should not have to do that in your head. Local is
+   the default and UTC is one click away, because both are legitimately useful
+   here — the feeds publish in UTC and the incidents happen in local time.
+*/
+let TZ_MODE=localStorage.getItem('sentinel_tz')||'local';
+/* CLDR only defines a short abbreviation where one is conventional, and only in
+   the matching locale: Australia/Melbourne renders as AEST under en-AU but
+   GMT+10 under en-GB, and Asia/Tokyo has no abbreviation in any English locale.
+   So ask in a locale matched to the zone's own region, and accept GMT+N
+   otherwise — it is correct, just less familiar than AEST. */
+const TZ_LOCALE=[[/^Australia\//,'en-AU'],[/^Pacific\/Auckland/,'en-NZ'],
+  [/^America\/(New_York|Chicago|Denver|Los_Angeles|Anchorage|Phoenix|Detroit)/,'en-US'],
+  [/^America\/(Toronto|Vancouver|Edmonton|Winnipeg|Halifax|St_Johns)/,'en-CA'],
+  [/^Europe\/(London|Dublin)/,'en-GB']];
+let _tzCache={key:null,val:null};
+function tzSuffix(d){
+  if(TZ_MODE==='utc')return'UTC';
+  const now=d||new Date();
+  // Recompute at most once a minute; DST is the only thing that changes it.
+  const key=Math.floor(now.getTime()/60000);
+  if(_tzCache.key===key&&_tzCache.val)return _tzCache.val;
+  let out='local';
+  try{
+    const zone=Intl.DateTimeFormat().resolvedOptions().timeZone||'';
+    const hit=TZ_LOCALE.find(([re])=>re.test(zone));
+    const read=loc=>{
+      const p=new Intl.DateTimeFormat(loc,{timeZoneName:'short'}).formatToParts(now);
+      const z=p.find(x=>x.type==='timeZoneName');
+      return z?z.value:null;
+    };
+    out=(hit&&read(hit[1]))||read(undefined)||'local';
+  }catch(e){}
+  _tzCache={key,val:out};
+  return out;
+}
+function _parts(d){
+  if(TZ_MODE==='utc')return{h:d.getUTCHours(),m:d.getUTCMinutes(),s:d.getUTCSeconds()};
+  return{h:d.getHours(),m:d.getMinutes(),s:d.getSeconds()};
+}
+const _p2=v=>String(v).padStart(2,'0');
+// "19:50:12 AEST" / "09:50:12 UTC"
+function fmtClock(d){const t=_parts(d||new Date());return _p2(t.h)+':'+_p2(t.m)+':'+_p2(t.s)+' '+tzSuffix(d);}
+// "19:50 AEST" / "09:50Z" — compact form for panels
+function fmtHM(d,withZone){const t=_parts(d);return _p2(t.h)+':'+_p2(t.m)+(withZone===false?'':(TZ_MODE==='utc'?'Z':' '+tzSuffix(d)));}
+function toggleTZ(){
+  TZ_MODE=TZ_MODE==='utc'?'local':'utc';
+  localStorage.setItem('sentinel_tz',TZ_MODE);
+  updateTZBtn();
+  try{updateWxBar();updateWxFrameLabel();renderAlerts();}catch(e){}
+}
+function updateTZBtn(){
+  const b=document.getElementById('tzBtn');
+  if(b)b.textContent=TZ_MODE==='utc'?'UTC':tzSuffix();
+}
+function ts(){return fmtClock(new Date());}
 function timeAgo(d){const s=Math.floor((Date.now()-new Date(d).getTime())/1000);if(s<60)return s+'s ago';if(s<3600)return Math.floor(s/60)+'m ago';if(s<86400)return Math.floor(s/3600)+'h ago';return Math.floor(s/86400)+'d ago';}
 function countryFlag(cc){if(!cc||cc.length!==2)return'';const u=cc.toUpperCase();return String.fromCodePoint(0x1F1E6+u.charCodeAt(0)-65,0x1F1E6+u.charCodeAt(1)-65);}
 function flashAlert(){const el=document.getElementById('alertFlash');el.classList.add('active');setTimeout(()=>el.classList.remove('active'),300);}
@@ -4220,7 +4280,7 @@ map.on('moveend',renderMarkers);map.on('zoomend',renderMarkers);
 // Clock + date + uptime
 setInterval(()=>{
   const now=new Date();
-  document.getElementById('hTime').textContent=now.toISOString().slice(11,19)+' UTC';
+  document.getElementById('hTime').textContent=fmtClock(now);
   const days=['SUN','MON','TUE','WED','THU','FRI','SAT'];
   const months=['JAN','FEB','MAR','APR','MAY','JUN','JUL','AUG','SEP','OCT','NOV','DEC'];
   document.getElementById('hDate').textContent=days[now.getUTCDay()]+' '+now.getUTCDate()+' '+months[now.getUTCMonth()]+' '+now.getUTCFullYear();
@@ -4719,6 +4779,10 @@ function activeDisk(){
 // frame it actually holds.
 const GIBS_TIME='default';
 
+// JMA stamps frames YYYYMMDDhhmmss in UTC.
+function himaDate(v){
+  return new Date(Date.UTC(+v.slice(0,4),+v.slice(4,6)-1,+v.slice(6,8),+v.slice(8,10),+v.slice(10,12)));
+}
 const HIMA_BANDS={
   B13:{path:'B13/TBB',label:'INFRARED',note:'day + night'},
   REP:{path:'REP/ETC',label:'COLOUR',note:'daylight only'},
@@ -4814,7 +4878,7 @@ function setLayerOpacity(which,v){
 function updateWxBar(){
   const r=document.getElementById('wxRadarTime');
   if(r)r.textContent=_radarFrames.length&&_radarIdx>=0
-    ? new Date(_radarFrames[_radarIdx].time*1000).toISOString().slice(11,16)+'Z ('+(_radarIdx+1)+'/'+_radarFrames.length+')'
+    ? fmtHM(new Date(_radarFrames[_radarIdx].time*1000))+' ('+(_radarIdx+1)+'/'+_radarFrames.length+')'
     : '--';
   const disk=(typeof activeDisk==='function')?activeDisk():null;
   const s=document.getElementById('wxSatTime');
@@ -4822,7 +4886,7 @@ function updateWxBar(){
     if(!disk)s.textContent='no coverage here';
     else if(disk.src==='gibs')s.textContent='latest';
     else s.textContent=_satTimes.length&&_satIdx>=0
-      ? _satTimes[_satIdx].validtime.slice(8,10)+':'+_satTimes[_satIdx].validtime.slice(10,12)+'Z ('+(_satIdx+1)+'/'+_satTimes.length+')'
+      ? fmtHM(himaDate(_satTimes[_satIdx].validtime))+' ('+(_satIdx+1)+'/'+_satTimes.length+')'
       : '--';
   }
   const note=document.getElementById('wxSatNote');
@@ -4865,7 +4929,7 @@ function updateWxFrameLabel(){
   const f=_radarFrames[_radarIdx];
   if(f){
     const age=Math.round((Date.now()-f.time*1000)/60000);
-    el.textContent=new Date(f.time*1000).toISOString().slice(11,16)+'Z · '
+    el.textContent=fmtHM(new Date(f.time*1000))+' · '
       +(f.forecast?'forecast':(age<=0?'now':age+' min ago'))
       +'  ('+(_radarIdx+1)+'/'+_radarFrames.length+')';
     return;
@@ -4874,10 +4938,9 @@ function updateWxFrameLabel(){
   // drops out. Fall back to the cloud clock rather than showing a dash.
   const t=_satTimes[_satIdx];
   if(t){
-    const iso=t.validtime;
-    const d=Date.UTC(+iso.slice(0,4),+iso.slice(4,6)-1,+iso.slice(6,8),+iso.slice(8,10),+iso.slice(10,12));
-    const age=Math.round((Date.now()-d)/60000);
-    el.textContent=iso.slice(8,10)+':'+iso.slice(10,12)+'Z · cloud only · '
+    const d=himaDate(t.validtime);
+    const age=Math.round((Date.now()-d.getTime())/60000);
+    el.textContent=fmtHM(d)+' · cloud only · '
       +(age<=0?'now':age+' min ago')+'  ('+(_satIdx+1)+'/'+_satTimes.length+')';
     return;
   }
@@ -5636,7 +5699,8 @@ setInterval(()=>{if(_countries&&loadWatch().length)renderWatchlist();},20000);
 // --- SITREP GENERATOR ---
 function generateSitrep(){
   const now=new Date();
-  const ts=now.toISOString().replace('T',' ').slice(0,19)+' UTC';
+  // The sitrep is a document someone may forward, so it carries both.
+  const ts=now.toISOString().replace('T',' ').slice(0,19)+' UTC ('+fmtClock(now)+')';
   const assets=state.assets.size;
   const sources=Object.values(state.sources).filter(v=>v>0).length;
   let sitrep='';
@@ -5880,6 +5944,7 @@ async function boot(){
   // paint so LOOP is instant.
   setTimeout(()=>{if(state.layers.radar&&_radarFrames.length)preloadRadarFrames();},2500);
   updateNotifyBtn();
+  updateTZBtn();
   restorePanels();
   renderWatchlist();
   syncLayerButtons();
