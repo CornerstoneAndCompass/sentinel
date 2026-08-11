@@ -2741,6 +2741,9 @@ async function fetchDarkVessels(){
   try{
     const d=await fetchR(u+'?days=3&limit=150',0,20000);
     if(!d.configured){feedIdle('f34','needs GFW token');state.sources.dark=0;return;}
+    // A rejected token still answers 200 with an empty list, which would show a
+    // green dot over nothing. Report the upstream status instead of the silence.
+    if(d.error){console.warn('GFW:',d.error,d.detail||'');feedIdle('f34',d.error==='gfw 401'?'GFW token rejected':d.error);state.sources.dark=0;return;}
     state.darkMarkers.forEach(m=>map.removeLayer(m));state.darkMarkers=[];
     state.darkEvents=[];
     for(const ev of d.entries||[]){

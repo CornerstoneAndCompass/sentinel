@@ -372,27 +372,52 @@ async function opensky(request, env, ctx) {
 
 /* ------------------------------------------------------------ keyed apis -- */
 
+// Each event type lives in its own dataset. Asking for LOITERING while only
+// registering the encounters dataset returns encounters — or a 422 — never
+// loitering, so the two lists have to be derived from one another.
+const GFW_DATASETS = {
+  ENCOUNTER: 'public-global-encounters-events:latest',
+  LOITERING: 'public-global-loitering-events:latest',
+  GAP: 'public-global-gaps-events:latest',
+  PORT_VISIT: 'public-global-port-visits-events:latest',
+  FISHING: 'public-global-fishing-events:latest',
+};
+
 async function gfwEvents(request, env) {
   if (!env.GFW_TOKEN) return json({ configured: false, entries: [] });
 
   const p = new URL(request.url).searchParams;
-  const types = p.get('types') || 'ENCOUNTER,LOITERING,GAP';
+  const types = (p.get('types') || 'ENCOUNTER,LOITERING,GAP')
+    .split(',')
+    .map((t) => t.trim().toUpperCase())
+    .filter((t) => GFW_DATASETS[t]);
+  if (!types.length) return json({ configured: true, error: 'no valid types', entries: [] });
+
   const days = Math.min(parseInt(p.get('days') || '3', 10), 30);
   const end = new Date();
   const start = new Date(end.getTime() - days * 86400000);
+  const limit = Math.min(parseInt(p.get('limit') || '100', 10), 500);
 
   const url = new URL('https://gateway.api.globalfishingwatch.org/v3/events');
-  url.searchParams.set('datasets[0]', 'public-global-encounters-events:latest');
+  types.forEach((t, i) => {
+    url.searchParams.set(`datasets[${i}]`, GFW_DATASETS[t]);
+    url.searchParams.append('types[]', t);
+  });
   url.searchParams.set('start-date', start.toISOString().slice(0, 10));
   url.searchParams.set('end-date', end.toISOString().slice(0, 10));
-  url.searchParams.set('limit', p.get('limit') || '100');
+  url.searchParams.set('limit', String(limit));
   url.searchParams.set('offset', '0');
-  for (const t of types.split(',')) url.searchParams.append('types[]', t.trim());
 
   const res = await fetch(url.toString(), {
     headers: { Authorization: `Bearer ${env.GFW_TOKEN}`, Accept: 'application/json' },
   });
-  if (!res.ok) return json({ configured: true, error: `gfw ${res.status}`, entries: [] }, 200);
+  if (!res.ok) {
+    // Surface the upstream body — GFW answers a bad token with 401 and a bad
+    // dataset with 422, and the difference decides whether the fix is a new
+    // token or a code change.
+    const detail = (await res.text().catch(() => '')).slice(0, 300);
+    return json({ configured: true, error: `gfw ${res.status}`, detail, entries: [] }, 200);
+  }
 
   const data = await res.json();
   return json({ configured: true, ...data }, 200, { 'Cache-Control': 'public, max-age=900' });
