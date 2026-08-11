@@ -821,7 +821,7 @@ html,body{width:100%;height:100%;overflow:hidden;background:#050a12;font-family:
 <button class="fbtn" id="fBases" onclick="togLayer('bases')" title="Major military installations">MIL BASES</button>
 </div>
 <div class="fgroup">Country</div>
-<select class="country-sel" id="countryFilter" onchange="applyFilters()" title="Only show assets from one country"><option value="">ALL COUNTRIES</option></select>
+<select class="country-sel" id="countryFilter" onchange="applyFilters()" title="Scope the whole picture to one country — tracked assets and every overlay with a position. Raster layers (rain radar, thermal hotspots) cannot be clipped, so the view moves to the country instead."><option value="">ALL COUNTRIES</option></select>
 </div>
 <div class="card">
 <div class="card-title">Quick Nav</div>
@@ -1873,7 +1873,8 @@ function renderMarkers(){
   // wondering whether the app is broken.
   const sparse=zoom>=LOCAL_ZOOM&&vis.length<=3?' | SPARSE RECEIVER COVERAGE HERE':'';
   const badge=document.getElementById('zoomBadge');
-  badge.textContent='ZOOM '+zoom+' | '+label+' | '+vis.length+' VISIBLE'+lodNote+sparse;
+  const scopeNote=_scope?' | SCOPE: '+_scope.name.toUpperCase():'';
+  badge.textContent='ZOOM '+zoom+' | '+label+' | '+vis.length+' VISIBLE'+scopeNote+lodNote+sparse;
   badge.style.color=sparse?'var(--y)':'';
 }
 
@@ -4399,7 +4400,12 @@ function togLayer(l){
     if(on&&!state.darkMarkers.length)fetchDarkVessels();
   }
 }
-function applyFilters(){state.countryFilter=document.getElementById('countryFilter').value;renderMarkers();renderAssetList();}
+function applyFilters(){
+  const v=document.getElementById('countryFilter').value;
+  state.countryFilter=v;
+  setCountryScope(v);                   // overlays and view, not just assets
+  renderMarkers();renderAssetList();
+}
 function switchTab(name,btn){document.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('active'));document.querySelectorAll('.tab-content').forEach(c=>c.classList.remove('active'));btn.classList.add('active');document.getElementById('tab'+name.charAt(0).toUpperCase()+name.slice(1)).classList.add('active');}
 
 // Keyboard shortcuts
@@ -4452,7 +4458,7 @@ function renderStaticOverlays(){
   }catch(e){console.warn('Static overlay error:',e);}
 }
 function renderAll(){
-  try{updateStats();renderMarkers();renderAssetList();generateAlerts();calculateDefcon();updateThreatBanner();}catch(e){console.warn('Render error:',e);}
+  try{updateStats();renderMarkers();renderAssetList();applyCountryScope();generateAlerts();calculateDefcon();updateThreatBanner();}catch(e){console.warn('Render error:',e);}
   try{checkSanctioned();detectDarkVessels();checkGeofences();}catch(e){console.warn('v19 module error:',e);}
   document.getElementById('mainStatus').textContent='ACTIVE \u2014 '+state.assets.size+' TRACKED';
   document.getElementById('mainDot').style.background='var(--g)';document.getElementById('lastUp').textContent=ts();
@@ -5467,6 +5473,82 @@ function nearCountry(lat,lon,c,degrees){
   const d=degrees||2;
   if(lat<c.bbox[0]-d||lat>c.bbox[2]+d||lon<c.bbox[1]-d||lon>c.bbox[3]+d)return false;
   return true;
+}
+
+/* ==================== COUNTRY SCOPE ====================
+   The country selector only ever filtered tracked assets. Aircraft and ships
+   carry a country field, so state.countryFilter matched on that and on nothing
+   else — every overlay stayed global, which is why choosing Australia still
+   left the map covered in Indonesian fire detections and Atlantic dark vessels.
+
+   Scoping now applies to every overlay that has a position. Land hazards are
+   tested against the country's actual polygon rather than its bounding box:
+   Australia's box reaches into Indonesia and Papua New Guinea, and those are
+   exactly the fires that made the filter look broken. Maritime layers get a
+   couple of degrees of sea room, because a country's own coastal traffic and
+   offshore incidents sit outside the coastline by definition.
+*/
+// var, not let: renderMarkers reads this from far higher up the file, and a
+// resize firing before this line is reached would hit the temporal dead zone
+// and throw rather than simply reading "no scope".
+var _scope=null;                                   // selected country, or null
+// [state array, layer flag, offshore allowance]
+const SCOPED=[
+  ['quakeMarkers','quakes',0],['fireMarkers','fires',0],['wildfireMarkers','fires',0],
+  ['wxMarkers','wx',0],['bomMarkers','bom',0],['ausEmMarkers','ausEm',0],
+  ['gdacsMarkers','gdacs',0],['gdeltMarkers','gdelt',0],['volcanoMarkers','volcanoes',0],
+  ['notamMarkers','notams',0],['cyberMarkers','cyber',0],['conflictMarkers','conflict',0],
+  ['rfMarkers','rf',0],['droneMarkers','drones',0],['refugeeMarkers','refugees',0],
+  ['nukeMarkers','nukes',0],['ntestMarkers','nukes',0],['milbaseMarkers','bases',0],
+  ['jamMarkers','jamming',2],['tsunamiMarkers','tsunami',2],['darkMarkers','dark',2],
+  ['piracyMarkers','piracy',2],['chokeMarkers','chokes',2],['cableLines','cables',2],
+];
+function inScope(lat,lon,sea){
+  if(!_scope)return true;
+  if(!isFinite(lat)||!isFinite(lon))return false;
+  if(pointInCountry(lat,lon,_scope))return true;
+  return sea>0&&nearCountry(lat,lon,_scope,sea);
+}
+// Runs on every render pass, so a renderer that re-adds its markers after a
+// fetch cannot quietly put out-of-scope ones back on the map.
+function applyCountryScope(){
+  for(const[arr,flag,sea]of SCOPED){
+    const list=state[arr];
+    if(!list||!list.length)continue;
+    const layerOn=state.layers[flag]!==false;
+    for(const m of list){
+      let show=layerOn;
+      if(show&&_scope){
+        if(m.getLatLng){const p=m.getLatLng();show=inScope(p.lat,p.lng,sea);}
+        else if(m.getBounds){
+          // Polylines (cables) have no single point — keep one if any part of
+          // it reaches the country.
+          const b=m.getBounds();
+          show=inScope(b.getNorth(),b.getWest(),sea)||inScope(b.getSouth(),b.getEast(),sea)
+             ||inScope(b.getCenter().lat,b.getCenter().lng,sea);
+        }
+      }
+      const on=map.hasLayer(m);
+      if(show&&!on)m.addTo(map);
+      else if(!show&&on)map.removeLayer(m);
+    }
+  }
+}
+async function setCountryScope(iso){
+  if(!iso){_scope=null;applyCountryScope();updateScopeBadge();return;}
+  let list;
+  try{list=await loadCountries();}catch(e){return;}
+  _scope=list.find(c=>c.iso===iso)||list.find(c=>c.iso3===iso)||null;
+  applyCountryScope();
+  updateScopeBadge();
+  if(_scope){
+    const[s,w,n,e]=_scope.bbox;
+    try{map.fitBounds([[s,w],[n,e]],{padding:[30,30],maxZoom:7});}catch(err){}
+  }
+}
+function updateScopeBadge(){
+  // The zoom badge carries it, and that is repainted by renderMarkers.
+  try{renderMarkers();}catch(e){}
 }
 
 function buildCountryBrief(c){
