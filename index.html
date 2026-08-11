@@ -2403,12 +2403,31 @@ async function fetchRadar(){
     const changed=next.length!==_radarFrames.length
       ||next.some((f,i)=>!_radarFrames[i]||_radarFrames[i].time!==f.time);
     if(changed){
+      // The set shifts by one frame every 10 minutes, so every index moves and
+      // the old code tore down all thirteen warmed layers and rebuilt one. That
+      // blanked the map on a 10-minute cadence and left nothing to loop over:
+      // if the single new frame was slow or empty, there was no radar at all
+      // until the next change ten minutes later.
+      //
+      // Layers are keyed by frame time, so a shifted set keeps every layer it
+      // already had — including the one on screen, which is never removed.
       const wasLatest=_radarIdx<0||_radarIdx===_radarFrames.length-1;
-      clearRadarLayers();
+      const prevTime=_radarFrames[_radarIdx]?_radarFrames[_radarIdx].time:null;
       _radarFrames=next;
+      const keep=new Set(next.map(f=>f.time));
+      _radarLayers.forEach((l,k)=>{
+        if(keep.has(k))return;
+        if(map.hasLayer(l))map.removeLayer(l);
+        _radarLayers.delete(k);
+      });
+      let idx=wasLatest?next.length-1:next.findIndex(f=>f.time===prevTime);
+      if(idx<0)idx=next.length-1;
       _radarIdx=-1;
-      if(_radarFrames.length)showRadarFrame(wasLatest?_radarFrames.length-1:_radarIdx);
+      if(next.length)showRadarFrame(idx);
       buildWxScrubber();
+      // Warm the frames that are genuinely new, or the loop is left with one.
+      _preloading=false;
+      setTimeout(preloadRadarFrames,1200);
     }
     state.sources.radar=_radarFrames.length;
     feedDot('f39',_radarFrames.length>0);
@@ -2421,18 +2440,29 @@ async function fetchRadar(){
    finished before the next swap 600ms later — which is why the loop looked
    broken. Holding the layers and cross-fading opacity means a frame is fetched
    once and every subsequent pass is instant. */
+// Keyed by frame time, not index: the frame list shifts every 10 minutes and
+// an index-keyed cache treats every frame as new each time it does.
 const _radarLayers=new Map();
+function frameKey(i){return _radarFrames[i]?_radarFrames[i].time:null;}
 function radarLayerFor(i){
-  if(_radarLayers.has(i))return _radarLayers.get(i);
   const f=_radarFrames[i];
   if(!f)return null;
+  if(_radarLayers.has(f.time))return _radarLayers.get(f.time);
   // 512px tiles, scheme 4 (universal blue/green/red), smoothed, snow shown.
   // RainViewer caps at z7 for both tile sizes; past that it answers HTTP 200
   // with a "Zoom Level Not Supported" image, so nothing errors and Leaflet
   // would tile the placeholder across the map.
   const l=L.tileLayer(`${f.url}/512/{z}/{x}/{y}/4/1_1.png`,
     {opacity:0,zIndex:200,maxNativeZoom:7,maxZoom:20,crossOrigin:true});
-  _radarLayers.set(i,l);
+  // A frame can be listed in the index before its tiles are published, which
+  // is what left the map blank right after a new frame appeared. Counting
+  // outcomes lets a frame that produced nothing be recognised and skipped.
+  // An area with no echo still answers 200 with a transparent tile, so a zero
+  // success count alongside errors means the frame itself is not there.
+  l.__ok=0;l.__err=0;
+  l.on('tileload',()=>{l.__ok++;});
+  l.on('tileerror',()=>{l.__err++;});
+  _radarLayers.set(f.time,l);
   return l;
 }
 function clearRadarLayers(){
@@ -2447,11 +2477,13 @@ let _fadeRaf=null;
 // interrupt the animation calls this so a frame is never left part-way.
 function settleRadarOpacity(idx){
   const op=state.radarOpacity!=null?state.radarOpacity:0.55;
-  _radarLayers.forEach((l,j)=>{if(map.hasLayer(l))l.setOpacity(j===idx?op:0);});
+  const key=frameKey(idx);
+  _radarLayers.forEach((l,k)=>{if(map.hasLayer(l))l.setOpacity(k===key?op:0);});
 }
 function fadeRadarTo(idx,ms){
   const op=state.radarOpacity!=null?state.radarOpacity:0.55;
-  const incoming=_radarLayers.get(idx);
+  const key=frameKey(idx);
+  const incoming=_radarLayers.get(key);
   if(!incoming)return;
   if(_fadeRaf){cancelAnimationFrame(_fadeRaf);_fadeRaf=null;}
   // requestAnimationFrame does not run in a background tab. Starting a fade
@@ -2460,8 +2492,8 @@ function fadeRadarTo(idx,ms){
   // is what made it look intermittent. Skip the animation and take the result.
   if(document.hidden){settleRadarOpacity(idx);return;}
   const outgoing=[];
-  _radarLayers.forEach((l,j)=>{
-    if(j!==idx&&map.hasLayer(l)&&l.options.opacity>0)outgoing.push([l,l.options.opacity]);
+  _radarLayers.forEach((l,k)=>{
+    if(k!==key&&map.hasLayer(l)&&l.options.opacity>0)outgoing.push([l,l.options.opacity]);
   });
   const t0=performance.now();
   const step=(t)=>{
@@ -2486,6 +2518,12 @@ function showRadarFrame(i,opts){
   if(!state.layers.radar){if(typeof updateWxBar==='function')updateWxBar();return;}
   const want=radarLayerFor(_radarIdx);
   if(!want)return;
+  // A frame already proven to have no tiles is not worth re-probing every pass
+  // of the loop — hold whatever is on screen.
+  if(_radarFrames[_radarIdx]&&_radarFrames[_radarIdx].dead){
+    if(typeof updateWxBar==='function')updateWxBar();
+    return;
+  }
   const first=!map.hasLayer(want);
   if(first){want.setOpacity(0);want.addTo(map);}
   const fade=!opts||opts.fade!==false;
@@ -2506,7 +2544,16 @@ function showRadarFrame(i,opts){
       done=true;
       // Only if this frame is still the wanted one; a stale callback from a
       // frame the loop has already stepped past must not drag it back.
-      if(_radarIdx===target)fadeRadarTo(target,280);
+      if(_radarIdx!==target)return;
+      // Nothing loaded and something failed: the frame is listed but not
+      // published. Keep whatever is on screen rather than fading to nothing.
+      if(want.__ok===0&&want.__err>0){
+        const f=_radarFrames[target];
+        if(f)f.dead=true;
+        console.warn('Radar frame has no tiles, holding previous frame:',f&&f.time);
+        return;
+      }
+      fadeRadarTo(target,280);
     };
     want.once('load',go);
     setTimeout(go,1500);
@@ -2532,7 +2579,10 @@ function preloadRadarFrames(){
     if(!state.layers.radar||i>=_radarFrames.length){_preloading=false;return;}
     const l=radarLayerFor(i);
     if(l&&!map.hasLayer(l)){l.setOpacity(0);l.addTo(map);}
-    if(l&&i===_radarIdx)l.setOpacity(state.radarOpacity!=null?state.radarOpacity:0.55);
+    // Warming must not promote a frame the display deliberately skipped, or a
+    // frame with no tiles gets drawn at full opacity over the good one.
+    if(l&&i===_radarIdx&&!(_radarFrames[i]&&_radarFrames[i].dead))
+      l.setOpacity(state.radarOpacity!=null?state.radarOpacity:0.55);
     i++;
     setTimeout(add,120);
   };
