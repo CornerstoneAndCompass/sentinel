@@ -246,33 +246,80 @@ async function passthrough(request, env, ctx) {
 async function firms(request, env) {
   if (!env.FIRMS_KEY) return json({ configured: false, hotspots: [] });
 
-  const days = Math.min(parseInt(new URL(request.url).searchParams.get('days') || '1', 10), 10);
-  const res = await fetch(
-    `https://firms.modaps.eosdis.nasa.gov/api/area/csv/${env.FIRMS_KEY}/VIIRS_SNPP_NRT/world/${days}`,
-    { headers: { 'User-Agent': 'Sentinel-OSINT/1.0' } }
-  );
-  if (!res.ok) return json({ configured: true, error: `firms ${res.status}`, hotspots: [] });
+  const p = new URL(request.url).searchParams;
+  // The area API accepts 1-5 days only. The old clamp allowed 10, which the
+  // upstream rejects outright. Non-numeric input has to be caught explicitly:
+  // Math.min/max propagate NaN, which would be interpolated into the URL path.
+  const dRaw = parseInt(p.get('days') || '1', 10);
+  const days = Number.isFinite(dRaw) ? Math.min(Math.max(dRaw, 1), 5) : 1;
 
-  const text = await res.text();
-  const rows = text.trim().split('\n');
-  const head = (rows.shift() || '').split(',');
-  const iLat = head.indexOf('latitude');
-  const iLon = head.indexOf('longitude');
-  const iConf = head.indexOf('confidence');
-  const iDate = head.indexOf('acq_date');
-  if (iLat < 0 || iLon < 0) return json({ configured: true, error: 'unexpected csv', hotspots: [] });
+  // west,south,east,north — or "world". A global VIIRS day is hundreds of
+  // thousands of rows and counts as many transactions against the key, so the
+  // caller should ask for the area it is actually showing.
+  const bbox = p.get('bbox');
+  const area = bbox && /^-?[\d.]+,-?[\d.]+,-?[\d.]+,-?[\d.]+$/.test(bbox) ? bbox : 'world';
 
-  const hotspots = [];
-  for (const row of rows) {
-    const c = row.split(',');
-    const lat = parseFloat(c[iLat]);
-    const lon = parseFloat(c[iLon]);
-    if (Number.isNaN(lat) || Number.isNaN(lon)) continue;
-    hotspots.push({ lat, lon, confidence: iConf >= 0 ? c[iConf] : null, date: iDate >= 0 ? c[iDate] : null });
+  // Both polar satellites: SNPP alone leaves roughly half the overpasses out.
+  const sources = (p.get('sources') || 'VIIRS_SNPP_NRT,VIIRS_NOAA20_NRT').split(',').slice(0, 3);
+  const cap = Math.min(parseInt(p.get('limit') || '4000', 10), 20000);
+
+  const parseCsv = (text, sat) => {
+    const rows = text.trim().split(/\r?\n/);
+    const head = (rows.shift() || '').split(',').map((h) => h.trim());
+    const at = (n) => head.indexOf(n);
+    const iLat = at('latitude'), iLon = at('longitude');
+    if (iLat < 0 || iLon < 0) return null;
+    const iConf = at('confidence'), iDate = at('acq_date'), iTime = at('acq_time');
+    const iFrp = at('frp'), iBright = at('bright_ti4') >= 0 ? at('bright_ti4') : at('brightness');
+    const iSat = at('satellite'), iDn = at('daynight');
+    const out = [];
+    for (const row of rows) {
+      const c = row.split(',');
+      const lat = parseFloat(c[iLat]), lon = parseFloat(c[iLon]);
+      if (Number.isNaN(lat) || Number.isNaN(lon)) continue;
+      out.push({
+        lat, lon,
+        confidence: iConf >= 0 ? c[iConf] : null,
+        date: iDate >= 0 ? c[iDate] : null,
+        // HHMM in UTC, kept as given; the client formats it.
+        time: iTime >= 0 ? c[iTime] : null,
+        frp: iFrp >= 0 ? parseFloat(c[iFrp]) || null : null,
+        bright: iBright >= 0 ? parseFloat(c[iBright]) || null : null,
+        sat: iSat >= 0 ? c[iSat] : sat,
+        daynight: iDn >= 0 ? c[iDn] : null,
+      });
+    }
+    return out;
+  };
+
+  const results = await Promise.all(sources.map(async (src) => {
+    const url = `https://firms.modaps.eosdis.nasa.gov/api/area/csv/${env.FIRMS_KEY}/${src}/${area}/${days}`;
+    const res = await fetch(url, { headers: { 'User-Agent': 'Sentinel-OSINT/1.0' } });
+    if (!res.ok) return { src, error: `firms ${res.status}` };
+    const text = await res.text();
+    // An invalid key answers 200 with an HTML/text error rather than CSV.
+    if (/Invalid MAP_KEY|<html/i.test(text.slice(0, 400))) return { src, error: 'firms bad key' };
+    const rows = parseCsv(text, src);
+    if (!rows) return { src, error: 'unexpected csv', sample: text.slice(0, 120) };
+    return { src, rows };
+  }));
+
+  const failed = results.filter((r) => r.error);
+  const hotspots = results.flatMap((r) => r.rows || []).slice(0, cap);
+  const body = {
+    configured: true,
+    area, days,
+    count: hotspots.length,
+    bySource: Object.fromEntries(results.map((r) => [r.src, r.rows ? r.rows.length : r.error])),
+    hotspots,
+  };
+  if (failed.length === results.length) {
+    body.error = failed[0].error;
+    body.detail = failed[0].sample;
+  } else if (failed.length) {
+    body.partial = failed.map((f) => `${f.src}: ${f.error}`);
   }
-  return json({ configured: true, count: hotspots.length, hotspots }, 200, {
-    'Cache-Control': 'public, max-age=600',
-  });
+  return json(body, 200, { 'Cache-Control': 'public, max-age=600' });
 }
 
 /* -------------------------------------------------------------- opensky -- */
