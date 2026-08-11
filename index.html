@@ -769,6 +769,7 @@ html,body{width:100%;height:100%;overflow:hidden;background:#050a12;font-family:
 <button class="fbtn on-r" id="fTsunami" onclick="togLayer('tsunami')" title="Active tsunami warnings (NOAA)">TSUNAMI</button>
 <button class="fbtn on" id="fRadar" onclick="toggleRadar()" title="Live precipitation radar (RainViewer)">RAIN RADAR</button>
 <button class="fbtn on-y" id="fBOM" onclick="togLayer('bom')" title="Australian Bureau of Meteorology warnings">AU WARNINGS</button>
+<button class="fbtn" id="fWx" onclick="togLayer('wx')" title="US National Weather Service severe weather alerts">US SEVERE WX</button>
 <button class="fbtn on-r" id="fAusEm" onclick="togLayer('ausEm')" title="Live incidents from NSW RFS, VicEmergency and Queensland Fire">AU INCIDENTS</button>
 </div>
 <div class="fgroup">Security &amp; intel<span class="grp-ctl"><button onclick="setGroup('grpIntel',true)" title="Turn every layer in this group on">ALL</button><button onclick="setGroup('grpIntel',false)" title="Turn every layer in this group off">NONE</button></span></div>
@@ -1050,7 +1051,12 @@ const state={
   quakeMarkers:[],gdeltMarkers:[],fireMarkers:[],chokeMarkers:[],
   filters:{aircraft:true,heli:true,ship:true,satellite:true},
   categories:{military:true,coastguard:true,police:true,government:true,sar:true,tanker:false,cargo:false,passenger:false,fishing:false},
-  layers:{radar:true,satimg:false,bom:true,ausEm:true,gdacs:true,quakes:true,fires:true,gdelt:true,chokes:true,notams:true,piracy:true,volcanoes:true,tsunami:true,cyber:true,cables:false,nukes:false,bases:false,conflict:true,rf:true,drones:true,refugees:true,dark:true},
+  // All overlays start off. Painting twenty layers at once on first run is the
+  // overload; the map should open quiet and you switch on what you want.
+  layers:{radar:false,satimg:false,bom:false,ausEm:false,gdacs:false,quakes:false,fires:false,
+    gdelt:false,chokes:false,notams:false,piracy:false,volcanoes:false,tsunami:false,cyber:false,
+    cables:false,nukes:false,bases:false,conflict:false,rf:false,drones:false,refugees:false,dark:false,
+    jamming:false,wx:false},
   countryFilter:'',searchTerm:'',selectedId:null,
   alerts:[],news:[],gdeltEvents:[],earthquakes:[],fires:[],notamMarkers:[],cableLines:[],nukeMarkers:[],piracyMarkers:[],wildfireMarkers:[],cyberMarkers:[],refugeeMarkers:[],milbaseMarkers:[],rfMarkers:[],droneMarkers:[],ntestMarkers:[],conflictMarkers:[],volcanoMarkers:[],tsunamiMarkers:[],
   threats:{},defcon:4,threatScore:0,
@@ -2402,23 +2408,67 @@ function clearRadarLayers(){
   _radarLayers.forEach(l=>{if(map.hasLayer(l))map.removeLayer(l);});
   _radarLayers.clear();
 }
-function showRadarFrame(i){
+/* Cross-fade rather than cut. A hard opacity swap reads as a flicker, and if the
+   incoming frame has not finished loading it flashes empty first. Waiting for
+   the tiles then fading over ~280ms makes the sequence morph. */
+let _fadeRaf=null;
+function fadeRadarTo(idx,ms){
+  const op=state.radarOpacity!=null?state.radarOpacity:0.55;
+  const incoming=_radarLayers.get(idx);
+  if(!incoming)return;
+  if(_fadeRaf)cancelAnimationFrame(_fadeRaf);
+  const outgoing=[];
+  _radarLayers.forEach((l,j)=>{if(j!==idx&&map.hasLayer(l)&&l.options.opacity>0)outgoing.push(l);});
+  const t0=performance.now();
+  const step=(t)=>{
+    const k=Math.min(1,(t-t0)/(ms||280));
+    incoming.setOpacity(op*k);
+    outgoing.forEach(l=>l.setOpacity(op*(1-k)));
+    if(k<1)_fadeRaf=requestAnimationFrame(step);
+    else{outgoing.forEach(l=>l.setOpacity(0));_fadeRaf=null;}
+  };
+  _fadeRaf=requestAnimationFrame(step);
+}
+function showRadarFrame(i,opts){
   if(!_radarFrames.length)return;
   _radarIdx=(i+_radarFrames.length)%_radarFrames.length;
   if(!state.layers.radar){if(typeof updateWxBar==='function')updateWxBar();return;}
   const want=radarLayerFor(_radarIdx);
-  if(want&&!map.hasLayer(want))want.addTo(map);
-  const op=state.radarOpacity!=null?state.radarOpacity:0.55;
-  _radarLayers.forEach((l,idx)=>{if(map.hasLayer(l))l.setOpacity(idx===_radarIdx?op:0);});
+  if(!want)return;
+  const first=!map.hasLayer(want);
+  if(first){want.setOpacity(0);want.addTo(map);}
+  const fade=!opts||opts.fade!==false;
+  if(!fade){
+    const op=state.radarOpacity!=null?state.radarOpacity:0.55;
+    _radarLayers.forEach((l,idx)=>{if(map.hasLayer(l))l.setOpacity(idx===_radarIdx?op:0);});
+  }else if(want.isLoading&&want.isLoading()){
+    // Do not start the fade on a half-drawn frame — hold the current one until
+    // the incoming tiles are in, which is what stops the loop flashing.
+    want.once('load',()=>{if(_radarIdx===i%_radarFrames.length||true)fadeRadarTo(_radarIdx,280);});
+  }else{
+    fadeRadarTo(_radarIdx,280);
+  }
   if(typeof updateWxBar==='function')updateWxBar();
 }
-// Warm every frame so the first pass of the loop is not a slideshow of blanks.
+/* Warm every frame so the first pass of the loop is not a slideshow of blanks.
+   Frames are added at zero opacity, one every 120ms rather than all at once —
+   thirteen tile layers requesting simultaneously stalls the main paint and gets
+   the client rate-limited. Runs after the app has finished its first render, so
+   it costs nothing visible. */
+let _preloading=false;
 function preloadRadarFrames(){
-  for(let i=0;i<_radarFrames.length;i++){
+  if(_preloading||!state.layers.radar)return;
+  _preloading=true;
+  let i=0;
+  const add=()=>{
+    if(i>=_radarFrames.length){_preloading=false;return;}
     const l=radarLayerFor(i);
-    if(l&&!map.hasLayer(l))l.addTo(map);
-    if(l)l.setOpacity(i===_radarIdx?(state.radarOpacity!=null?state.radarOpacity:0.55):0);
-  }
+    if(l&&!map.hasLayer(l)){l.setOpacity(0);l.addTo(map);}
+    if(l&&i===_radarIdx)l.setOpacity(state.radarOpacity!=null?state.radarOpacity:0.55);
+    i++;
+    setTimeout(add,120);
+  };
+  add();
 }
 
 // Looping is handled by toggleWxLoop in the weather panel, which steps radar
@@ -2428,8 +2478,14 @@ function toggleRadar(){
   const btn=document.getElementById('fRadar');
   if(btn)btn.classList.toggle('on',state.layers.radar);
   if(!state.layers.radar)clearRadarLayers();
-  else if(_radarFrames.length)showRadarFrame(_radarIdx>=0?_radarIdx:_radarFrames.length-1);
-  else fetchRadar();
+  else if(_radarFrames.length){
+    showRadarFrame(_radarIdx>=0?_radarIdx:_radarFrames.length-1);
+    // Warm the rest once the visible frame is up, so LOOP is instant. Layers
+    // now start off, so this is the point the frames are actually wanted —
+    // doing it at boot would fetch two hours of tiles nobody asked for.
+    setTimeout(preloadRadarFrames,1200);
+  }
+  else fetchRadar().then(()=>setTimeout(preloadRadarFrames,1200));
   if(typeof syncWxButtons==='function')syncWxButtons();
 }
 
@@ -2941,6 +2997,7 @@ async function fetchWildfires(){
         {name:'NSW/QLD Fire Season 2026',lat:-30.0,lon:152.0,acres:75000,contained:55,country:'AU'},
       ];
       ACTIVE_FIRES.forEach(f=>{
+        if(!state.layers.fires)return;
         const m=L.marker([f.lat,f.lon],{icon:overlayIcon('wildfire','#ff6600',Math.min(32,18+Math.floor((f.acres||0)/200000)))}).addTo(map);
         m.bindPopup('<div style="background:#0a0e18;color:#d8dfe8;padding:8px;border:1px solid #ff6600;border-radius:4px;font-family:Share Tech Mono,monospace;font-size:11px"><div style="color:#ff6600;font-weight:bold;margin-bottom:4px">🔥 '+f.name+'</div>Acres: '+(f.acres>=1000000?(f.acres/1000000).toFixed(1)+'M':f.acres.toLocaleString())+'<br>Contained: '+f.contained+'%<br>Country: '+f.country+'</div>',{className:'dark-popup'});
         state.wildfireMarkers.push(m);
@@ -3005,6 +3062,7 @@ async function fetchRefugees(){
     ];
     DISPLACEMENT_CRISES.forEach(c=>{
       const color=c.status==='ACTIVE CONFLICT'?'#ff3355':c.status==='PROTRACTED'?'#ff8800':'#ffcc00';
+      if(!state.layers.refugees)return;
       const m=L.marker([c.lat,c.lon],{icon:overlayIcon('refugee',color,26)}).addTo(map);
       m.bindPopup('<div style="background:#0a0e18;color:#d8dfe8;padding:8px;border:1px solid '+color+';border-radius:4px;font-family:Share Tech Mono,monospace;font-size:11px"><div style="color:'+color+';font-weight:bold;margin-bottom:4px">🚶 '+c.name+'</div>Displaced: '+c.displaced+' | Refugees: '+c.refugees+'<br>Origin: '+c.origin+' | Status: '+c.status+'<br>'+c.desc+'</div>',{className:'dark-popup'});
       state.refugeeMarkers.push(m);
@@ -3138,6 +3196,7 @@ async function fetchNuclearTests(){
     }
     TEST_SITES.forEach(ts=>{
       const color=ts.country==='KP'?'#ff0000':ts.country==='RU'||ts.country==='CN'?'#ff3355':'#ff8800';
+      if(!state.layers.nukes)return;
       const m=L.marker([ts.lat,ts.lon],{icon:overlayIcon('ntest',color,26)}).addTo(map);
       m.bindPopup('<div style="background:#0a0e18;color:#d8dfe8;padding:8px;border:1px solid '+color+';border-radius:4px;font-family:Share Tech Mono,monospace;font-size:11px"><div style="color:'+color+';font-weight:bold;margin-bottom:4px">☢ TEST SITE: '+ts.name+' ['+ts.country+']</div>Historical tests: '+ts.tests+' | Last: '+ts.lastTest+'<br>Max yield: '+ts.yield+'<br>'+ts.desc+'</div>',{className:'dark-popup'});
       state.ntestMarkers.push(m);
@@ -3961,6 +4020,7 @@ async function fetchSevereWeather(){
     // Plot severe weather on map
     state.wxMarkers.forEach(m=>map.removeLayer(m));state.wxMarkers=[];
     for(const wx of state.wxAlerts){
+      if(!state.layers.wx)break;
       if(!wx.lat||!wx.lon)continue;
       const color=wx.severity==='Extreme'?'#ff0044':'#ff8800';
       const m=L.circleMarker([wx.lat,wx.lon],{radius:8,color,fillColor:color,fillOpacity:0.25,weight:2,opacity:0.6});
@@ -4043,17 +4103,32 @@ function updateStats(){
 // --- FILTERS + KEYBOARD ---
 function togF(t){state.filters[t]=!state.filters[t];const on=state.filters[t];const bm={aircraft:'fAir',heli:'fHeli',ship:'fShip',satellite:'fSat'};const cm={aircraft:'on',heli:'on-y',ship:'on-o',satellite:'on-p'};const btn=document.getElementById(bm[t]);if(btn){if(on)btn.classList.add(cm[t]);else btn.classList.remove(cm[t]);}renderMarkers();renderAssetList();}
 function togC(c){state.categories[c]=!state.categories[c];const on=state.categories[c];const bm={military:'cMil',coastguard:'cCG',police:'cPol',government:'cGov',sar:'cSar',tanker:'cTanker',cargo:'cCargo',passenger:'cPassenger',fishing:'cFishing'};const btn=document.getElementById(bm[c]);if(btn){if(on)btn.classList.add('on-g');else btn.classList.remove('on-g');}renderMarkers();renderAssetList();}
+// Single source of truth for which button belongs to which layer and what
+// colour it lights up. The markup used to hard-code "on" classes, which drifted
+// the moment a default changed.
+const LAYER_BTN={wx:'fWx',ausEm:'fAusEm',bom:'fBOM',radar:'fRadar',quakes:'fQuake',fires:'fFire',gdelt:'fGdelt',chokes:'fChoke',jamming:'fJam',notams:'fNotam',piracy:'fPiracy',volcanoes:'fVolcano',tsunami:'fTsunami',cyber:'fCyber',cables:'fCables',nukes:'fNuke',bases:'fBases',conflict:'fConflict',rf:'fRF',drones:'fDrone',refugees:'fRefugee'};
+const LAYER_COL={wx:'on-y',ausEm:'on-r',bom:'on-y',radar:'on',quakes:'on-r',fires:'on-o',gdelt:'on',chokes:'on-y',jamming:'on-p',notams:'on-y',piracy:'on-r',volcanoes:'on-o',tsunami:'on-r',cyber:'on-p',cables:'on',nukes:'on-o',bases:'on',conflict:'on-r',rf:'on-p',drones:'on-o',refugees:'on-y'};
+const ALL_ON_CLASSES=['on','on-r','on-o','on-y','on-p','on-g'];
+function syncLayerButtons(){
+  for(const[l,id]of Object.entries(LAYER_BTN)){
+    const b=document.getElementById(id);
+    if(!b)continue;
+    ALL_ON_CLASSES.forEach(c=>b.classList.remove(c));
+    if(state.layers[l])b.classList.add(LAYER_COL[l]||'on');
+  }
+  const ob=document.getElementById('fOrbit');
+  if(ob){ALL_ON_CLASSES.forEach(c=>ob.classList.remove(c));if(state.showOrbits)ob.classList.add('on-p');}
+}
 function togLayer(l){
   state.layers[l]=!state.layers[l];
   const on=state.layers[l];
-  // Button ID + color class map
-  const bm={ausEm:'fAusEm',bom:'fBOM',quakes:'fQuake',fires:'fFire',gdelt:'fGdelt',chokes:'fChoke',jamming:'fJam',notams:'fNotam',piracy:'fPiracy',volcanoes:'fVolcano',tsunami:'fTsunami',cyber:'fCyber',cables:'fCables',nukes:'fNuke',bases:'fBases',conflict:'fConflict',rf:'fRF',drones:'fDrone',refugees:'fRefugee'};
-  const cm={ausEm:'on-r',bom:'on-y',quakes:'on-r',fires:'on-o',gdelt:'on',chokes:'on-y',jamming:'on-p',notams:'on-y',piracy:'on-r',volcanoes:'on-o',tsunami:'on-r',cyber:'on-p',cables:'on',nukes:'on-o',bases:'on',conflict:'on-r',rf:'on-p',drones:'on-o',refugees:'on-y'};
+  const bm=LAYER_BTN,cm=LAYER_COL;
   // Sync button visual to state (not toggle — prevents desync)
   if(bm[l]){const btn=document.getElementById(bm[l]);if(btn){if(on)btn.classList.add(cm[l]);else btn.classList.remove(cm[l]);}}
   // Handle overlay marker layers
   const overlayMap={
     bom:{markers:'bomMarkers',render:on?renderBOMMarkers:null},
+    wx:{markers:'wxMarkers',render:on?fetchSevereWeather:null},
     ausEm:{markers:'ausEmMarkers',render:on?renderAusEmergency:null},
     notams:{markers:'notamMarkers',render:on?fetchNOTAMs:null},
     piracy:{markers:'piracyMarkers',render:on?renderPiracy:null},
@@ -4213,7 +4288,9 @@ const GPS_JAM_ZONES=[
   {name:'Korean DMZ',lat:38.0,lon:127.0,radius:50000,severity:'HIGH',desc:'North Korean GPS jamming operations targeting South Korea.'},
   {name:'India-Pakistan Border',lat:32.0,lon:74.5,radius:60000,severity:'MODERATE',desc:'Military jamming during tensions. Affects Jammu & Kashmir region.'},
 ];
-state.jamMarkers=[];state.layers.jamming=true;
+state.jamMarkers=[];
+// Do not force this on — it overrode the defaults object further up, which is
+// why GPS jamming was the one layer still lit on a fresh load.
 function renderJammingZones(){
   feedWait('f17');
   state.jamMarkers.forEach(m=>map.removeLayer(m));state.jamMarkers=[];
@@ -4371,7 +4448,7 @@ function checkGeofences(){
 }
 
 // --- SPACE VIEW + ORBIT DISPLAY ---
-state.orbitLines=[];state.showOrbits=true;
+state.orbitLines=[];state.showOrbits=false;
 state._spaceViewActive=false;
 
 // Ensure banner element exists
@@ -4639,7 +4716,8 @@ function showSatFrame(i){
     const band=HIMA_BANDS[_satBand]||HIMA_BANDS.B13;
     url=`https://www.jma.go.jp/bosai/himawari/data/satimg/${f.basetime}/fd/${f.validtime}/${band.path}/{z}/{x}/{y}.jpg`;
   }
-  if(_satLayer)map.removeLayer(_satLayer);
+  // The outgoing layer stays on the map until the fade finishes and removes it.
+  const _prevSat=_satLayer;
   _satLayer=L.tileLayer(url,{
     opacity:state.satOpacity!=null?state.satOpacity:0.65,
     // JMA's full-disk product stops at z5 and GIBS Level7 stops at z7. Going one
@@ -4652,7 +4730,25 @@ function showSatFrame(i){
     // Outside the Himawari disk every tile 404s; silence rather than console spam.
     errorTileUrl:'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7'
   });
-  if(state.layers.satimg)_satLayer.addTo(map);
+  if(state.layers.satimg){
+    // Add the new frame underneath at zero opacity, fade it up, then drop the
+    // old one — otherwise the map blinks through to the basemap between frames.
+    const target=state.satOpacity!=null?state.satOpacity:0.65;
+    _satLayer.setOpacity(0);
+    _satLayer.addTo(map);
+    const run=()=>{
+      const t0=performance.now();
+      const step=(t)=>{
+        const k=Math.min(1,(t-t0)/280);
+        _satLayer.setOpacity(target*k);
+        if(_prevSat&&map.hasLayer(_prevSat))_prevSat.setOpacity(target*(1-k));
+        if(k<1)requestAnimationFrame(step);
+        else if(_prevSat&&map.hasLayer(_prevSat))map.removeLayer(_prevSat);
+      };
+      requestAnimationFrame(step);
+    };
+    if(_satLayer.isLoading&&_satLayer.isLoading())_satLayer.once('load',run);else run();
+  }else if(_prevSat&&map.hasLayer(_prevSat))map.removeLayer(_prevSat);
   updateWxBar();
 }
 
@@ -4779,7 +4875,7 @@ function toggleWxLoop(){
     updateWxFrameLabel();
   }else{
     if(btn){btn.textContent='❚❚ STOP';btn.classList.add('on');}
-    if(state.layers.radar)preloadRadarFrames();     // warm every frame first
+    preloadRadarFrames();                           // no-op if already warm
     _wxTimer=setInterval(()=>{
       const disk=typeof activeDisk==='function'?activeDisk():null;
       const stepR=state.layers.radar&&_radarFrames.length;
@@ -5648,7 +5744,7 @@ async function boot(){
     bootSysRow(9,true);
 
     txt.textContent='INITIALIZING GPS JAMMING DETECTION...';bar.style.width='88%';
-    renderJammingZones();
+    if(state.layers.jamming)renderJammingZones();
     bootSysRow(11,true);
     await new Promise(r=>setTimeout(r,150));
 
@@ -5670,17 +5766,17 @@ async function boot(){
     await new Promise(r=>setTimeout(r,100));
 
     txt.textContent='MAPPING SUBMARINE CABLE GRID...';bar.style.width='95.5%';
-    renderCables();
+    if(state.layers.cables)renderCables();
     bootSysRow(16,true);
     await new Promise(r=>setTimeout(r,100));
 
     txt.textContent='LOADING NUCLEAR FACILITY DATABASE...';bar.style.width='96%';
-    renderNukes();
+    if(state.layers.nukes)renderNukes();
     bootSysRow(17,true);
     await new Promise(r=>setTimeout(r,100));
 
     txt.textContent='ACTIVATING PIRACY TRACKING...';bar.style.width='96.5%';
-    renderPiracy();
+    if(state.layers.piracy)renderPiracy();
     bootSysRow(18,true);
     await new Promise(r=>setTimeout(r,80));
 
@@ -5689,7 +5785,7 @@ async function boot(){
     await new Promise(r=>setTimeout(r,80));
 
     txt.textContent='CONNECTING CYBER THREAT INTEL...';bar.style.width='97.3%';
-    renderCyber();
+    if(state.layers.cyber)renderCyber();
     bootSysRow(20,true);
     await new Promise(r=>setTimeout(r,80));
 
@@ -5698,17 +5794,17 @@ async function boot(){
     await new Promise(r=>setTimeout(r,80));
 
     txt.textContent='MAPPING MILITARY INSTALLATIONS...';bar.style.width='97.8%';
-    renderMilBases();
+    if(state.layers.bases)renderMilBases();
     bootSysRow(22,true);
     await new Promise(r=>setTimeout(r,80));
 
     txt.textContent='ACTIVATING RF SPECTRUM MONITOR...';bar.style.width='98%';
-    renderRF();
+    if(state.layers.rf)renderRF();
     bootSysRow(23,true);
     await new Promise(r=>setTimeout(r,80));
 
     txt.textContent='SCANNING DRONE ACTIVITY ZONES...';bar.style.width='98.3%';
-    renderDrones();
+    if(state.layers.drones)renderDrones();
     bootSysRow(24,true);
     await new Promise(r=>setTimeout(r,80));
 
@@ -5717,7 +5813,7 @@ async function boot(){
     await new Promise(r=>setTimeout(r,80));
 
     txt.textContent='LOADING CONFLICT DATA (ACLED)...';bar.style.width='98.7%';
-    renderConflicts();
+    if(state.layers.conflict)renderConflicts();
     bootSysRow(26,true);
     await new Promise(r=>setTimeout(r,80));
 
@@ -5729,7 +5825,7 @@ async function boot(){
     bootSysRow(28,true);
     await new Promise(r=>setTimeout(r,80));
     txt.textContent='COMPUTING THREAT MATRIX...';bar.style.width='99.5%';
-    renderThreats();renderChokepoints();calculateDefcon();updateThreatBanner();
+    renderThreats();if(state.layers.chokes)renderChokepoints();calculateDefcon();updateThreatBanner();
     bootSysRow(6,true);
     await new Promise(r=>setTimeout(r,200));
 
@@ -5738,9 +5834,13 @@ async function boot(){
   // Leaflet caches its size while the loader is covering the map, so re-check
   // once the real layout is visible.
   setTimeout(()=>{ensureMapSized();renderMarkers();},120);
+  // If radar was left on from a previous session, warm its frames after first
+  // paint so LOOP is instant.
+  setTimeout(()=>{if(state.layers.radar&&_radarFrames.length)preloadRadarFrames();},2500);
   updateNotifyBtn();
   restorePanels();
   renderWatchlist();
+  syncLayerButtons();
   if(localStorage.getItem('sentinel_wxpanel')!=='shut')document.getElementById('wxPanel').classList.add('open');
   syncWxButtons();updateWxBar();buildWxScrubber();
   if(loadWatch().length){loadCountries().then(renderWatchlist).catch(()=>{});}
