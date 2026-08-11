@@ -66,6 +66,20 @@ html,body{width:100%;height:100%;overflow:hidden;background:#050a12;font-family:
 .threat-banner{position:fixed;top:40px;left:0;right:0;height:28px;background:rgba(255,51,85,0.06);border-bottom:1px solid rgba(255,51,85,0.15);display:flex;align-items:center;z-index:4999;overflow:hidden}
 .marquee-track{display:flex;animation:marquee-scroll 60s linear infinite;white-space:nowrap}
 .marquee-track:hover{animation-play-state:paused}
+/* Hover-pause is not enough when the thing scrolls all day in your peripheral
+   vision. Click the banner to stop it; the choice sticks. */
+.threat-banner{cursor:pointer}
+.threat-banner.paused .marquee-track{animation-play-state:paused}
+.threat-banner.paused .marquee-text{color:#c99}
+.tick-hint{position:absolute;right:6px;top:50%;transform:translateY(-50%);z-index:2;
+  font-family:'Share Tech Mono',monospace;font-size:8px;letter-spacing:1px;color:var(--td);
+  background:rgba(8,12,20,.85);padding:1px 5px;pointer-events:none}
+/* Someone who has asked their OS for less motion should not have to find a
+   toggle in an app they just opened. */
+@media(prefers-reduced-motion:reduce){
+  .marquee-track{animation:none!important}
+  .threat-banner{overflow-x:auto}
+}
 .marquee-text{font-family:'Orbitron',sans-serif;font-size:11px;letter-spacing:3px;color:#ff6680;text-shadow:0 0 8px rgba(255,51,85,0.4);padding-right:80px}
 @keyframes marquee-scroll{0%{transform:translateX(0)}100%{transform:translateX(-50%)}}
 
@@ -670,7 +684,7 @@ html,body{width:100%;height:100%;overflow:hidden;background:#050a12;font-family:
 <!-- AIS STATUS BANNER -->
 
 <!-- THREAT BANNER -->
-<div class="threat-banner" id="threatBanner" style="top:64px"><div class="marquee-track" id="marqueeTrack"><span class="marquee-text" id="threatMarquee">LOADING GLOBAL THREAT ASSESSMENT...</span><span class="marquee-text" id="threatMarquee2">LOADING GLOBAL THREAT ASSESSMENT...</span></div></div>
+<div class="threat-banner" id="threatBanner" style="top:64px" onclick="toggleTicker()" title="Click to pause or resume the threat ticker"><span class="tick-hint" id="tickHint"></span><div class="marquee-track" id="marqueeTrack"><span class="marquee-text" id="threatMarquee">LOADING GLOBAL THREAT ASSESSMENT...</span><span class="marquee-text" id="threatMarquee2">LOADING GLOBAL THREAT ASSESSMENT...</span></div></div>
 
 <!-- HEADER -->
 <div class="header">
@@ -4140,6 +4154,22 @@ async function fetchSevereWeather(){
 }
 
 // --- THREAT BANNER (seamless loop) ---
+function toggleTicker(){
+  const b=document.getElementById('threatBanner');
+  const off=b.classList.toggle('paused');
+  localStorage.setItem('sentinel_ticker',off?'paused':'running');
+  const h=document.getElementById('tickHint');
+  if(h)h.textContent=off?'PAUSED':'';
+}
+function restoreTicker(){
+  const reduce=window.matchMedia&&window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const saved=localStorage.getItem('sentinel_ticker');
+  const off=saved?saved==='paused':reduce;
+  const b=document.getElementById('threatBanner');
+  if(b)b.classList.toggle('paused',off);
+  const h=document.getElementById('tickHint');
+  if(h)h.textContent=off?'PAUSED':'';
+}
 function updateThreatBanner(){
   const critical=Object.entries(RISK_DATA).filter(([,v])=>v.level==='CRITICAL');
   const quakes=state.earthquakes.filter(q=>q.mag>=5);
@@ -4292,14 +4322,14 @@ setInterval(()=>{
 // Render static intelligence overlays
 function renderStaticOverlays(){
   try{
-    if(state.layers.cables)renderCables();
-    if(state.layers.nukes)renderNukes();
-    if(state.layers.piracy)renderPiracy();
-    if(state.layers.cyber)renderCyber();
-    if(state.layers.bases)renderMilBases();
-    if(state.layers.rf)renderRF();
-    if(state.layers.drones)renderDrones();
-    if(state.layers.conflict)renderConflicts();
+    renderCables();
+    renderNukes();
+    renderPiracy();
+    renderCyber();
+    renderMilBases();
+    renderRF();
+    renderDrones();
+    renderConflicts();
   }catch(e){console.warn('Static overlay error:',e);}
 }
 function renderAll(){
@@ -4395,7 +4425,9 @@ state.jamMarkers=[];
 function renderJammingZones(){
   feedWait('f17');
   state.jamMarkers.forEach(m=>map.removeLayer(m));state.jamMarkers=[];
-  if(!state.layers.jamming){feedDot('f17',true);return;}
+  document.getElementById('sJam').textContent=GPS_JAM_ZONES.length;
+  state.sources.jamming=GPS_JAM_ZONES.length;feedDot('f17',true);
+  if(!state.layers.jamming)return;
   for(const jz of GPS_JAM_ZONES){
     const color=jz.severity==='SEVERE'?'#ff0044':jz.severity==='HIGH'?'#aa66ff':'#8855cc';
     const fillOp=jz.severity==='SEVERE'?0.12:jz.severity==='HIGH'?0.08:0.05;
@@ -4718,7 +4750,7 @@ function renderTimeline(){
   let html='<div style="padding:8px 12px;border-bottom:1px solid var(--brd);font-size:10px;color:var(--tm);font-family:Orbitron;letter-spacing:2px">INCIDENT LOG — '+state.timeline.length+' EVENTS</div>';
   for(const ev of state.timeline.slice(0,60)){
     const t=new Date(ev.time);
-    const ts=t.toISOString().slice(11,19)+'Z';
+    const ts=fmtClock(t);
     const lvlCls=ev.level==='critical'?'critical':ev.level==='warning'?'warning':'info';
     const onclick=ev.lat?` onclick="flyTo(${ev.lat},${ev.lon},8)" style="cursor:pointer"`:' style="cursor:default"';
     html+=`<div class="timeline-item ${lvlCls}"${onclick}><div style="font-family:Orbitron;font-size:9px;color:var(--tm);letter-spacing:1px;margin-bottom:2px">${ts}</div><div style="color:var(--th);font-size:11px;line-height:1.4">${ev.text}</div></div>`;
@@ -5850,7 +5882,7 @@ async function boot(){
     bootSysRow(9,true);
 
     txt.textContent='INITIALIZING GPS JAMMING DETECTION...';bar.style.width='88%';
-    if(state.layers.jamming)renderJammingZones();
+    renderJammingZones();
     bootSysRow(11,true);
     await new Promise(r=>setTimeout(r,150));
 
@@ -5877,7 +5909,7 @@ async function boot(){
     await new Promise(r=>setTimeout(r,100));
 
     txt.textContent='LOADING NUCLEAR FACILITY DATABASE...';bar.style.width='96%';
-    if(state.layers.nukes)renderNukes();
+    renderNukes();
     bootSysRow(17,true);
     await new Promise(r=>setTimeout(r,100));
 
@@ -5900,7 +5932,7 @@ async function boot(){
     await new Promise(r=>setTimeout(r,80));
 
     txt.textContent='MAPPING MILITARY INSTALLATIONS...';bar.style.width='97.8%';
-    if(state.layers.bases)renderMilBases();
+    renderMilBases();
     bootSysRow(22,true);
     await new Promise(r=>setTimeout(r,80));
 
@@ -5931,7 +5963,7 @@ async function boot(){
     bootSysRow(28,true);
     await new Promise(r=>setTimeout(r,80));
     txt.textContent='COMPUTING THREAT MATRIX...';bar.style.width='99.5%';
-    renderThreats();if(state.layers.chokes)renderChokepoints();calculateDefcon();updateThreatBanner();
+    renderThreats();renderChokepoints();calculateDefcon();updateThreatBanner();
     bootSysRow(6,true);
     await new Promise(r=>setTimeout(r,200));
 
@@ -5945,6 +5977,7 @@ async function boot(){
   setTimeout(()=>{if(state.layers.radar&&_radarFrames.length)preloadRadarFrames();},2500);
   updateNotifyBtn();
   updateTZBtn();
+  restoreTicker();
   restorePanels();
   renderWatchlist();
   syncLayerButtons();
