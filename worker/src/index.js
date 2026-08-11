@@ -383,6 +383,32 @@ const GFW_DATASETS = {
   FISHING: 'public-global-fishing-events:latest',
 };
 
+// One request per type. Sorted newest-first the feed is dominated by loitering
+// — 250k events in a month against a few thousand encounters — so a single
+// merged query would return 150 loitering events and never show a
+// transshipment or an AIS gap, which are the two that actually matter.
+async function gfwOneType(type, startDate, endDate, limit, token) {
+  const u = new URL('https://gateway.api.globalfishingwatch.org/v3/events');
+  u.searchParams.set('datasets[0]', GFW_DATASETS[type]);
+  u.searchParams.set('types[0]', type);
+  u.searchParams.set('start-date', startDate);
+  u.searchParams.set('end-date', endDate);
+  // Without this the API returns oldest-first: a 2026 query answers with 2014.
+  u.searchParams.set('sort', '-start');
+  u.searchParams.set('limit', String(limit));
+  u.searchParams.set('offset', '0');
+
+  const res = await fetch(u.toString(), {
+    headers: { Authorization: `Bearer ${token}`, Accept: 'application/json' },
+  });
+  if (!res.ok) {
+    const detail = (await res.text().catch(() => '')).slice(0, 200);
+    return { type, error: `gfw ${res.status}`, detail, entries: [] };
+  }
+  const d = await res.json();
+  return { type, total: d.total ?? 0, entries: d.entries || [] };
+}
+
 async function gfwEvents(request, env) {
   if (!env.GFW_TOKEN) return json({ configured: false, entries: [] });
 
@@ -393,34 +419,45 @@ async function gfwEvents(request, env) {
     .filter((t) => GFW_DATASETS[t]);
   if (!types.length) return json({ configured: true, error: 'no valid types', entries: [] });
 
-  const days = Math.min(parseInt(p.get('days') || '3', 10), 30);
+  // GFW publishes roughly five days behind real time, so the obvious three-day
+  // window is always empty. Fourteen days always contains data; entries carry
+  // their own timestamps and the client shows them.
+  const days = Math.min(Math.max(parseInt(p.get('days') || '14', 10), 7), 90);
   const end = new Date();
   const start = new Date(end.getTime() - days * 86400000);
-  const limit = Math.min(parseInt(p.get('limit') || '100', 10), 500);
+  const endDate = end.toISOString().slice(0, 10);
+  const startDate = start.toISOString().slice(0, 10);
+  const limit = Math.min(parseInt(p.get('limit') || '150', 10), 500);
+  const per = Math.max(Math.ceil(limit / types.length), 10);
 
-  const url = new URL('https://gateway.api.globalfishingwatch.org/v3/events');
-  types.forEach((t, i) => {
-    url.searchParams.set(`datasets[${i}]`, GFW_DATASETS[t]);
-    url.searchParams.append('types[]', t);
-  });
-  url.searchParams.set('start-date', start.toISOString().slice(0, 10));
-  url.searchParams.set('end-date', end.toISOString().slice(0, 10));
-  url.searchParams.set('limit', String(limit));
-  url.searchParams.set('offset', '0');
+  const results = await Promise.all(
+    types.map((t) => gfwOneType(t, startDate, endDate, per, env.GFW_TOKEN))
+  );
 
-  const res = await fetch(url.toString(), {
-    headers: { Authorization: `Bearer ${env.GFW_TOKEN}`, Accept: 'application/json' },
-  });
-  if (!res.ok) {
-    // Surface the upstream body — GFW answers a bad token with 401 and a bad
-    // dataset with 422, and the difference decides whether the fix is a new
-    // token or a code change.
-    const detail = (await res.text().catch(() => '')).slice(0, 300);
-    return json({ configured: true, error: `gfw ${res.status}`, detail, entries: [] }, 200);
+  const failed = results.filter((r) => r.error);
+  const entries = results
+    .flatMap((r) => r.entries)
+    // The API reports the type in lower case; the client keys its icons on the
+    // upper-case name it asked for.
+    .map((e) => ({ ...e, type: String(e.type || '').toUpperCase() }))
+    .sort((a, b) => String(b.start).localeCompare(String(a.start)));
+
+  const body = {
+    configured: true,
+    window: { start: startDate, end: endDate, days },
+    counts: Object.fromEntries(results.map((r) => [r.type, r.entries.length])),
+    totals: Object.fromEntries(results.map((r) => [r.type, r.total ?? 0])),
+    entries,
+  };
+  // Only a total failure is an error. One dead dataset should not blank the
+  // other two.
+  if (failed.length === results.length) {
+    body.error = failed[0].error;
+    body.detail = failed[0].detail;
+  } else if (failed.length) {
+    body.partial = failed.map((f) => `${f.type}: ${f.error}`);
   }
-
-  const data = await res.json();
-  return json({ configured: true, ...data }, 200, { 'Cache-Control': 'public, max-age=900' });
+  return json(body, 200, { 'Cache-Control': 'public, max-age=900' });
 }
 
 // ACLED retired the key+email query-parameter API on 15 September 2025 and

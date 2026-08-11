@@ -782,7 +782,7 @@ html,body{width:100%;height:100%;overflow:hidden;background:#050a12;font-family:
 <div id="grpHaz" style="display:flex;flex-wrap:wrap">
 <button class="fbtn on-r" id="fQuake" onclick="togLayer('quakes')" title="Earthquakes from the last 24 hours (USGS)">EARTHQUAKES</button>
 <button class="fbtn on-o" id="fFire" onclick="togLayer('fires')" title="NASA EONET named wildfire events. Coverage is overwhelmingly US-sourced.">FIRE EVENTS</button>
-<button class="fbtn" id="fHotspot" onclick="toggleHotspots()" title="VIIRS thermal detections worldwide, last 24 hours (Copernicus GWIS)">HOTSPOTS (GLOBAL)</button>
+<button class="fbtn" id="fHotspot" onclick="toggleHotspots()" title="Every VIIRS satellite fire detection worldwide in the last 24h (Copernicus GWIS). Bright red = detected in the last 6 hours, fading to pink with age. Expect thousands over northern Australia and central Africa in the dry season — that is normal savanna burning, not an anomaly. Click one for details.">HOTSPOTS (GLOBAL)</button>
 <button class="fbtn on-o" id="fVolcano" onclick="togLayer('volcanoes')" title="Volcanoes with elevated activity">VOLCANOES</button>
 <button class="fbtn on-r" id="fTsunami" onclick="togLayer('tsunami')" title="Active tsunami warnings (NOAA)">TSUNAMI</button>
 <button class="fbtn on" id="fRadar" onclick="toggleRadar()" title="Live precipitation radar (RainViewer)">RAIN RADAR</button>
@@ -797,6 +797,7 @@ html,body{width:100%;height:100%;overflow:hidden;background:#050a12;font-family:
 <button class="fbtn on-p" id="fJam" onclick="togLayer('jamming')" title="Zones with known GPS signal jamming">GPS JAMMING</button>
 <button class="fbtn on-y" id="fNotam" onclick="togLayer('notams')" title="Airspace restrictions and flight notices (NOTAMs/TFRs)">AIRSPACE</button>
 <button class="fbtn on-r" id="fPiracy" onclick="togLayer('piracy')" title="Maritime piracy risk zones">PIRACY</button>
+<button class="fbtn on-p" id="fDark" onclick="togLayer('dark')" title="Vessels going dark: AIS gaps, at-sea encounters and loitering (Global Fishing Watch, ~5 day lag)">DARK VESSELS</button>
 <button class="fbtn on-p" id="fCyber" onclick="togLayer('cyber')" title="Regions with active cyber threat campaigns">CYBER</button>
 <button class="fbtn on-r" id="fConflict" onclick="togLayer('conflict')" title="Armed conflict and border incidents (ACLED)">CONFLICTS</button>
 <button class="fbtn on-p" id="fRF" onclick="togLayer('rf')" title="Radio-frequency interference and signals-intelligence zones">RF SIGNALS</button>
@@ -1117,7 +1118,7 @@ const FEEDS=[
   {id:'f31',code:'ACLED',name:'Conflicts',desc:'Armed conflict & border incidents'},
   {id:'f32',code:'VOLC',name:'Volcanoes',desc:'Volcanic activity monitoring'},
   {id:'f33',code:'TSUN',name:'Tsunami',desc:'Tsunami warnings (NOAA)'},
-  {id:'f34',code:'DARK',name:'Dark Vessels',desc:'AIS gaps, encounters & loitering (Global Fishing Watch)'},
+  {id:'f34',code:'DARK',name:'Dark Vessels',desc:'AIS gaps, encounters & loitering (Global Fishing Watch, ~5d lag)'},
   {id:'f35',code:'GEO',name:'News Map',desc:'Geolocated news mentions, refreshed every 15 min (GDELT GEO)'},
   {id:'f36',code:'RELIEF',name:'Humanitarian',desc:'Disaster declarations & humanitarian alerts (ReliefWeb)'},
   {id:'f37',code:'GDACS',name:'Global Disasters',desc:'Worldwide disaster alerts \u2014 cyclones, floods, fires, drought (GDACS)'},
@@ -1275,6 +1276,14 @@ const _p2=v=>String(v).padStart(2,'0');
 function fmtClock(d){const t=_parts(d||new Date());return _p2(t.h)+':'+_p2(t.m)+':'+_p2(t.s)+' '+tzSuffix(d);}
 // "19:50 AEST" / "09:50Z" — compact form for panels
 function fmtHM(d,withZone){const t=_parts(d);return _p2(t.h)+':'+_p2(t.m)+(withZone===false?'':(TZ_MODE==='utc'?'Z':' '+tzSuffix(d)));}
+// "7 Aug 21:30 AEST" — for events that are days old, where a bare clock misleads
+function fmtDayHM(d){
+  const dt=(d instanceof Date)?d:new Date(d);
+  if(!isFinite(dt.getTime()))return'';
+  const o={day:'numeric',month:'short'};
+  if(TZ_MODE==='utc')o.timeZone='UTC';
+  return new Intl.DateTimeFormat(undefined,o).format(dt)+' '+fmtHM(dt);
+}
 function toggleTZ(){
   TZ_MODE=TZ_MODE==='utc'?'local':'utc';
   localStorage.setItem('sentinel_tz',TZ_MODE);
@@ -1286,7 +1295,7 @@ function updateTZBtn(){
   if(b)b.textContent=TZ_MODE==='utc'?'UTC':tzSuffix();
 }
 function ts(){return fmtClock(new Date());}
-function timeAgo(d){const s=Math.floor((Date.now()-new Date(d).getTime())/1000);if(s<60)return s+'s ago';if(s<3600)return Math.floor(s/60)+'m ago';if(s<86400)return Math.floor(s/3600)+'h ago';return Math.floor(s/86400)+'d ago';}
+function timeAgo(d){const t=new Date(d).getTime();if(!isFinite(t))return'';const s=Math.floor((Date.now()-t)/1000);if(s<60)return s+'s ago';if(s<3600)return Math.floor(s/60)+'m ago';if(s<86400)return Math.floor(s/3600)+'h ago';return Math.floor(s/86400)+'d ago';}
 function countryFlag(cc){if(!cc||cc.length!==2)return'';const u=cc.toUpperCase();return String.fromCodePoint(0x1F1E6+u.charCodeAt(0)-65,0x1F1E6+u.charCodeAt(1)-65);}
 function flashAlert(){const el=document.getElementById('alertFlash');el.classList.add('active');setTimeout(()=>el.classList.remove('active'),300);}
 function updateUptime(){const s=Math.floor((Date.now()-BOOT_START)/1000);const m=Math.floor(s/60);const h=Math.floor(m/60);document.getElementById('hUptime').textContent='UP: '+(h?h+'h ':'')+(m%60)+'m';}
@@ -2679,6 +2688,56 @@ function buildHotspotLayer(){
     attribution:'Copernicus GWIS'
   });
 }
+/* ---- identifying a hotspot ----
+   The layer is a WMS raster, so a detection is a pixel, not a marker: there is
+   nothing to bind a popup to, which is why clicking one gave nothing at all.
+   GWIS also serves the same layer over WFS, so a click can ask what is actually
+   under it. Two traps, both silent: WFS 1.1.0 reads EPSG:4326 bbox as
+   lat,lon — lon,lat returns an empty collection rather than an error — and TIME
+   is ignored here, so the archive comes back unfiltered and has to be sorted by
+   acquisition time on this side.
+*/
+async function identifyHotspot(latlng){
+  const d=0.03;                        // ~3km box: a VIIRS pixel is 375m
+  // 1.1.0 exactly: an invalid version is rejected without CORS headers, so it
+  // surfaces as an opaque network failure rather than an HTTP error. sortby is
+  // what makes the answer truthful — the archive comes back in storage order,
+  // so without it the "newest" is only the newest of an arbitrary sample and
+  // reads as a year old.
+  const p=new URLSearchParams({service:'WFS',version:'1.1.0',request:'GetFeature',
+    typename:'viirs.hs',outputformat:'geojson',maxfeatures:'150',sortby:'acq_at D',
+    bbox:[latlng.lat-d,latlng.lng-d,latlng.lat+d,latlng.lng+d,'EPSG:4326'].join(',')});
+  const r=await fetch('https://maps.effis.emergency.copernicus.eu/gwis?'+p,
+    {signal:AbortSignal.timeout(9000)});
+  if(!r.ok)return null;
+  const g=await r.json();
+  const f=(g.features||[]).map(x=>x.properties).filter(x=>x&&x.acq_at);
+  if(!f.length)return null;
+  const at=x=>new Date(String(x.acq_at).replace(' ','T')+'Z');
+  const when=at(f[0]);
+  // The visible layer is a 24h window, so that is the count worth reporting;
+  // anything older is archive that the map is not currently drawing.
+  const cutoff=Date.now()-86400000;
+  const live=f.filter(x=>at(x).getTime()>=cutoff).length;
+  // Nothing recent here means the click did not land on a drawn hotspot, only
+  // on archive the map is not showing. Fall through to the country brief rather
+  // than answer a question that was not asked.
+  if(!live)return null;
+  return `<b style="color:#ff6b35">🔥 THERMAL HOTSPOT</b>`
+    +`<br><span style="opacity:.85">VIIRS satellite fire detection</span>`
+    +`<br>Latest: ${fmtDayHM(when)} &middot; ${timeAgo(when)}`
+    +`<br>${live} detection${live===1?'':'s'} within 3 km in the last 24h`
+    // CLASS is what the symbol colour encodes — freshest detections are drawn
+    // bright red and they fade through to washed-out pink with age. That is the
+    // whole reason the same layer shows several different colours at once.
+    +(f[0].CLASS?`<br><span style="opacity:.6">Age band: ${
+        /6HOURS/i.test(f[0].CLASS)?'last 6 hours'
+       :/24HOURS/i.test(f[0].CLASS)?'last 24 hours'
+       :/30DAYS/i.test(f[0].CLASS)?'last 30 days'
+       :/FireSeason/i.test(f[0].CLASS)?'this fire season'
+       :f[0].CLASS}</span>`:'')
+    +`<br><span style="opacity:.5;font-size:10px">Copernicus GWIS · layer: HOTSPOTS (GLOBAL)</span>`;
+}
 function toggleHotspots(){
   state.layers.hotspots=!state.layers.hotspots;
   if(state.layers.hotspots){
@@ -2739,7 +2798,9 @@ async function fetchDarkVessels(){
   if(!u){feedIdle('f34','needs proxy');state.sources.dark=0;return;}
   feedWait('f34');
   try{
-    const d=await fetchR(u+'?days=3&limit=150',0,20000);
+    // GFW publishes about five days behind real time, so a three-day window is
+    // always empty. Fourteen days is the smallest window that always has data.
+    const d=await fetchR(u+'?days=14&limit=150',0,25000);
     if(!d.configured){feedIdle('f34','needs GFW token');state.sources.dark=0;return;}
     // A rejected token still answers 200 with an empty list, which would show a
     // green dot over nothing. Report the upstream status instead of the silence.
@@ -2753,7 +2814,7 @@ async function fetchDarkVessels(){
       const vessel=ev.vessel?.name||ev.vessel?.ssvid||'Unknown vessel';
       state.darkEvents.push({type:kind.t,vessel,lat,lon,start:ev.start,end:ev.end});
       const mk=L.circleMarker([lat,lon],{radius:6,color:kind.c,weight:2,fillColor:kind.c,fillOpacity:0.25})
-        .bindPopup(`<b>${kind.t}</b><br>${vessel}<br><span style="opacity:.7">${(ev.start||'').slice(0,16).replace('T',' ')}</span>`);
+        .bindPopup(`<b>${kind.t}</b><br>${vessel}<br><span style="opacity:.7">${fmtDayHM(ev.start)} &middot; ${timeAgo(ev.start)}</span>`);
       if(state.layers.dark!==false){mk.addTo(map);}
       state.darkMarkers.push(mk);
     }
@@ -4080,7 +4141,17 @@ async function fetchSevereWeather(){
       const color=wx.severity==='Extreme'?'#ff0044':'#ff8800';
       const m=L.circleMarker([wx.lat,wx.lon],{radius:8,color,fillColor:color,fillOpacity:0.25,weight:2,opacity:0.6});
       m.bindTooltip('\u26a1 '+wx.event+': '+wx.areas.substring(0,60),{className:'quake-tooltip',direction:'top'});
-      m.on('click',()=>addAlert(wx.severity==='Extreme'?'red':'orange','WEATHER: '+wx.headline));
+      // These were the only markers on the map with a tooltip but no popup, so
+      // clicking one silently pushed an alert and told you nothing.
+      m.bindPopup(`<b style="color:${color}">\u26a1 ${wx.event||'SEVERE WEATHER'}</b>`
+        +(wx.severity?`<br>Severity: <span style="color:${color}">${wx.severity}</span>`
+           +(wx.urgency?` &middot; ${wx.urgency}`:''):'')
+        +(wx.headline?`<br><span style="opacity:.85">${wx.headline}</span>`:'')
+        +(wx.areas?`<br><span style="opacity:.7">${wx.areas.substring(0,140)}</span>`:'')
+        +(wx.expires?`<br><span style="opacity:.6">Expires ${fmtDayHM(wx.expires)}</span>`:'')
+        +`<br><span style="opacity:.5;font-size:10px">${wx.sender||'US National Weather Service'} \u00b7 layer: US SEVERE WX</span>`);
+      m.on('click',()=>addAlert(wx.severity==='Extreme'?'red':'orange','WEATHER: '+wx.headline,
+        {lat:wx.lat,lon:wx.lon,zoom:7,kind:wx.event}));
       m.addTo(map);state.wxMarkers.push(m);
     }
     document.getElementById('sWxAlerts').textContent=state.wxAlerts.length;
@@ -4177,8 +4248,8 @@ function togC(c){state.categories[c]=!state.categories[c];const on=state.categor
 // Single source of truth for which button belongs to which layer and what
 // colour it lights up. The markup used to hard-code "on" classes, which drifted
 // the moment a default changed.
-const LAYER_BTN={hotspots:'fHotspot',wx:'fWx',ausEm:'fAusEm',bom:'fBOM',radar:'fRadar',quakes:'fQuake',fires:'fFire',gdelt:'fGdelt',chokes:'fChoke',jamming:'fJam',notams:'fNotam',piracy:'fPiracy',volcanoes:'fVolcano',tsunami:'fTsunami',cyber:'fCyber',cables:'fCables',nukes:'fNuke',bases:'fBases',conflict:'fConflict',rf:'fRF',drones:'fDrone',refugees:'fRefugee'};
-const LAYER_COL={hotspots:'on-o',wx:'on-y',ausEm:'on-r',bom:'on-y',radar:'on',quakes:'on-r',fires:'on-o',gdelt:'on',chokes:'on-y',jamming:'on-p',notams:'on-y',piracy:'on-r',volcanoes:'on-o',tsunami:'on-r',cyber:'on-p',cables:'on',nukes:'on-o',bases:'on',conflict:'on-r',rf:'on-p',drones:'on-o',refugees:'on-y'};
+const LAYER_BTN={hotspots:'fHotspot',wx:'fWx',ausEm:'fAusEm',bom:'fBOM',radar:'fRadar',quakes:'fQuake',fires:'fFire',gdelt:'fGdelt',chokes:'fChoke',jamming:'fJam',notams:'fNotam',piracy:'fPiracy',volcanoes:'fVolcano',tsunami:'fTsunami',cyber:'fCyber',cables:'fCables',nukes:'fNuke',bases:'fBases',conflict:'fConflict',rf:'fRF',drones:'fDrone',refugees:'fRefugee',dark:'fDark'};
+const LAYER_COL={hotspots:'on-o',wx:'on-y',ausEm:'on-r',bom:'on-y',radar:'on',quakes:'on-r',fires:'on-o',gdelt:'on',chokes:'on-y',jamming:'on-p',notams:'on-y',piracy:'on-r',volcanoes:'on-o',tsunami:'on-r',cyber:'on-p',cables:'on',nukes:'on-o',bases:'on',conflict:'on-r',rf:'on-p',drones:'on-o',refugees:'on-y',dark:'on-p'};
 const ALL_ON_CLASSES=['on','on-r','on-o','on-y','on-p','on-g'];
 function syncLayerButtons(){
   for(const[l,id]of Object.entries(LAYER_BTN)){
@@ -4224,6 +4295,12 @@ function togLayer(l){
   if(l==='fires')state.fireMarkers.forEach(m=>{on?m.addTo(map):map.removeLayer(m);});
   if(l==='chokes')state.chokeMarkers.forEach(m=>{on?m.addTo(map):map.removeLayer(m);});
   if(l==='jamming'&&state.jamMarkers)state.jamMarkers.forEach(m=>{on?m.addTo(map):map.removeLayer(m);});
+  if(l==='dark'&&state.darkMarkers){
+    state.darkMarkers.forEach(m=>{on?m.addTo(map):map.removeLayer(m);});
+    // Layers start off, so the first fetch builds nothing. Turning the layer on
+    // has to be able to populate it rather than wait out the refresh interval.
+    if(on&&!state.darkMarkers.length)fetchDarkVessels();
+  }
 }
 function applyFilters(){state.countryFilter=document.getElementById('countryFilter').value;renderMarkers();renderAssetList();}
 function switchTab(name,btn){document.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('active'));document.querySelectorAll('.tab-content').forEach(c=>c.classList.remove('active'));btn.classList.add('active');document.getElementById('tab'+name.charAt(0).toUpperCase()+name.slice(1)).classList.add('active');}
@@ -4253,7 +4330,12 @@ setInterval(()=>{
   document.getElementById('hTime').textContent=fmtClock(now);
   const days=['SUN','MON','TUE','WED','THU','FRI','SAT'];
   const months=['JAN','FEB','MAR','APR','MAY','JUN','JUL','AUG','SEP','OCT','NOV','DEC'];
-  document.getElementById('hDate').textContent=days[now.getUTCDay()]+' '+now.getUTCDate()+' '+months[now.getUTCMonth()]+' '+now.getUTCFullYear();
+  // Must follow the same clock as fmtClock above it, or the header reads
+  // "TUE 11 AUG" beside "08:40 AEST" when local time has already rolled over.
+  const utc=TZ_MODE==='utc';
+  document.getElementById('hDate').textContent=
+    days[utc?now.getUTCDay():now.getDay()]+' '+(utc?now.getUTCDate():now.getDate())+' '+
+    months[utc?now.getUTCMonth():now.getMonth()]+' '+(utc?now.getUTCFullYear():now.getFullYear());
   updateUptime();
 },1000);
 
@@ -5581,6 +5663,15 @@ setInterval(()=>{
 // Clicking empty map opens the brief for whatever country is under the cursor.
 map.on('click',async e=>{
   if(contactAt(e.containerPoint))return;               // a contact click wins
+  // A hotspot is a raster pixel with no marker to click, so it has to be asked
+  // for by position — and before the country brief, which would otherwise
+  // swallow every click over land.
+  if(state.layers.hotspots&&_hotspotLayer){
+    try{
+      const html=await identifyHotspot(e.latlng);
+      if(html){L.popup({className:'hotspot-pop'}).setLatLng(e.latlng).setContent(html).openOn(map);return;}
+    }catch(err){/* fall through to the country brief */}
+  }
   if(!_countries){try{await loadCountries();}catch(err){return;}}
   const c=countryAt(e.latlng.lat,e.latlng.lng);
   if(c)openCountryBrief(c.iso||c.name);
