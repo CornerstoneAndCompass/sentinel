@@ -2443,23 +2443,43 @@ function clearRadarLayers(){
    incoming frame has not finished loading it flashes empty first. Waiting for
    the tiles then fading over ~280ms makes the sequence morph. */
 let _fadeRaf=null;
+// The end state of any fade, applied without animating. Anything that can
+// interrupt the animation calls this so a frame is never left part-way.
+function settleRadarOpacity(idx){
+  const op=state.radarOpacity!=null?state.radarOpacity:0.55;
+  _radarLayers.forEach((l,j)=>{if(map.hasLayer(l))l.setOpacity(j===idx?op:0);});
+}
 function fadeRadarTo(idx,ms){
   const op=state.radarOpacity!=null?state.radarOpacity:0.55;
   const incoming=_radarLayers.get(idx);
   if(!incoming)return;
-  if(_fadeRaf)cancelAnimationFrame(_fadeRaf);
+  if(_fadeRaf){cancelAnimationFrame(_fadeRaf);_fadeRaf=null;}
+  // requestAnimationFrame does not run in a background tab. Starting a fade
+  // there leaves the incoming frame pinned at opacity 0 with a callback that
+  // never arrives, so the radar is simply invisible when you come back — which
+  // is what made it look intermittent. Skip the animation and take the result.
+  if(document.hidden){settleRadarOpacity(idx);return;}
   const outgoing=[];
-  _radarLayers.forEach((l,j)=>{if(j!==idx&&map.hasLayer(l)&&l.options.opacity>0)outgoing.push(l);});
+  _radarLayers.forEach((l,j)=>{
+    if(j!==idx&&map.hasLayer(l)&&l.options.opacity>0)outgoing.push([l,l.options.opacity]);
+  });
   const t0=performance.now();
   const step=(t)=>{
     const k=Math.min(1,(t-t0)/(ms||280));
     incoming.setOpacity(op*k);
-    outgoing.forEach(l=>l.setOpacity(op*(1-k)));
+    // Fade each from where it actually is. Driving them all from `op` made a
+    // frame interrupted mid-fade jump brighter before falling away.
+    outgoing.forEach(([l,from])=>l.setOpacity(from*(1-k)));
     if(k<1)_fadeRaf=requestAnimationFrame(step);
-    else{outgoing.forEach(l=>l.setOpacity(0));_fadeRaf=null;}
+    else{_fadeRaf=null;settleRadarOpacity(idx);}
   };
   _fadeRaf=requestAnimationFrame(step);
 }
+// Coming back to the tab re-asserts the frame, in case a fade was interrupted
+// by the tab being hidden part-way through.
+document.addEventListener('visibilitychange',()=>{
+  if(!document.hidden&&state.layers.radar&&_radarIdx>=0&&_radarLayers.size)settleRadarOpacity(_radarIdx);
+});
 function showRadarFrame(i,opts){
   if(!_radarFrames.length)return;
   _radarIdx=(i+_radarFrames.length)%_radarFrames.length;
@@ -2469,15 +2489,29 @@ function showRadarFrame(i,opts){
   const first=!map.hasLayer(want);
   if(first){want.setOpacity(0);want.addTo(map);}
   const fade=!opts||opts.fade!==false;
+  const target=_radarIdx;
   if(!fade){
-    const op=state.radarOpacity!=null?state.radarOpacity:0.55;
-    _radarLayers.forEach((l,idx)=>{if(map.hasLayer(l))l.setOpacity(idx===_radarIdx?op:0);});
+    settleRadarOpacity(target);
   }else if(want.isLoading&&want.isLoading()){
     // Do not start the fade on a half-drawn frame — hold the current one until
     // the incoming tiles are in, which is what stops the loop flashing.
-    want.once('load',()=>{if(_radarIdx===i%_radarFrames.length||true)fadeRadarTo(_radarIdx,280);});
+    //
+    // 'load' is not guaranteed: a layer whose tiles all come from cache, or
+    // whose load cycle is superseded by a pan, can leave the handler waiting
+    // forever with the frame pinned at opacity 0. Time it out and show the
+    // frame regardless — a briefly incomplete frame beats no radar at all.
+    let done=false;
+    const go=()=>{
+      if(done)return;
+      done=true;
+      // Only if this frame is still the wanted one; a stale callback from a
+      // frame the loop has already stepped past must not drag it back.
+      if(_radarIdx===target)fadeRadarTo(target,280);
+    };
+    want.once('load',go);
+    setTimeout(go,1500);
   }else{
-    fadeRadarTo(_radarIdx,280);
+    fadeRadarTo(target,280);
   }
   if(typeof updateWxBar==='function')updateWxBar();
 }
@@ -2492,7 +2526,10 @@ function preloadRadarFrames(){
   _preloading=true;
   let i=0;
   const add=()=>{
-    if(i>=_radarFrames.length){_preloading=false;return;}
+    // The walk spans a couple of seconds, so the layer can be switched off
+    // half way through it. Without this the remaining frames are recreated and
+    // added to a map the user just cleared.
+    if(!state.layers.radar||i>=_radarFrames.length){_preloading=false;return;}
     const l=radarLayerFor(i);
     if(l&&!map.hasLayer(l)){l.setOpacity(0);l.addTo(map);}
     if(l&&i===_radarIdx)l.setOpacity(state.radarOpacity!=null?state.radarOpacity:0.55);
