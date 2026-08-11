@@ -483,6 +483,11 @@ export class AisHub {
     this.connectedAt = 0;
     this.lastMessage = 0;
     this.messages = 0;
+    // aisstream replies to a bad subscription with an error frame rather than
+    // closing the socket, so "connected but silent" is indistinguishable from
+    // "connected and working" unless the non-position frames are kept.
+    this.lastNote = null;
+    this.frames = 0;
   }
 
   async fetch(request) {
@@ -527,6 +532,13 @@ export class AisHub {
       count: out.length,
       tracked: this.vessels.size,
       messages: this.messages,
+      frames: this.frames,
+      note: this.lastNote,
+      // Kept deliberately: a valid key with a silent upstream is otherwise
+      // indistinguishable from no key at all, and that cost an evening.
+      handshake: this.handshake || null,
+      connected: Boolean(this.ws),
+      keyLen: (this.env.AISSTREAM_KEY || '').length,
       connectedFor: this.connectedAt ? Math.floor((Date.now() - this.connectedAt) / 1000) : 0,
       vessels: out,
     });
@@ -547,13 +559,25 @@ export class AisHub {
       const res = await fetch('https://stream.aisstream.io/v0/stream', {
         headers: { Upgrade: 'websocket' },
       });
+      // A failed upgrade still resolves; res.webSocket is simply absent. Record
+      // what actually came back so "connected but silent" can be told apart
+      // from "never upgraded".
+      this.handshake = { status: res.status, hasSocket: Boolean(res.webSocket) };
       const ws = res.webSocket;
-      if (!ws) throw new Error('no websocket in response');
+      if (!ws) {
+        this.lastNote = 'upgrade failed: HTTP ' + res.status + ' ' +
+          (await res.text().catch(() => '')).slice(0, 160);
+        throw new Error('no websocket in response');
+      }
+      // Listeners must be attached before accept(): accept() starts delivery,
+      // and anything that arrives before a handler exists is dropped. The
+      // subscription reply is the first thing aisstream sends, so registering
+      // afterwards can lose exactly the frame that says what is wrong.
+      ws.addEventListener('message', (ev) => this.onMessage(ev));
       ws.accept();
       this.ws = ws;
       this.connectedAt = Date.now();
       this.lastMessage = Date.now();
-
       ws.send(
         JSON.stringify({
           APIKey: this.env.AISSTREAM_KEY,
@@ -561,12 +585,14 @@ export class AisHub {
           FilterMessageTypes: ['PositionReport', 'ShipStaticData'],
         })
       );
+      this.subscribedAt = Date.now();
 
-      ws.addEventListener('message', (ev) => this.onMessage(ev));
-      ws.addEventListener('close', () => {
+      ws.addEventListener('close', (e) => {
+        this.lastNote = 'socket closed: code=' + (e && e.code) + ' reason=' + ((e && e.reason) || '');
         this.ws = null;
       });
-      ws.addEventListener('error', () => {
+      ws.addEventListener('error', (e) => {
+        this.lastNote = 'socket error: ' + ((e && e.message) || 'unknown');
         this.ws = null;
       });
 
@@ -579,13 +605,24 @@ export class AisHub {
 
   onMessage(ev) {
     this.lastMessage = Date.now();
-    this.messages++;
+    this.frames++;
     let msg;
     try {
       msg = JSON.parse(typeof ev.data === 'string' ? ev.data : new TextDecoder().decode(ev.data));
     } catch {
       return;
     }
+
+    // Anything that is not a position or static-data frame is worth keeping —
+    // in practice it is the reason nothing is arriving.
+    if (msg.error || msg.Error || (msg.MessageType && msg.MessageType !== 'PositionReport' && msg.MessageType !== 'ShipStaticData')) {
+      this.lastNote = JSON.stringify(msg).slice(0, 300);
+    }
+    if (!msg.MessageType) {
+      this.lastNote = JSON.stringify(msg).slice(0, 300);
+      return;
+    }
+    this.messages++;
 
     const meta = msg.MetaData || {};
     const mmsi = String(meta.MMSI || meta.MMSI_String || '');
@@ -632,6 +669,7 @@ export class AisHub {
   }
 
   async alarm() {
+    this.alarms = (this.alarms || 0) + 1;
     this.evict();
     await this.ensureConnected();
     await this.state.storage.setAlarm(Date.now() + 20000);

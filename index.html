@@ -2152,6 +2152,11 @@ async function fetchGlobalAIS(){
     const bbox=[b.west,b.south,b.east,b.north].map(v=>v.toFixed(2)).join(',');
     const d=await fetchR(`${u}?bbox=${bbox}&limit=6000`,0,15000);
     if(!d.configured){feedIdle('f16','needs aisstream key');state.sources.globalAis=0;return;}
+    // A configured key whose upstream sends nothing is not our failure, and
+    // showing it red trains you to ignore red. aisstream is explicitly beta and
+    // offers no uptime guarantee, so a silent stream is a state to report, not
+    // an error to debug.
+    if(d.connected&&!d.messages){feedIdle('f16','aisstream connected, no data');state.sources.globalAis=0;return;}
     let n=0;
     for(const v of d.vessels||[]){
       if(!isFinite(v.lat)||!isFinite(v.lon))continue;
@@ -2281,6 +2286,7 @@ async function fetchOSINT(){
         const batch=WARSHIPS.slice(i,i+100);
         const d=await fetchR(`${u}?mmsi=${batch.map(s=>s.m).join(',')}`,0,12000);
         if(!d.configured){feedIdle('f7','needs aisstream key');state.sources.osint=0;return;}
+        if(d.connected&&!d.messages&&!(d.vessels||[]).length){feedIdle('f7','aisstream connected, no data');state.sources.osint=0;return;}
         const byMmsi=new Map((d.vessels||[]).map(v=>[String(v.mmsi),v]));
         for(const ship of batch){
           const v=byMmsi.get(String(ship.m));
