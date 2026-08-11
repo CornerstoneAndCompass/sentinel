@@ -1100,7 +1100,6 @@ const FEEDS=[
   {id:'f12',code:'CHOKE',name:'Chokepoints',desc:'Strategic strait & canal monitoring'},
   {id:'f14',code:'SOLAR',name:'Space Weather',desc:'Geomagnetic & solar activity (NOAA)'},
   {id:'f15',code:'WX',name:'Severe Weather',desc:'Extreme weather alerts (US National Weather Service)'},
-  {id:'f16',code:'AIS.GL',name:'Global Vessels',desc:'Worldwide live ship positions (aisstream.io)'},
   {id:'f17',code:'JAM',name:'GPS Jamming',desc:'Known GPS interference zones'},
   {id:'f18',code:'SNCT',name:'Sanctions Check',desc:'Vessels cross-checked against sanctions lists'},
   {id:'f19',code:'SATS',name:'Satellites',desc:'Live satellite positions from orbital data'},
@@ -1739,7 +1738,7 @@ async function onViewChanged(){
   if(map.getZoom()<LOCAL_ZOOM)return;    // strategic view keeps the global sweep
   const dropped=pruneOutOfView();
   document.getElementById('mainStatus').textContent='SCANNING AREA';
-  await Promise.allSettled([fetchADSBRegion(),fetchOpenSky(),fetchGlobalAIS()]);
+  await Promise.allSettled([fetchADSBRegion(),fetchOpenSky()]);
   renderAll();
   if(dropped)console.debug('pruned',dropped,'out-of-view contacts');
 }
@@ -2118,59 +2117,6 @@ async function fetchAIS(){
   }catch(e){console.warn('AIS fetch error:',e);feedDot('f6',false);}
 }
 
-// --- GLOBAL AIS (aisstream.io, bridged by the Worker) ---
-// This replaces the old VesselFinder integration, which hit an undocumented
-// internal endpoint (/api/pub/mp2) with a hand-rolled binary parser. That was
-// against their terms and has returned 403 since Aug 2026. aisstream.io is a
-// supported free API, but it is a firehose (~300 msg/s) and its key must not
-// ship in the page — so the Worker holds the socket and we read snapshots.
-function aisClassify(typeCode,name){
-  const nm=(name||'').toUpperCase();
-  if(nm.match(/NAVY|WARSHIP|FRIGATE|CORVETTE|DESTROYER|SUBMARINE|PATROL|COAST\s?GUARD|RESCUE|POLICE|BORDER|CUSTOMS|USCG|HMCG|MILITARY|MINESWEEP/))
-    return{cat:'military',t:'NAVAL'};
-  if(nm.match(/^HMS\s|^USS\s|^FGS\s|^FS\s|^HNLMS\s|^KNM\s|^HDMS\s|^HSwMS\s|^ORP\s|^TCG\s|^ITS\s|^ESPS\s|^KV\s|^INS\s|^JS\s/))
-    return{cat:'military',t:'NAVAL'};
-  const tc=Number(typeCode)||0;
-  if(tc>=80&&tc<=89)return{cat:'tanker',t:'TANKER'};
-  if(tc>=70&&tc<=79)return{cat:'cargo',t:'CARGO'};
-  if(tc>=60&&tc<=69)return{cat:'passenger',t:'PASSENGER'};
-  if(tc>=40&&tc<=49)return{cat:'highspeed',t:'HIGH-SPEED'};
-  if(tc===30)return{cat:'fishing',t:'FISHING'};
-  if(tc===35)return{cat:'military',t:'MILITARY'};
-  if(tc===51)return{cat:'sar',t:'SAR'};
-  if(tc===55)return{cat:'police',t:'LAW ENFORCE'};
-  if(tc>=36&&tc<=37)return{cat:'sailing',t:'SAILING'};
-  if(tc>=20&&tc<=29)return{cat:'tug',t:'TUG/PILOT'};
-  return{cat:'cargo',t:'VESSEL'};
-}
-async function fetchGlobalAIS(){
-  const u=workerUrl('/ais/snapshot');
-  if(!u){feedIdle('f16','needs proxy');state.sources.globalAis=0;return;}
-  feedWait('f16');
-  try{
-    const b=safeBounds();
-    const bbox=[b.west,b.south,b.east,b.north].map(v=>v.toFixed(2)).join(',');
-    const d=await fetchR(`${u}?bbox=${bbox}&limit=6000`,0,15000);
-    if(!d.configured){feedIdle('f16','needs aisstream key');state.sources.globalAis=0;return;}
-    // A configured key whose upstream sends nothing is not our failure, and
-    // showing it red trains you to ignore red. aisstream is explicitly beta and
-    // offers no uptime guarantee, so a silent stream is a state to report, not
-    // an error to debug.
-    if(d.connected&&!d.messages){feedIdle('f16','aisstream connected, no data');state.sources.globalAis=0;return;}
-    let n=0;
-    for(const v of d.vessels||[]){
-      if(!isFinite(v.lat)||!isFinite(v.lon))continue;
-      const cls=aisClassify(v.type,v.name);
-      const id='v_'+v.mmsi;
-      const old=state.assets.get(id);
-      const trail=old?.trail?[...old.trail.slice(-20),[v.lat,v.lon]]:[[v.lat,v.lon]];
-      state.assets.set(id,{id,hex:String(v.mmsi),cs:v.name||('MMSI-'+v.mmsi),type:'ship',cat:cls.cat,country:mmsiCC(String(v.mmsi)),lat:v.lat,lon:v.lon,alt:0,gs:v.sog,track:v.cog,t:cls.t,source:'AISSTREAM',trail,_lastSeen:Date.now()});
-      n++;
-    }
-    state.sources.globalAis=n;feedDot('f16',n>0);
-  }catch(e){console.warn('Global AIS error:',e);feedDot('f16',false);}
-}
-
 // OSINT Warships + Coast Guard + Patrol Vessels — Global Coverage
 const WARSHIPS=[
   // ===== US NAVY =====
@@ -2274,29 +2220,14 @@ function placeWarship(ship,pos,src){
   state.assets.set('w_'+ship.m,{id:'w_'+ship.m,hex:ship.m,cs:ship.n,type:'ship',cat:ship.cat||'military',country:ship.f,lat:pos.lat,lon:pos.lon,alt:0,gs:pos.sog,track:pos.cog,t:ship.t,source:src,trail,_lastSeen:Date.now()});
 }
 // The warship list used to be resolved with one HTTP request per hull — 200+
-// requests every refresh, against an endpoint that now 403s. aisstream can
-// filter by MMSI server-side, so the Worker answers the whole list at once.
+// requests every refresh, against an endpoint that now 403s. Digitraffic is the
+// only free AIS source left that answers reliably, and it covers Finnish and
+// Baltic waters only — so hulls elsewhere will not resolve. aisstream was wired
+// here for global coverage and removed: it accepted the key and the
+// subscription and then sent nothing, from two independent networks.
 async function fetchOSINT(){
   feedWait('f7');
   let n=0;
-  const u=workerUrl('/ais/vessels');
-  if(u){
-    try{
-      for(let i=0;i<WARSHIPS.length;i+=100){
-        const batch=WARSHIPS.slice(i,i+100);
-        const d=await fetchR(`${u}?mmsi=${batch.map(s=>s.m).join(',')}`,0,12000);
-        if(!d.configured){feedIdle('f7','needs aisstream key');state.sources.osint=0;return;}
-        if(d.connected&&!d.messages&&!(d.vessels||[]).length){feedIdle('f7','aisstream connected, no data');state.sources.osint=0;return;}
-        const byMmsi=new Map((d.vessels||[]).map(v=>[String(v.mmsi),v]));
-        for(const ship of batch){
-          const v=byMmsi.get(String(ship.m));
-          if(v&&isFinite(v.lat)&&isFinite(v.lon)){placeWarship(ship,v,'AISSTREAM');n++;}
-        }
-      }
-      state.sources.osint=n;feedDot('f7',n>0);
-      return;
-    }catch(e){console.warn('Warship AIS error:',e);}
-  }
   // No proxy: Digitraffic is the only direct-fetchable AIS source, so only
   // hulls currently in Finnish/Baltic waters will resolve.
   const nordic=WARSHIPS.filter(s=>['NO','FI','SE','DK','EE','LV','LT','PL','DE','RU'].includes(s.f));
@@ -4361,7 +4292,7 @@ async function fetchAll(){
   renderAll();
   // WAVE 2: viewport-scoped and slower feeds
   try{
-    await Promise.allSettled([fetchADSBRegion(),fetchOpenSky(),fetchAIS(),fetchGlobalAIS(),fetchSpaceWeather(),fetchSevereWeather(),fetchSats()]);
+    await Promise.allSettled([fetchADSBRegion(),fetchOpenSky(),fetchAIS(),fetchSpaceWeather(),fetchSevereWeather(),fetchSats()]);
   }catch(e){}
   renderAll();
   // WAVE 3: Intel overlays (static + slow feeds)
@@ -5873,8 +5804,7 @@ async function boot(){
     await Promise.race([fetchNews(),new Promise(r=>setTimeout(r,8000))]);
     bootSysRow(5,true);
 
-    txt.textContent='CONNECTING GLOBAL AIS...';bar.style.width='63%';
-    await Promise.race([fetchGlobalAIS(),new Promise(r=>setTimeout(r,10000))]);
+    txt.textContent='CONNECTING BALTIC AIS...';bar.style.width='63%';
     bootSysRow(10,true);
 
     await new Promise(r=>setTimeout(r,400));
@@ -6001,7 +5931,6 @@ setInterval(fetchFIRMS,300000);
 setInterval(fetchSpaceWeather,120000);
 setInterval(fetchSevereWeather,300000);
 setInterval(updateThreatBanner,60000);
-setInterval(fetchGlobalAIS,45000); // global AIS snapshot for the current viewport
 // Both publish every 10 minutes; poll a little faster so a new frame appears
 // promptly rather than waiting on the general refresh.
 setInterval(()=>{if(state.layers.radar)fetchRadar();},240000);

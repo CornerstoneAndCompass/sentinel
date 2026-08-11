@@ -23,8 +23,6 @@ Paste that into the dashboard's **PROXY** field in the header — it is stored i
 |---|---|
 | `/p?url=<encoded>` | Allowlisted passthrough with CORS + edge cache |
 | `/osky?lamin=..&lomin=..&lamax=..&lomax=..` | OpenSky, OAuth2 token injected when configured |
-| `/ais/snapshot?bbox=minLon,minLat,maxLon,maxLat` | Global AIS positions from the aisstream socket |
-| `/ais/vessels?mmsi=a,b,c` | Positions for specific MMSIs (the warship list) |
 | `/gfw/events?days=3` | Global Fishing Watch encounters / loitering / AIS gaps |
 | `/acled?days=7` | ACLED armed-conflict events |
 | `/firms?days=1` | NASA FIRMS thermal hotspots, parsed from CSV to JSON |
@@ -73,10 +71,6 @@ instead of failing. Add the ones you want:
 npx wrangler secret put OPENSKY_CLIENT_ID
 npx wrangler secret put OPENSKY_CLIENT_SECRET
 
-# aisstream.io — global live AIS. Free key at https://aisstream.io
-# This is what replaces the removed VesselFinder scraping.
-npx wrangler secret put AISSTREAM_KEY
-
 # Global Fishing Watch — dark-vessel events (AIS gaps, encounters, loitering).
 # Free token at https://globalfishingwatch.org/our-apis/tokens
 npx wrangler secret put GFW_TOKEN
@@ -105,13 +99,15 @@ Check what landed:
 curl https://sentinel-feeds.<subdomain>.workers.dev/health
 ```
 
-## Notes on the AIS bridge
+## Removed: aisstream
 
-`AisHub` is a Durable Object holding one outbound WebSocket to aisstream.io and
-an in-memory map of MMSI → last known position. An alarm re-fires every 20s to
-keep the object resident and reconnect if the socket drops or goes quiet for two
-minutes. Vessels unheard for 45 minutes are evicted.
+A Durable Object here used to hold a WebSocket to aisstream.io for global
+vessel positions and the warship list. It was removed after the service
+accepted a valid key and a well-formed subscription and then sent nothing at
+all — no data, no error, no close — reproduced from Cloudflare and from a
+residential connection. Their documentation describes the service as beta with
+no uptime guarantee.
 
-aisstream pushes roughly 300 messages/second globally, which is why this lives
-in a Durable Object rather than the browser — and why the API key must never
-ship in the page.
+Maritime coverage is therefore Digitraffic only: Finnish and Baltic waters.
+Warship hulls outside that area will not resolve. If you want global AIS later,
+it needs a source with an availability guarantee.

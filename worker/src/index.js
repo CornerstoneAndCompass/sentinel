@@ -9,8 +9,6 @@
  * Routes
  *   GET /p?url=<encoded>     allowlisted passthrough, CORS + edge cache
  *   GET /osky?lamin=..&..    OpenSky, OAuth2 token injected when configured
- *   GET /ais/snapshot?bbox=  global AIS positions from the aisstream socket
- *   GET /ais/vessels?mmsi=   positions for specific MMSIs (warship list)
  *   GET /gfw/events?..       Global Fishing Watch events (dark vessels)
  *   GET /acled?..            ACLED armed-conflict events
  *   GET /health              which upstreams and secrets are live
@@ -472,210 +470,6 @@ async function acled(request, env) {
   return json({ configured: true, ...data }, 200, { 'Cache-Control': 'public, max-age=1800' });
 }
 
-/* ------------------------------------------------------- aisstream bridge -- */
-
-export class AisHub {
-  constructor(state, env) {
-    this.state = state;
-    this.env = env;
-    this.vessels = new Map(); // mmsi -> { lat, lon, sog, cog, name, type, ts }
-    this.ws = null;
-    this.connectedAt = 0;
-    this.lastMessage = 0;
-    this.messages = 0;
-    // aisstream replies to a bad subscription with an error frame rather than
-    // closing the socket, so "connected but silent" is indistinguishable from
-    // "connected and working" unless the non-position frames are kept.
-    this.lastNote = null;
-    this.frames = 0;
-  }
-
-  async fetch(request) {
-    const url = new URL(request.url);
-
-    if (!this.env.AISSTREAM_KEY) {
-      return json({ configured: false, vessels: [] });
-    }
-    await this.ensureConnected();
-
-    if (url.pathname.endsWith('/vessels')) {
-      const want = (url.searchParams.get('mmsi') || '')
-        .split(',')
-        .map((s) => s.trim())
-        .filter(Boolean);
-      const out = [];
-      for (const m of want) {
-        const v = this.vessels.get(m);
-        if (v) out.push({ mmsi: m, ...v });
-      }
-      return json({ configured: true, count: out.length, vessels: out });
-    }
-
-    // /snapshot — optional bbox filter as minLon,minLat,maxLon,maxLat
-    const bbox = (url.searchParams.get('bbox') || '')
-      .split(',')
-      .map(Number)
-      .filter((n) => !Number.isNaN(n));
-    const limit = Math.min(parseInt(url.searchParams.get('limit') || '6000', 10), 20000);
-
-    const out = [];
-    for (const [mmsi, v] of this.vessels) {
-      if (bbox.length === 4) {
-        if (v.lon < bbox[0] || v.lon > bbox[2] || v.lat < bbox[1] || v.lat > bbox[3]) continue;
-      }
-      out.push({ mmsi, ...v });
-      if (out.length >= limit) break;
-    }
-
-    return json({
-      configured: true,
-      count: out.length,
-      tracked: this.vessels.size,
-      messages: this.messages,
-      frames: this.frames,
-      note: this.lastNote,
-      // Kept deliberately: a valid key with a silent upstream is otherwise
-      // indistinguishable from no key at all, and that cost an evening.
-      handshake: this.handshake || null,
-      connected: Boolean(this.ws),
-      keyLen: (this.env.AISSTREAM_KEY || '').length,
-      connectedFor: this.connectedAt ? Math.floor((Date.now() - this.connectedAt) / 1000) : 0,
-      vessels: out,
-    });
-  }
-
-  async ensureConnected() {
-    const stale = this.lastMessage && Date.now() - this.lastMessage > 120000;
-    if (this.ws && !stale) return;
-    if (this.ws && stale) {
-      try {
-        this.ws.close();
-      } catch {}
-      this.ws = null;
-    }
-    if (this.ws) return;
-
-    try {
-      const res = await fetch('https://stream.aisstream.io/v0/stream', {
-        headers: { Upgrade: 'websocket' },
-      });
-      // A failed upgrade still resolves; res.webSocket is simply absent. Record
-      // what actually came back so "connected but silent" can be told apart
-      // from "never upgraded".
-      this.handshake = { status: res.status, hasSocket: Boolean(res.webSocket) };
-      const ws = res.webSocket;
-      if (!ws) {
-        this.lastNote = 'upgrade failed: HTTP ' + res.status + ' ' +
-          (await res.text().catch(() => '')).slice(0, 160);
-        throw new Error('no websocket in response');
-      }
-      // Listeners must be attached before accept(): accept() starts delivery,
-      // and anything that arrives before a handler exists is dropped. The
-      // subscription reply is the first thing aisstream sends, so registering
-      // afterwards can lose exactly the frame that says what is wrong.
-      ws.addEventListener('message', (ev) => this.onMessage(ev));
-      ws.accept();
-      this.ws = ws;
-      this.connectedAt = Date.now();
-      this.lastMessage = Date.now();
-      ws.send(
-        JSON.stringify({
-          APIKey: this.env.AISSTREAM_KEY,
-          BoundingBoxes: [[[-90, -180], [90, 180]]],
-          FilterMessageTypes: ['PositionReport', 'ShipStaticData'],
-        })
-      );
-      this.subscribedAt = Date.now();
-
-      ws.addEventListener('close', (e) => {
-        this.lastNote = 'socket closed: code=' + (e && e.code) + ' reason=' + ((e && e.reason) || '');
-        this.ws = null;
-      });
-      ws.addEventListener('error', (e) => {
-        this.lastNote = 'socket error: ' + ((e && e.message) || 'unknown');
-        this.ws = null;
-      });
-
-      // Keep the object resident so the socket survives between requests.
-      await this.state.storage.setAlarm(Date.now() + 20000);
-    } catch (e) {
-      this.ws = null;
-    }
-  }
-
-  onMessage(ev) {
-    this.lastMessage = Date.now();
-    this.frames++;
-    let msg;
-    try {
-      msg = JSON.parse(typeof ev.data === 'string' ? ev.data : new TextDecoder().decode(ev.data));
-    } catch {
-      return;
-    }
-
-    // Anything that is not a position or static-data frame is worth keeping —
-    // in practice it is the reason nothing is arriving.
-    if (msg.error || msg.Error || (msg.MessageType && msg.MessageType !== 'PositionReport' && msg.MessageType !== 'ShipStaticData')) {
-      this.lastNote = JSON.stringify(msg).slice(0, 300);
-    }
-    if (!msg.MessageType) {
-      this.lastNote = JSON.stringify(msg).slice(0, 300);
-      return;
-    }
-    this.messages++;
-
-    const meta = msg.MetaData || {};
-    const mmsi = String(meta.MMSI || meta.MMSI_String || '');
-    if (!mmsi) return;
-
-    const prev = this.vessels.get(mmsi) || {};
-
-    if (msg.MessageType === 'PositionReport') {
-      const r = msg.Message?.PositionReport;
-      if (!r) return;
-      this.vessels.set(mmsi, {
-        ...prev,
-        lat: r.Latitude,
-        lon: r.Longitude,
-        sog: r.Sog,
-        cog: r.Cog,
-        heading: r.TrueHeading,
-        navStat: r.NavigationalStatus,
-        name: (meta.ShipName || prev.name || '').trim(),
-        ts: Date.now(),
-      });
-    } else if (msg.MessageType === 'ShipStaticData') {
-      const s = msg.Message?.ShipStaticData;
-      if (!s) return;
-      this.vessels.set(mmsi, {
-        ...prev,
-        name: (s.Name || meta.ShipName || prev.name || '').trim(),
-        type: s.Type ?? prev.type,
-        callsign: s.CallSign,
-        destination: s.Destination,
-        ts: prev.ts || Date.now(),
-      });
-    }
-
-    // Cap memory: drop anything not heard from in 45 minutes.
-    if (this.vessels.size > 40000) this.evict();
-  }
-
-  evict() {
-    const cutoff = Date.now() - 2700000;
-    for (const [mmsi, v] of this.vessels) {
-      if ((v.ts || 0) < cutoff) this.vessels.delete(mmsi);
-    }
-  }
-
-  async alarm() {
-    this.alarms = (this.alarms || 0) + 1;
-    this.evict();
-    await this.ensureConnected();
-    await this.state.storage.setAlarm(Date.now() + 20000);
-  }
-}
-
 /* ---------------------------------------------------------------- router -- */
 
 export default {
@@ -693,12 +487,6 @@ export default {
       if (path === '/acled') return await acled(request, env);
       if (path === '/firms') return await firms(request, env);
 
-      if (path.startsWith('/ais/')) {
-        if (!env.AIS_HUB) return json({ configured: false, vessels: [] });
-        const id = env.AIS_HUB.idFromName('global');
-        return await env.AIS_HUB.get(id).fetch(request);
-      }
-
       if (path === '/health') {
         return json({
           ok: true,
@@ -706,7 +494,6 @@ export default {
           allowedHosts: ALLOWED_HOSTS.size,
           configured: {
             opensky: Boolean(env.OPENSKY_CLIENT_ID && env.OPENSKY_CLIENT_SECRET),
-            aisstream: Boolean(env.AISSTREAM_KEY),
             gfw: Boolean(env.GFW_TOKEN),
             acled: Boolean(env.ACLED_EMAIL && env.ACLED_PASSWORD),
             firms: Boolean(env.FIRMS_KEY),
@@ -717,7 +504,7 @@ export default {
       if (path === '/') {
         return json({
           service: 'sentinel-feed-proxy',
-          routes: ['/p?url=', '/osky', '/ais/snapshot', '/ais/vessels', '/gfw/events', '/acled', '/firms', '/health'],
+          routes: ['/p?url=', '/osky', '/gfw/events', '/acled', '/firms', '/health'],
         });
       }
 

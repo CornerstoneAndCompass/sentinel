@@ -16,18 +16,17 @@
       "id": "524df388794b470ab82034c599c068f2"
     }
   ],
-  "durable_objects": {
-    "bindings": [
-      {
-        "name": "AIS_HUB",
-        "class_name": "AisHub"
-      }
-    ]
-  },
+  // v2 drops AisHub. Removing a Durable Object class requires an explicit
+  // deleted_classes migration; without it the deploy fails rather than
+  // silently orphaning the class.
   "migrations": [
     {
       "tag": "v1",
       "new_sqlite_classes": ["AisHub"]
+    },
+    {
+      "tag": "v2",
+      "deleted_classes": ["AisHub"]
     }
   ]
 }
