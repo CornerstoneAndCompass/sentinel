@@ -764,7 +764,8 @@ html,body{width:100%;height:100%;overflow:hidden;background:#050a12;font-family:
 <div class="fgroup">Hazards<span class="grp-ctl"><button onclick="setGroup('grpHaz',true)" title="Turn every layer in this group on">ALL</button><button onclick="setGroup('grpHaz',false)" title="Turn every layer in this group off">NONE</button></span></div>
 <div id="grpHaz" style="display:flex;flex-wrap:wrap">
 <button class="fbtn on-r" id="fQuake" onclick="togLayer('quakes')" title="Earthquakes from the last 24 hours (USGS)">EARTHQUAKES</button>
-<button class="fbtn on-o" id="fFire" onclick="togLayer('fires')" title="Fire hotspots detected by satellite (NASA)">FIRES</button>
+<button class="fbtn on-o" id="fFire" onclick="togLayer('fires')" title="NASA EONET named wildfire events. Coverage is overwhelmingly US-sourced.">FIRE EVENTS</button>
+<button class="fbtn" id="fHotspot" onclick="toggleHotspots()" title="VIIRS thermal detections worldwide, last 24 hours (Copernicus GWIS)">HOTSPOTS (GLOBAL)</button>
 <button class="fbtn on-o" id="fVolcano" onclick="togLayer('volcanoes')" title="Volcanoes with elevated activity">VOLCANOES</button>
 <button class="fbtn on-r" id="fTsunami" onclick="togLayer('tsunami')" title="Active tsunami warnings (NOAA)">TSUNAMI</button>
 <button class="fbtn on" id="fRadar" onclick="toggleRadar()" title="Live precipitation radar (RainViewer)">RAIN RADAR</button>
@@ -1056,7 +1057,7 @@ const state={
   layers:{radar:false,satimg:false,bom:false,ausEm:false,gdacs:false,quakes:false,fires:false,
     gdelt:false,chokes:false,notams:false,piracy:false,volcanoes:false,tsunami:false,cyber:false,
     cables:false,nukes:false,bases:false,conflict:false,rf:false,drones:false,refugees:false,dark:false,
-    jamming:false,wx:false},
+    jamming:false,wx:false,hotspots:false},
   countryFilter:'',searchTerm:'',selectedId:null,
   alerts:[],news:[],gdeltEvents:[],earthquakes:[],fires:[],notamMarkers:[],cableLines:[],nukeMarkers:[],piracyMarkers:[],wildfireMarkers:[],cyberMarkers:[],refugeeMarkers:[],milbaseMarkers:[],rfMarkers:[],droneMarkers:[],ntestMarkers:[],conflictMarkers:[],volcanoMarkers:[],tsunamiMarkers:[],
   threats:{},defcon:4,threatScore:0,
@@ -2642,6 +2643,46 @@ function renderAusEmergency(){
   }
 }
 
+/* ==================== GLOBAL FIRE HOTSPOTS ====================
+   The fires layer was NASA EONET, whose open wildfire events were 30 out of 30
+   inside the United States — it reports where that programme reports, not where
+   the world is burning. FIRMS would fix it but needs a key.
+
+   Copernicus GWIS/EFFIS serves the same VIIRS and MODIS thermal detections as
+   WMS, free, no key, CORS enabled, worldwide. Two things it needs that are easy
+   to miss: STYLES must be present even when empty (MapServer 8 rejects the
+   request otherwise), and without an explicit TIME it returns an empty tile
+   everywhere rather than an error. With a 24-hour window it returns real
+   detections — measured 10,474 over central Africa alone.
+*/
+let _hotspotLayer=null;
+function hotspotTimeWindow(){
+  const d=new Date(),p=n=>String(n).padStart(2,'0');
+  const iso=t=>t.getUTCFullYear()+'-'+p(t.getUTCMonth()+1)+'-'+p(t.getUTCDate());
+  return iso(new Date(d.getTime()-86400000))+'/'+iso(d);
+}
+function buildHotspotLayer(){
+  return L.tileLayer.wms('https://maps.effis.emergency.copernicus.eu/gwis',{
+    layers:'viirs.hs',styles:'',format:'image/png',transparent:true,version:'1.1.1',
+    time:hotspotTimeWindow(),opacity:0.85,zIndex:210,maxZoom:20,
+    attribution:'Copernicus GWIS'
+  });
+}
+function toggleHotspots(){
+  state.layers.hotspots=!state.layers.hotspots;
+  if(state.layers.hotspots){
+    if(!_hotspotLayer)_hotspotLayer=buildHotspotLayer();
+    _hotspotLayer.addTo(map);
+  }else if(_hotspotLayer&&map.hasLayer(_hotspotLayer))map.removeLayer(_hotspotLayer);
+  syncLayerButtons();
+}
+// Roll the window forward so the layer does not silently age out.
+setInterval(()=>{
+  if(state.layers.hotspots&&_hotspotLayer){
+    _hotspotLayer.setParams({time:hotspotTimeWindow()});
+  }
+},900000);
+
 /* ---- BOM warnings on the map ----
    BOM attributes warnings to a state rather than a coordinate, so they had no
    way onto the map and only ever appeared in the country brief. Placing them at
@@ -4106,8 +4147,8 @@ function togC(c){state.categories[c]=!state.categories[c];const on=state.categor
 // Single source of truth for which button belongs to which layer and what
 // colour it lights up. The markup used to hard-code "on" classes, which drifted
 // the moment a default changed.
-const LAYER_BTN={wx:'fWx',ausEm:'fAusEm',bom:'fBOM',radar:'fRadar',quakes:'fQuake',fires:'fFire',gdelt:'fGdelt',chokes:'fChoke',jamming:'fJam',notams:'fNotam',piracy:'fPiracy',volcanoes:'fVolcano',tsunami:'fTsunami',cyber:'fCyber',cables:'fCables',nukes:'fNuke',bases:'fBases',conflict:'fConflict',rf:'fRF',drones:'fDrone',refugees:'fRefugee'};
-const LAYER_COL={wx:'on-y',ausEm:'on-r',bom:'on-y',radar:'on',quakes:'on-r',fires:'on-o',gdelt:'on',chokes:'on-y',jamming:'on-p',notams:'on-y',piracy:'on-r',volcanoes:'on-o',tsunami:'on-r',cyber:'on-p',cables:'on',nukes:'on-o',bases:'on',conflict:'on-r',rf:'on-p',drones:'on-o',refugees:'on-y'};
+const LAYER_BTN={hotspots:'fHotspot',wx:'fWx',ausEm:'fAusEm',bom:'fBOM',radar:'fRadar',quakes:'fQuake',fires:'fFire',gdelt:'fGdelt',chokes:'fChoke',jamming:'fJam',notams:'fNotam',piracy:'fPiracy',volcanoes:'fVolcano',tsunami:'fTsunami',cyber:'fCyber',cables:'fCables',nukes:'fNuke',bases:'fBases',conflict:'fConflict',rf:'fRF',drones:'fDrone',refugees:'fRefugee'};
+const LAYER_COL={hotspots:'on-o',wx:'on-y',ausEm:'on-r',bom:'on-y',radar:'on',quakes:'on-r',fires:'on-o',gdelt:'on',chokes:'on-y',jamming:'on-p',notams:'on-y',piracy:'on-r',volcanoes:'on-o',tsunami:'on-r',cyber:'on-p',cables:'on',nukes:'on-o',bases:'on',conflict:'on-r',rf:'on-p',drones:'on-o',refugees:'on-y'};
 const ALL_ON_CLASSES=['on','on-r','on-o','on-y','on-p','on-g'];
 function syncLayerButtons(){
   for(const[l,id]of Object.entries(LAYER_BTN)){
@@ -5487,9 +5528,10 @@ function renderCountryBrief(){
     +`<div class="cb-foot">
         <b>Coverage.</b> Global sources: GDACS, Open-Meteo, USGS seismic, WHO, FCDO, GDELT, rain radar.
         Single-country sources: Bureau of Meteorology (Australia), National Weather Service (United States),
-        FAA airspace notices (United States). NASA EONET's open wildfire events are currently
-        30 of 30 inside the United States, so the fire count reflects where that programme reports,
-        not where the world is burning — a NASA FIRMS key replaces it with genuine global hotspots.<br>
+        FAA airspace notices (United States). NASA EONET's named wildfire events are currently
+        30 of 30 inside the United States, so that count reflects where the programme reports rather
+        than where the world is burning. The HOTSPOTS layer is the unbiased one — VIIRS thermal
+        detections worldwide from Copernicus GWIS, no key required.<br>
         Aircraft and vessel coverage follows community ADS-B and AIS receiver density, which is thin
         over much of the world: an empty section means no reception, not necessarily no activity.<br>
         Borders: Natural Earth 110m.</div>`;
