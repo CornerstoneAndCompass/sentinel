@@ -32,6 +32,7 @@ const ALLOWED_HOSTS = new Set([
   'api.weather.bom.gov.au',        // Australian warnings
   'www.rfs.nsw.gov.au',            // NSW Rural Fire Service incidents
   'data.emergency.vic.gov.au',     // VicEmergency incidents
+  'publiccontent.gis.psba.qld.gov.au', // Queensland Fire Department warnings
   'earthquake.usgs.gov',
   'eonet.gsfc.nasa.gov',
   'firms.modaps.eosdis.nasa.gov',
@@ -65,7 +66,7 @@ const TTL = [
   [/rss|feeds\.|xml|reliefweb|news\.google/, 180],
   [/rainviewer/, 60],
   [/gdacs|bom\.gov\.au/, 300],
-  [/rfs\.nsw|emergency\.vic/, 120],
+  [/rfs\.nsw|emergency\.vic|psba\.qld/, 120],
   [/firms|eonet|usgs|swpc|weather|tsunami|volcano/, 120],
 ];
 function ttlFor(url) {

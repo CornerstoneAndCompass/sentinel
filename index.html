@@ -769,7 +769,7 @@ html,body{width:100%;height:100%;overflow:hidden;background:#050a12;font-family:
 <button class="fbtn on-r" id="fTsunami" onclick="togLayer('tsunami')" title="Active tsunami warnings (NOAA)">TSUNAMI</button>
 <button class="fbtn on" id="fRadar" onclick="toggleRadar()" title="Live precipitation radar (RainViewer)">RAIN RADAR</button>
 <button class="fbtn on-y" id="fBOM" onclick="togLayer('bom')" title="Australian Bureau of Meteorology warnings">AU WARNINGS</button>
-<button class="fbtn on-r" id="fAusEm" onclick="togLayer('ausEm')" title="Live incidents from NSW RFS and VicEmergency">AU INCIDENTS</button>
+<button class="fbtn on-r" id="fAusEm" onclick="togLayer('ausEm')" title="Live incidents from NSW RFS, VicEmergency and Queensland Fire">AU INCIDENTS</button>
 </div>
 <div class="fgroup">Security &amp; intel<span class="grp-ctl"><button onclick="setGroup('grpIntel',true)" title="Turn every layer in this group on">ALL</button><button onclick="setGroup('grpIntel',false)" title="Turn every layer in this group off">NONE</button></span></div>
 <div id="grpIntel" style="display:flex;flex-wrap:wrap">
@@ -1102,7 +1102,7 @@ const FEEDS=[
   {id:'f39',code:'RADAR',name:'Weather Radar',desc:'Live global precipitation radar, last 2 hours (RainViewer)'},
   {id:'f40',code:'WHO',name:'Health Emergencies',desc:'Disease outbreak news (World Health Organization)'},
   {id:'f41',code:'SATIMG',name:'Cloud Imagery',desc:'Himawari-9 satellite \u2014 Asia-Pacific and Australia only'},
-  {id:'f42',code:'AU.EM',name:'AU State Emergency',desc:'Live incidents from NSW RFS and VicEmergency'}
+  {id:'f42',code:'AU.EM',name:'AU State Emergency',desc:'Live incidents from NSW RFS, VicEmergency and Queensland Fire'}
 ];
 document.getElementById('feedsBar').innerHTML=
   '<span class="feeds-chip" onclick="event.stopPropagation();toggleFeedsBar()" title="Click to show or hide every feed; click the bar for full status"><span class="fd ok" style="animation:none"></span><span id="feedSummary">FEEDS --/--</span></span>'+
@@ -1667,6 +1667,9 @@ map.on('moveend',()=>{
     const d=activeDisk();
     if((d&&d.id)!==_lastDiskId){_lastDiskId=d&&d.id;showSatFrame(_satIdx);}
   }
+  // Keep the coverage note honest while the layer is off too, otherwise it
+  // still reads whatever was true where the map happened to start.
+  if(typeof updateWxBar==='function')updateWxBar();
 });
 let _lastDiskId=null;
 map.on('moveend zoomend',()=>{
@@ -2442,7 +2445,7 @@ function toggleRadar(){
 
    Western Australia serves an HTML application shell rather than JSON at its
    documented path, and South Australia's returns "File currently unavailable",
-   so neither is wired up. Queensland redirects; worth revisiting.
+   so neither is wired up.
 */
 // Most of what NSW RFS publishes is not a warning: of 45 entries, 15 are
 // scheduled hazard-reduction burns and 27 carry no warning level at all. They
@@ -2453,6 +2456,7 @@ const AUS_LEVEL={
   'emergency warning':{score:3,col:'#ff0033',label:'EMERGENCY WARNING'},
   'watch and act':{score:2,col:'#ff8800',label:'WATCH AND ACT'},
   'advice':{score:1,col:'#ffcc00',label:'ADVICE'},
+  'information':{score:0,col:'#4dabf7',label:'INFORMATION'},
   'planned burn':{score:-1,col:'#6b7a8f',label:'PLANNED BURN'},
   'not applicable':{score:0,col:'#4dabf7',label:'INCIDENT'},
   'safe':{score:0,col:'#4dabf7',label:'RESOLVED'}
@@ -2500,6 +2504,35 @@ async function fetchAusEmergency(){
       });
     }
   }catch(e){console.warn('NSW RFS error:',e);}
+  try{
+    // The documented qfes.qld.gov.au path 301s to this; use the resolved host
+    // directly so the Worker allowlist has something stable to match.
+    const d=await fetchR(corsUrl('https://publiccontent.gis.psba.qld.gov.au/content/Feeds/BushfireCurrentIncidents/bushfireAlert.json'),1,20000);
+    for(const f of d.features||[]){
+      const p=f.properties||{};
+      // Latitude/Longitude are published as properties, which is more reliable
+      // than deriving a centroid from the warning-area polygon.
+      let lat=parseFloat(p.Latitude),lon=parseFloat(p.Longitude);
+      if(!isFinite(lat)||!isFinite(lon)){
+        const c=firstPoint(f.geometry);
+        if(!c)continue;
+        lon=c[0];lat=c[1];
+      }
+      const cta=String(p.CallToAction||'');
+      // Hazard reduction burns are marked in the call to action, not the level.
+      const burn=/hazard reduction/i.test(cta)||/HAZARD REDUCTION/i.test(p.WarningTitle||'');
+      out.push({
+        state:'QLD',agency:'Queensland Fire Department',
+        title:(p.WarningTitle||p.Header||'').replace(/\s+/g,' ').trim(),
+        level:burn?'Planned Burn':(p.WarningLevel||''),
+        type:p.EventType||'Fire',
+        desc:[cta,p.WarningArea].filter(Boolean).join(' · ').slice(0,220),
+        url:p.FurtherInformation||'',
+        when:p.ItemDateTimeLocal_ISO||p.PublishDateLocal_ISO||'',
+        lat,lon
+      });
+    }
+  }catch(e){console.warn('QFD error:',e);}
   try{
     const d=await fetchR(corsUrl('https://data.emergency.vic.gov.au/Show?pageId=getIncidentJSON'),1,20000);
     for(const r of d.results||[]){
@@ -5314,7 +5347,7 @@ function renderCountryBrief(){
           <span class="cb-a" style="color:${ausLevel(i.level).col}">${esc(ausLevel(i.level).label)}</span>
           <span class="cb-b">${esc(i.title.slice(0,54))}</span>
           <span class="cb-c">${esc(i.state)}</span></div>`,
-       'NSW and Victoria only')
+       'NSW, Victoria and Queensland only')
     +briefSection('Bureau of Meteorology warnings',b.bom,w=>
        `<div class="cb-row" style="cursor:default">
           <span class="cb-a">${esc(w.short||w.type)}</span>
