@@ -412,6 +412,16 @@ html,body{width:100%;height:100%;overflow:hidden;background:#050a12;font-family:
 /* TOOLTIP */
 .marker-tooltip{background:rgba(5,10,20,0.94)!important;border:1px solid rgba(0,232,255,0.3)!important;color:#00e8ff!important;font-family:'Share Tech Mono',monospace!important;font-size:11px!important;padding:4px 10px!important;border-radius:3px!important;box-shadow:0 0 12px rgba(0,232,255,0.2)!important}
 .marker-tooltip::before{border-top-color:rgba(0,232,255,0.3)!important}
+/* Leaflet popups ship white with a serif-ish stack. Every popup in the app —
+   vessels, warnings, piracy zones, hotspots — was rendering as a bright white
+   card on a dark tactical map. */
+.leaflet-popup-content-wrapper{background:var(--pnl);color:var(--tm);border:1px solid var(--brdh);
+  border-radius:3px;box-shadow:0 4px 24px rgba(0,0,0,0.6);font-family:'Share Tech Mono',monospace}
+.leaflet-popup-content{margin:9px 12px;font-size:11px;line-height:1.55}
+.leaflet-popup-content b{color:var(--th)}
+.leaflet-popup-tip{background:var(--pnl);border:1px solid var(--brdh);box-shadow:none}
+.leaflet-container a.leaflet-popup-close-button{color:var(--td)}
+.leaflet-container a.leaflet-popup-close-button:hover{color:var(--th);background:transparent}
 .quake-tooltip{background:rgba(30,5,10,0.94)!important;border:1px solid rgba(255,51,85,0.4)!important;color:#ff3355!important;font-family:'Share Tech Mono',monospace!important;font-size:11px!important;padding:4px 10px!important;border-radius:3px!important}
 .fire-tooltip{background:rgba(30,15,5,0.94)!important;border:1px solid rgba(255,136,0,0.4)!important;color:#ff8800!important;font-family:'Share Tech Mono',monospace!important;font-size:11px!important;padding:4px 10px!important;border-radius:3px!important}
 .choke-tooltip{background:rgba(5,10,20,0.94)!important;border:1px solid rgba(255,204,0,0.4)!important;color:#ffcc00!important;font-family:'Share Tech Mono',monospace!important;font-size:11px!important;padding:4px 10px!important;border-radius:3px!important}
