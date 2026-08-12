@@ -1822,7 +1822,12 @@ const PRIORITY_CATS=new Set(['military','coastguard','police','government','sar'
 function shouldShow(a){
   if(!state.filters[a.type])return false;
   if(a.cat&&!state.categories[a.cat])return false;
-  if(state.countryFilter&&a.country!==state.countryFilter)return false;
+  // The country selector used to match a.country — the flag the hull or
+  // airframe is registered under — so picking Australia showed VH- aircraft
+  // over Europe and hid everything else actually flying over Australia. It is
+  // a geographic scope, so it tests position. Registration is still reachable
+  // through the search box.
+  if(_scope&&!inScope(a.lat,a.lon,a.type==='ship'?2:0))return false;
   if(state.searchTerm){const s=state.searchTerm.toUpperCase();const h=(a.cs+' '+a.hex+' '+a.t+' '+a.country+' '+(CN[a.country]||'')).toUpperCase();if(!h.includes(s))return false;}
   return true;
 }
@@ -3750,8 +3755,21 @@ async function fetchACLED(){
 function renderGDELT(){
   const el=document.getElementById('tabEvents');
   if(!state.gdeltEvents.length){el.innerHTML='<div style="padding:12px;color:var(--td);font-size:11px;text-align:center">No events detected</div>';return;}
-  let html='<div style="padding:8px 12px;border-bottom:1px solid var(--brd);font-size:10px;color:var(--tm);font-family:Orbitron;letter-spacing:2px">GDELT GLOBAL EVENTS \u2014 '+state.gdeltEvents.length+' DETECTED</div>';
-  for(const e of state.gdeltEvents){
+  // GDELT geocodes the source of an article, not every article. Scoping drops
+  // the ones placed elsewhere and keeps the ungeocoded remainder, which is
+  // said plainly in the header rather than presented as a country's events.
+  let ungeocoded=0;
+  const list=state.gdeltEvents.filter(e=>{
+    if(!_scope)return true;
+    const la=parseFloat(e.lat),lo=parseFloat(e.lon);
+    if(!isFinite(la)||!isFinite(lo)){ungeocoded++;return true;}
+    return inScope(la,lo,2);
+  });
+  if(!list.length){el.innerHTML='<div style="padding:12px;color:var(--td);font-size:11px;text-align:center">No events in '+_scope.name+'</div>';return;}
+  const title=_scope?_scope.name.toUpperCase()+' EVENTS \u2014 '+list.length
+    +(ungeocoded?' ('+ungeocoded+' UNPLACED)':''):'GDELT GLOBAL EVENTS \u2014 '+list.length+' DETECTED';
+  let html='<div style="padding:8px 12px;border-bottom:1px solid var(--brd);font-size:10px;color:var(--tm);font-family:Orbitron;letter-spacing:2px">'+title+'</div>';
+  for(const e of list){
     const ago=e.date?timeAgo(e.date.replace(/(\d{4})(\d{2})(\d{2})(\d{2})(\d{2})(\d{2})/,'$1-$2-$3T$4:$5:$6Z')):'';
     const tone=e.tone?parseFloat(e.tone):0;
     const toneColor=tone<-3?'var(--r)':tone<0?'var(--o)':'var(--c)';
@@ -4223,13 +4241,30 @@ function renderAlerts(){
   const el=document.getElementById('tabAlerts');
   const badge=document.getElementById('alertTabCount');
   if(badge){
-    const hot=state.alerts.slice(0,40).filter(a=>a.level==='red'||a.level==='orange').length;
+    const hot=state.alerts.filter(a=>{
+      if(!_scope)return true;
+      const m=a.meta;
+      if(!m||m.lat==null||m.lon==null)return true;
+      return inScope(m.lat,m.lon,2);
+    }).slice(0,40).filter(a=>a.level==='red'||a.level==='orange').length;
     badge.textContent=hot>99?'99+':hot;
     badge.style.display=hot>0?'inline-block':'none';
   }
   if(!state.alerts.length){el.innerHTML='<div style="padding:12px;color:var(--td);font-size:11px;text-align:center">No alerts</div>';return;}
   let html='';
-  state.alerts.slice(0,40).forEach((a,i)=>{
+  // focusAlertIdx indexes state.alerts, so carry the original index rather
+  // than the position in the filtered list.
+  const rows=state.alerts.map((a,i)=>({a,i})).filter(({a})=>{
+    if(!_scope)return true;
+    const m=a.meta;
+    // No coordinates means nothing to place it by — space weather, DEFCON and
+    // system alerts have none, and dropping those would hide the very things a
+    // country scope has no opinion about.
+    if(!m||m.lat==null||m.lon==null)return true;
+    return inScope(m.lat,m.lon,2);
+  }).slice(0,40);
+  if(!rows.length){el.innerHTML='<div style="padding:12px;color:var(--td);font-size:11px;text-align:center">No alerts in '+_scope.name+'</div>';return;}
+  rows.forEach(({a,i})=>{
     // Alerts with a location fly the map there and open the contact; ones
     // without stay inert rather than pretending to be clickable.
     const go=a.meta&&(a.meta.assetId||a.meta.lat!=null);
@@ -5646,6 +5681,7 @@ async function setCountryScope(iso){
   _scope=list.find(c=>c.iso===iso)||list.find(c=>c.iso3===iso)||null;
   applyCountryScope();
   updateScopeBadge();
+  try{renderAlerts();renderGDELT();renderAssetList();}catch(e){}
   if(_scope){
     const[s,w,n,e]=_scope.bbox;
     try{map.fitBounds([[s,w],[n,e]],{padding:[30,30],maxZoom:7});}catch(err){}
