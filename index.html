@@ -1754,6 +1754,7 @@ async function onViewChanged(){
   if(key===_lastViewKey)return;
   _lastViewKey=key;
   renderMarkers();                       // re-cull immediately, no network wait
+  if(state.layers.hotspots&&_firmsAvailable!==false)fetchFIRMSHotspots();
   if(map.getZoom()<LOCAL_ZOOM)return;    // strategic view keeps the global sweep
   const dropped=pruneOutOfView();
   document.getElementById('mainStatus').textContent='SCANNING AREA';
@@ -2836,17 +2837,97 @@ async function identifyHotspot(latlng){
        :f[0].CLASS}</span>`:'')
     +`<br><span style="opacity:.5;font-size:10px">Copernicus GWIS · layer: HOTSPOTS (GLOBAL)</span>`;
 }
+/* ---- FIRMS thermal hotspots as real points ----
+   The GWIS layer is a WMS raster: the detections are pixels, so they cannot be
+   clicked, cannot be filtered, and cannot be scoped to a country. NASA FIRMS
+   serves the same VIIRS detections as data, with the fields that matter —
+   fire radiative power, brightness temperature, satellite and acquisition
+   time — so with a key configured the layer becomes real markers and the
+   raster is only the fallback.
+
+   Drawn through a canvas renderer: these arrive in the thousands, and that many
+   SVG circles is the same cost that pushed contacts onto a canvas.
+*/
+const _fireRenderer=L.canvas({padding:0.3});
+state.firmsMarkers=[];
+// var, not let: onViewChanged reads _firmsAvailable from far higher up the
+// file, and Leaflet fires moveend synchronously from setView during boot —
+// which would hit the temporal dead zone and throw before this line is reached.
+var _firmsBusy=false,_firmsAvailable=null;   // null = not yet known
+function firmsColor(frp){
+  if(!isFinite(frp))return'#ff8800';
+  if(frp>=100)return'#ffffff';
+  if(frp>=30)return'#ffe066';
+  if(frp>=10)return'#ff8800';
+  return'#ff4d1a';
+}
+function firmsWhen(h){
+  if(!h.date)return null;
+  const t=String(h.time||'0').padStart(4,'0');
+  const d=new Date(`${h.date}T${t.slice(0,2)}:${t.slice(2)}:00Z`);
+  return isFinite(d.getTime())?d:null;
+}
+async function fetchFIRMSHotspots(){
+  const u=workerUrl('/firms');
+  if(!u){_firmsAvailable=false;return false;}
+  if(_firmsBusy)return _firmsAvailable;
+  _firmsBusy=true;
+  try{
+    const b=safeBounds();
+    // The area API takes west,south,east,north. Asking for the view keeps the
+    // response small and the key's transaction budget intact.
+    const bbox=[b.west,b.south,b.east,b.north].map(v=>v.toFixed(2)).join(',');
+    const d=await fetchR(u+'?bbox='+encodeURIComponent(bbox),0,25000);
+    if(!d.configured){_firmsAvailable=false;return false;}
+    if(d.error){console.warn('FIRMS:',d.error,d.detail||'');_firmsAvailable=false;return false;}
+    _firmsAvailable=true;
+    state.firmsMarkers.forEach(m=>map.removeLayer(m));state.firmsMarkers=[];
+    for(const h of (d.hotspots||[])){
+      if(!isFinite(h.lat)||!isFinite(h.lon))continue;
+      const col=firmsColor(h.frp);
+      const when=firmsWhen(h);
+      const conf=h.confidence==='h'?'high':h.confidence==='l'?'low':h.confidence==='n'?'nominal':(h.confidence||'—');
+      const m=L.circleMarker([h.lat,h.lon],{renderer:_fireRenderer,radius:4,color:col,weight:1,
+        fillColor:col,fillOpacity:0.55});
+      m.bindPopup(`<b style="color:${col}">🔥 THERMAL HOTSPOT</b>`
+        +`<br><span style="opacity:.85">VIIRS satellite fire detection</span>`
+        +(when?`<br>Detected: ${fmtDayHM(when)} &middot; ${timeAgo(when)}`:'')
+        +(isFinite(h.frp)&&h.frp!=null?`<br>Fire radiative power: ${h.frp} MW`:'')
+        +(isFinite(h.bright)&&h.bright!=null?`<br>Brightness: ${h.bright} K`:'')
+        +`<br>Confidence: ${conf}${h.daynight?' &middot; '+(h.daynight==='D'?'day':'night'):''}`
+        +`<br><span style="opacity:.5;font-size:10px">NASA FIRMS · ${h.sat||'VIIRS'} · layer: HOTSPOTS (GLOBAL)</span>`);
+      if(state.layers.hotspots)m.addTo(map);
+      state.firmsMarkers.push(m);
+    }
+    // Truncation is reported rather than passed off as a quiet day.
+    if(d.truncated)console.info(`FIRMS: showing ${d.count} of ${d.total} detections in view`);
+    state.sources.hotspots=d.count||0;
+    applyCountryScope();
+    return true;
+  }catch(e){console.warn('FIRMS hotspots failed:',e);return _firmsAvailable;}
+  finally{_firmsBusy=false;}
+}
+function clearFIRMSHotspots(){
+  state.firmsMarkers.forEach(m=>map.removeLayer(m));state.firmsMarkers=[];
+}
 function toggleHotspots(){
   state.layers.hotspots=!state.layers.hotspots;
   if(state.layers.hotspots){
-    if(!_hotspotLayer)_hotspotLayer=buildHotspotLayer();
-    _hotspotLayer.addTo(map);
-  }else if(_hotspotLayer&&map.hasLayer(_hotspotLayer))map.removeLayer(_hotspotLayer);
+    // Try real points first; only fall back to the raster if there is no key.
+    fetchFIRMSHotspots().then(ok=>{
+      if(ok||!state.layers.hotspots)return;
+      if(!_hotspotLayer)_hotspotLayer=buildHotspotLayer();
+      _hotspotLayer.addTo(map);
+    });
+  }else{
+    clearFIRMSHotspots();
+    if(_hotspotLayer&&map.hasLayer(_hotspotLayer))map.removeLayer(_hotspotLayer);
+  }
   syncLayerButtons();
 }
 // Roll the window forward so the layer does not silently age out.
 setInterval(()=>{
-  if(state.layers.hotspots&&_hotspotLayer){
+  if(state.layers.hotspots&&_hotspotLayer&&map.hasLayer(_hotspotLayer)){
     _hotspotLayer.setParams({time:hotspotTimeWindow()});
   }
 },900000);
@@ -3777,7 +3858,9 @@ async function fetchFIRMS(){
     const firms=workerUrl('/firms');
     if(firms){
       try{
-        const fd=await fetchR(firms+'?days=1',0,15000);
+        // days=1 is the current UTC day, which is empty for hours after UTC
+        // midnight. The Worker defaults to 2 for that reason.
+        const fd=await fetchR(firms,0,20000);
         if(fd.configured&&Array.isArray(fd.hotspots)){
           for(const h of fd.hotspots.slice(0,400)){
             if(!isFinite(h.lat)||!isFinite(h.lon))continue;
@@ -5500,7 +5583,7 @@ const SCOPED=[
   ['notamMarkers','notams',0],['cyberMarkers','cyber',0],['conflictMarkers','conflict',0],
   ['rfMarkers','rf',0],['droneMarkers','drones',0],['refugeeMarkers','refugees',0],
   ['nukeMarkers','nukes',0],['ntestMarkers','nukes',0],['milbaseMarkers','bases',0],
-  ['jamMarkers','jamming',2],['tsunamiMarkers','tsunami',2],['darkMarkers','dark',2],
+  ['firmsMarkers','hotspots',0],['jamMarkers','jamming',2],['tsunamiMarkers','tsunami',2],['darkMarkers','dark',2],
   ['piracyMarkers','piracy',2],['chokeMarkers','chokes',2],['cableLines','cables',2],
 ];
 function inScope(lat,lon,sea){

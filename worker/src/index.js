@@ -250,8 +250,13 @@ async function firms(request, env) {
   // The area API accepts 1-5 days only. The old clamp allowed 10, which the
   // upstream rejects outright. Non-numeric input has to be caught explicitly:
   // Math.min/max propagate NaN, which would be interpolated into the URL path.
-  const dRaw = parseInt(p.get('days') || '1', 10);
-  const days = Number.isFinite(dRaw) ? Math.min(Math.max(dRaw, 1), 5) : 1;
+  // day_range counts whole UTC days *including today*, so a range of 1 is
+  // whatever has been observed since 00:00 UTC. Measured just after UTC
+  // midnight that is a header and nothing else, worldwide — which is exactly
+  // how "the key does not work" would look. 2 is the smallest range that
+  // always contains a full day of overpasses.
+  const dRaw = parseInt(p.get('days') || '2', 10);
+  const days = Number.isFinite(dRaw) ? Math.min(Math.max(dRaw, 1), 5) : 2;
 
   // west,south,east,north — or "world". A global VIIRS day is hundreds of
   // thousands of rows and counts as many transactions against the key, so the
@@ -260,7 +265,10 @@ async function firms(request, env) {
   const area = bbox && /^-?[\d.]+,-?[\d.]+,-?[\d.]+,-?[\d.]+$/.test(bbox) ? bbox : 'world';
 
   // Both polar satellites: SNPP alone leaves roughly half the overpasses out.
-  const sources = (p.get('sources') || 'VIIRS_SNPP_NRT,VIIRS_NOAA20_NRT').split(',').slice(0, 3);
+  // Three polar satellites. Availability lists NOAA21 alongside SNPP and
+  // NOAA20, and each adds its own overpasses.
+  const sources = (p.get('sources') || 'VIIRS_SNPP_NRT,VIIRS_NOAA20_NRT,VIIRS_NOAA21_NRT')
+    .split(',').slice(0, 4);
   const cap = Math.min(parseInt(p.get('limit') || '4000', 10), 20000);
 
   const parseCsv = (text, sat) => {
@@ -305,11 +313,26 @@ async function firms(request, env) {
   }));
 
   const failed = results.filter((r) => r.error);
-  const hotspots = results.flatMap((r) => r.rows || []).slice(0, cap);
+  // Flattening then truncating drops whole satellites: SNPP alone can fill the
+  // cap, so NOAA21 would never appear. Take an equal share from each instead,
+  // and report the total so a truncated view is not mistaken for a quiet day.
+  const live = results.filter((r) => r.rows && r.rows.length);
+  const share = live.length ? Math.floor(cap / live.length) : 0;
+  let hotspots = live.flatMap((r) => r.rows.slice(0, share));
+  const total = live.reduce((n, r) => n + r.rows.length, 0);
+  // Any headroom left by a small source goes back to the others.
+  if (hotspots.length < cap) {
+    for (const r of live) {
+      if (hotspots.length >= cap) break;
+      hotspots = hotspots.concat(r.rows.slice(share, share + (cap - hotspots.length)));
+    }
+  }
   const body = {
     configured: true,
     area, days,
     count: hotspots.length,
+    total,
+    truncated: total > hotspots.length,
     bySource: Object.fromEntries(results.map((r) => [r.src, r.rows ? r.rows.length : r.error])),
     hotspots,
   };
