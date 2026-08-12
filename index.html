@@ -4476,6 +4476,7 @@ function togLayer(l){
   if(l==='fires')state.fireMarkers.forEach(m=>{on?m.addTo(map):map.removeLayer(m);});
   if(l==='chokes')state.chokeMarkers.forEach(m=>{on?m.addTo(map):map.removeLayer(m);});
   if(l==='jamming'&&state.jamMarkers)state.jamMarkers.forEach(m=>{on?m.addTo(map):map.removeLayer(m);});
+  if(_scope)setTimeout(()=>{try{applyCountryScope();}catch(e){}},0);
   if(l==='dark'&&state.darkMarkers){
     state.darkMarkers.forEach(m=>{on?m.addTo(map):map.removeLayer(m);});
     // Layers start off, so the first fetch builds nothing. Turning the layer on
@@ -5586,11 +5587,20 @@ const SCOPED=[
   ['firmsMarkers','hotspots',0],['jamMarkers','jamming',2],['tsunamiMarkers','tsunami',2],['darkMarkers','dark',2],
   ['piracyMarkers','piracy',2],['chokeMarkers','chokes',2],['cableLines','cables',2],
 ];
+// Natural Earth 110m drops offshore islands and clips coastlines, so a strict
+// polygon test hid Queensland fires on North Stradbroke and Moreton Island.
+const COAST_PAD=1;
 function inScope(lat,lon,sea){
   if(!_scope)return true;
   if(!isFinite(lat)||!isFinite(lon))return false;
   if(pointInCountry(lat,lon,_scope))return true;
-  return sea>0&&nearCountry(lat,lon,_scope,sea);
+  // Just outside the polygon is allowed, but only where the point does not
+  // belong to another country: that keeps Queensland's islands in and Papua
+  // New Guinea's fires out, which a bounding box alone cannot do — Australia's
+  // box reaches past Cape York into PNG. The country lookup runs only for the
+  // few points that fail the polygon test, not for every marker.
+  if(!nearCountry(lat,lon,_scope,sea>0?sea:COAST_PAD))return false;
+  return !countryAt(lat,lon);
 }
 // Runs on every render pass, so a renderer that re-adds its markers after a
 // fetch cannot quietly put out-of-scope ones back on the map.
@@ -5617,6 +5627,18 @@ function applyCountryScope(){
     }
   }
 }
+// Renderers add their markers whenever their own fetch returns, so a scope
+// applied only at fixed points always has gaps — turning a layer on while
+// scoped put every one of its markers back on the map. Leaflet fires layeradd
+// for any layer added by any path, so that is the one hook that catches them
+// all. Debounced because a bulk add (thousands of hotspots) fires it per
+// marker, and re-scoping once after the last one is what is wanted.
+let _scopeTimer=null;
+map.on('layeradd',()=>{
+  if(!_scope)return;
+  clearTimeout(_scopeTimer);
+  _scopeTimer=setTimeout(()=>{try{applyCountryScope();}catch(e){}},150);
+});
 async function setCountryScope(iso){
   if(!iso){_scope=null;applyCountryScope();updateScopeBadge();return;}
   let list;
