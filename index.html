@@ -802,7 +802,7 @@ html,body{width:100%;height:100%;overflow:hidden;background:#050a12;font-family:
 </div>
 <div class="fgroup">Security &amp; intel<span class="grp-ctl"><button onclick="setGroup('grpIntel',true)" title="Turn every layer in this group on">ALL</button><button onclick="setGroup('grpIntel',false)" title="Turn every layer in this group off">NONE</button></span></div>
 <div id="grpIntel" style="display:flex;flex-wrap:wrap">
-<button class="fbtn on" id="fGdelt" onclick="togLayer('gdelt')" title="Geolocated world news events (GDELT)">NEWS EVENTS</button>
+<button class="fbtn on" id="fWire" onclick="togLayer('wire')" title="Corroborated significant events from a rolling 24h news ingest">NEWS EVENTS</button>
 <button class="fbtn on-y" id="fChoke" onclick="togLayer('chokes')" title="Strategic straits and canals — Hormuz, Suez, Malacca…">CHOKEPOINTS</button>
 <button class="fbtn on-p" id="fJam" onclick="togLayer('jamming')" title="Zones with known GPS signal jamming">GPS JAMMING</button>
 <button class="fbtn on-y" id="fNotam" onclick="togLayer('notams')" title="Airspace restrictions and flight notices (NOTAMs/TFRs)">AIRSPACE</button>
@@ -1077,17 +1077,17 @@ async function checkProxyHealth(){
 }
 const state={
   assets:new Map(),markers:new Map(),routes:new Map(),
-  quakeMarkers:[],gdeltMarkers:[],fireMarkers:[],chokeMarkers:[],
+  quakeMarkers:[],wireMarkers:[],fireMarkers:[],chokeMarkers:[],
   filters:{aircraft:true,heli:true,ship:true,satellite:true},
   categories:{military:true,coastguard:true,police:true,government:true,sar:true,tanker:false,cargo:false,passenger:false,fishing:false},
   // All overlays start off. Painting twenty layers at once on first run is the
   // overload; the map should open quiet and you switch on what you want.
   layers:{radar:false,satimg:false,bom:false,ausEm:false,gdacs:false,quakes:false,fires:false,
-    gdelt:false,chokes:false,notams:false,piracy:false,volcanoes:false,tsunami:false,cyber:false,
+    wire:false,chokes:false,notams:false,piracy:false,volcanoes:false,tsunami:false,cyber:false,
     cables:false,nukes:false,bases:false,conflict:false,rf:false,drones:false,refugees:false,dark:false,
     jamming:false,wx:false,hotspots:false},
   countryFilter:'',searchTerm:'',selectedId:null,
-  alerts:[],news:[],gdeltEvents:[],earthquakes:[],fires:[],notamMarkers:[],cableLines:[],nukeMarkers:[],piracyMarkers:[],wildfireMarkers:[],cyberMarkers:[],refugeeMarkers:[],milbaseMarkers:[],rfMarkers:[],droneMarkers:[],ntestMarkers:[],conflictMarkers:[],volcanoMarkers:[],tsunamiMarkers:[],
+  alerts:[],news:[],earthquakes:[],fires:[],notamMarkers:[],cableLines:[],nukeMarkers:[],piracyMarkers:[],wildfireMarkers:[],cyberMarkers:[],refugeeMarkers:[],milbaseMarkers:[],rfMarkers:[],droneMarkers:[],ntestMarkers:[],conflictMarkers:[],volcanoMarkers:[],tsunamiMarkers:[],
   threats:{},defcon:4,threatScore:0,
   proxyHealth:null,darkEvents:[],darkMarkers:[],reliefEvents:[],acledEvents:[],
   visible:[],gdacs:[],gdacsMarkers:[],bom:[],bomMarkers:[],ausEm:[],ausEmMarkers:[],who:[],fcdo:null,conditions:null,
@@ -1105,7 +1105,7 @@ const FEEDS=[
   {id:'f6',code:'AIS',name:'Baltic Vessels',desc:'Ship positions in Finnish & Baltic waters (Digitraffic AIS)'},
   {id:'f7',code:'SHIPS',name:'Naval Vessels',desc:'Known military & government vessel positions'},
   {id:'f8',code:'QUAKE',name:'Earthquakes',desc:'Earthquakes from the last 24 hours (USGS)'},
-  {id:'f9',code:'GDELT',name:'News Events',desc:'Geolocated world events from global media (GDELT)'},
+  {id:'f9',code:'WIRE',name:'Breaking Events',desc:'Rolling 24h news ingest \u2014 corroborated, geolocated significant events'},
   {id:'f10',code:'NEWS',name:'Intel Headlines',desc:'Defense & security news headlines'},
   {id:'f11',code:'FIRMS',name:'Fire Hotspots',desc:'Thermal hotspots detected by NASA satellites'},
   {id:'f12',code:'CHOKE',name:'Chokepoints',desc:'Strategic strait & canal monitoring'},
@@ -1129,7 +1129,6 @@ const FEEDS=[
   {id:'f32',code:'VOLC',name:'Volcanoes',desc:'Volcanic activity monitoring'},
   {id:'f33',code:'TSUN',name:'Tsunami',desc:'Tsunami warnings (NOAA)'},
   {id:'f34',code:'DARK',name:'Dark Vessels',desc:'AIS gaps, encounters & loitering (Global Fishing Watch, ~5d lag)'},
-  {id:'f35',code:'GEO',name:'News Map',desc:'Geolocated news mentions, refreshed every 15 min (GDELT GEO)'},
   {id:'f36',code:'RELIEF',name:'Humanitarian',desc:'Disaster declarations & humanitarian alerts (ReliefWeb)'},
   {id:'f37',code:'GDACS',name:'Global Disasters',desc:'Worldwide disaster alerts \u2014 cyclones, floods, fires, drought (GDACS)'},
   {id:'f38',code:'BOM',name:'Australia Warnings',desc:'Flood, marine and severe weather warnings (Bureau of Meteorology)'},
@@ -1489,6 +1488,15 @@ function overlayIcon(type,color,size){
         <circle cx="6" cy="18" r="3.5" fill="${color}" fill-opacity="0.2" stroke="${color}" stroke-width="1"/>
         <circle cx="18" cy="18" r="3.5" fill="${color}" fill-opacity="0.2" stroke="${color}" stroke-width="1"/>
         <rect x="10" y="10" width="4" height="4" fill="${color}" fill-opacity="0.6"/>
+      </svg>`;break;
+    case 'wire':
+      // Broadcast burst — a breaking event, sized by reported toll
+      svg=`<svg width="${s}" height="${s}" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+        <circle cx="12" cy="12" r="10.5" fill="none" stroke="${color}" stroke-width="1" opacity="0.35"/>
+        <circle cx="12" cy="12" r="7" fill="${color}" fill-opacity="0.14" stroke="${color}" stroke-width="1.4"/>
+        <circle cx="12" cy="12" r="2.6" fill="${color}"/>
+        <path d="M4.5 4.5 L7 7 M19.5 4.5 L17 7 M4.5 19.5 L7 17 M19.5 19.5 L17 17"
+          stroke="${color}" stroke-width="1.6" stroke-linecap="round" opacity="0.8"/>
       </svg>`;break;
     case 'notam':
       // Warning triangle with exclamation
@@ -2294,7 +2302,14 @@ async function fetchGDACS(){
   if(!hasProxy()){feedIdle('f37','needs proxy');state.sources.gdacs=0;return;}
   feedWait('f37');
   try{
-    const url='https://www.gdacs.org/gdacsapi/api/events/geteventlist/SEARCH?fromDate=&toDate=&alertlevel=Orange;Red';
+    // An empty date range returns everything GDACS still has on file — 98
+    // events reaching back a full year, plotted with no indication that most
+    // of them ended months ago. The window filters on last-update, so a
+    // long-running drought whose todate is current is still kept.
+    const day=864e5,fmt=d=>new Date(d).toISOString().slice(0,10);
+    const url='https://www.gdacs.org/gdacsapi/api/events/geteventlist/SEARCH'
+      +'?fromDate='+fmt(Date.now()-14*day)+'&toDate='+fmt(Date.now())
+      +'&alertlevel=Orange;Red';
     const d=await fetchR(corsUrl(url),1,20000);
     state.gdacsMarkers.forEach(m=>map.removeLayer(m));state.gdacsMarkers=[];
     state.gdacs=[];
@@ -2321,6 +2336,7 @@ async function fetchGDACS(){
       const mk=L.circleMarker([lat,lon],{radius:ev.level==='Red'?10:7,color:col,weight:2,
         fillColor:col,fillOpacity:0.18})
         .bindPopup(`<b>${ev.level.toUpperCase()} — ${ev.type}</b><br>${ev.name||ev.country}<br>`
+          +(ev.to?`<span style="opacity:.6;font-size:11px">last update ${timeAgo(new Date(ev.to).toISOString())}</span><br>`:'')
           +`<span style="opacity:.75">${ev.desc.slice(0,180)}</span>`);
       if(state.layers.gdacs!==false)mk.addTo(map);
       state.gdacsMarkers.push(mk);
@@ -3648,60 +3664,1411 @@ async function fetchEarthquakes(){
   }catch(e){feedDot('f8',false);}
 }
 
-// --- GDELT EVENTS ---
-async function fetchGDELT(){
-  feedWait('f9');
-  try{
-    // GDELT sends no CORS header and rate-limits hard (429) on repeat callers,
-    // so it needs the proxy — which also caches the response for 5 minutes.
-    // GDELT rejects un-parenthesised OR groups with "Queries containing OR'd
-    // terms must be surrounded by ()" — this query was missing them and had
-    // been returning an error string rather than articles.
-    const q='(military OR conflict OR attack OR strike) sourcelang:english';
-    const d=await fetchR(corsUrl('https://api.gdeltproject.org/api/v2/doc/doc?query='+encodeURIComponent(q)+'&timespan=24h&mode=ArtList&maxrecords=30&format=json'),1,30000);
-    state.gdeltEvents=(d.articles||[]).filter(a=>!a.language||a.language.toLowerCase()==='english').map(a=>({title:a.title,url:a.url,source:a.domain||a.source||'',date:a.seendate,tone:a.tone,lat:a.sourcelat,lon:a.sourcelon,lang:a.language,image:a.socialimage}));
-    renderGDELT();
-    state.sources.gdelt=state.gdeltEvents.length;feedDot('f9',true);
-  }catch(e){
-    console.warn('GDELT fetch failed:',e);
-    document.getElementById('tabEvents').innerHTML='<div style="padding:12px;color:var(--r);font-size:11px;text-align:center">GDELT FEED UNAVAILABLE \u2014 RETRYING NEXT CYCLE</div>';
-    feedDot('f9',false);
+/* ==================== WIRE — ROLLING NEWS INGESTER ====================
+
+   Why this exists: on 27 Aug 2026 a glacial-lake outburst flood on the
+   Nepal–Tibet border killed 165+ people with ~1,000 missing, and this
+   dashboard showed nothing at all. Two separate faults caused that.
+
+   1. Both map news layers were GDELT. api.gdeltproject.org now refuses
+      connections outright (ECONNREFUSED, reproduced from two networks), so
+      f9 and f35 were dark and reported "no events" — which reads as a quiet
+      day rather than a dead upstream.
+   2. Even with GDELT up, both queries were hardcoded to
+      (military OR conflict OR attack OR strike). A flood can never match
+      those terms, so the single largest humanitarian event of the day was
+      excluded by construction.
+
+   The replacement is an ingester rather than a fetch-and-render feed. It
+   stays awake on its own timer, pulls broad wire RSS with no keyword filter,
+   and keeps a rolling 24-hour store. Raw headlines are NOT events — an item
+   only reaches the map once independent outlets corroborate it and its
+   severity clears a threshold, which is what keeps a single tabloid headline
+   off an intelligence display. When a cluster is first promoted the ingester
+   goes back out and pulls detail on that specific event.
+
+   Everything here is derived from the headline text. Casualty figures are
+   what the wires are reporting, not a verified toll, and the UI says so.
+*/
+// Country coordinates are capitals, not polygon centroids. Russia's centroid
+// is uninhabited central Siberia, so every Ukraine-war headline that named
+// only "Russian forces" was plotted 3,000km from the war — and because the
+// city-consistency check measures against this point, a strike on Kharkiv was
+// rejected as "inconsistent with Russia" and thrown into Siberia too.
+const GAZ_COUNTRY=[
+["Fiji","FJI",-18.13,178.44,816.2,""],
+["Tanzania","TZA",-6.8,39.27,118.2,"tanzanian"],
+["W. Sahara","ESH",24.78,-12.03,55.9,""],
+["Canada","CAN",45.42,-75.7,3671.6,"canadian"],
+["United States of America","USA",38.9,-77.01,5497.3,"american|u\\.s\\."],
+["Kazakhstan","KAZ",51.18,71.43,602.1,"kazakh"],
+["Uzbekistan","UZB",41.31,69.29,144.6,"uzbek"],
+["Papua New Guinea","PNG",-9.46,147.19,122.4,""],
+["Indonesia","IDN",-6.17,106.83,724.5,"indonesian"],
+["Argentina","ARG",-34.6,-58.4,661.2,"argentine|argentinian"],
+["Chile","CHL",-33.45,-70.67,330.3,"chilean"],
+["Dem. Rep. Congo","COD",-4.33,15.31,351.6,"congolese|drc|dr congo"],
+["Somalia","SOM",2.07,45.36,139.2,"somali"],
+["Kenya","KEN",-1.28,36.81,81.1,"kenyan"],
+["Sudan","SDN",15.59,32.53,226.9,"sudanese"],
+["Chad","TCD",12.12,15.05,165.4,"chadian"],
+["Haiti","HTI",18.54,-72.34,5.3,"haitian"],
+["Dominican Rep.","DOM",18.47,-69.9,8.3,""],
+["Russia","RUS",55.75,37.61,14435.6,"russian|kremlin"],
+["Bahamas","BHS",25.08,-77.35,6.6,""],
+["Falkland Is.","FLK",-51.73,-59.59,4.1,""],
+["Norway","-99",66.23,18.09,2.4,""],
+["Greenland","GRL",74.15,-41.03,1442.2,""],
+["Fr. S. Antarctic Lands","ATF",-49.12,69.46,2.1,""],
+["Timor-Leste","TLS",-8.56,125.58,2.7,""],
+["South Africa","ZAF",-29.12,26.23,209.8,"south african"],
+["Lesotho","LSO",-29.32,27.48,4.6,""],
+["Mexico","MEX",19.44,-99.13,551.2,"mexican"],
+["Uruguay","URY",-34.86,-56.17,25.3,""],
+["Brazil","BRA",-15.78,-47.92,1531.5,"brazilian"],
+["Bolivia","BOL",-19.04,-65.26,158.5,""],
+["Peru","PER",-12.05,-77.05,233.1,"peruvian"],
+["Colombia","COL",4.6,-74.09,202.7,"colombian"],
+["Panama","PAN",8.97,-79.53,13.7,""],
+["Costa Rica","CRI",9.94,-84.09,10.2,""],
+["Nicaragua","NIC",12.15,-86.27,19.4,""],
+["Honduras","HND",14.1,-87.22,18.7,""],
+["El Salvador","SLV",13.71,-89.2,3.0,""],
+["Guatemala","GTM",14.62,-90.53,16.4,""],
+["Belize","BLZ",17.25,-88.77,2.9,""],
+["Venezuela","VEN",10.5,-66.92,154.9,"venezuelan"],
+["Guyana","GUY",6.8,-58.17,34.6,""],
+["Suriname","SUR",5.84,-55.17,17.2,""],
+["France","-99",47.0,3.3,2.4,""],
+["Ecuador","ECU",-0.21,-78.5,36.4,""],
+["Puerto Rico","PRI",18.28,-66.43,0.9,""],
+["Jamaica","JAM",17.98,-76.77,1.8,""],
+["Cuba","CUB",23.13,-82.37,36.0,"cuban"],
+["Zimbabwe","ZWE",-17.82,31.04,51.3,"zimbabwean"],
+["Botswana","BWA",-24.65,25.91,87.4,""],
+["Namibia","NAM",-22.57,17.08,161.6,""],
+["Senegal","SEN",14.72,-17.48,26.3,""],
+["Mali","MLI",12.65,-8.0,244.6,"malian"],
+["Mauritania","MRT",18.09,-15.98,155.1,""],
+["Benin","BEN",6.4,2.52,18.4,""],
+["Niger","NER",13.52,2.11,184.3,"nigerien"],
+["Nigeria","NGA",9.09,7.53,114.4,"nigerian"],
+["Cameroon","CMR",3.87,11.51,83.8,"cameroonian"],
+["Togo","TGO",6.13,1.22,9.7,""],
+["Ghana","GHA",5.55,-0.22,27.5,"ghanaian"],
+["Côte d'Ivoire","CIV",6.82,-5.28,37.4,"ivory coast|ivorian"],
+["Guinea","GIN",9.53,-13.68,38.5,""],
+["Guinea-Bissau","GNB",11.87,-15.6,4.7,""],
+["Liberia","LBR",6.31,-10.8,16.3,""],
+["Sierra Leone","SLE",8.47,-13.24,9.8,""],
+["Burkina Faso","BFA",12.37,-1.53,42.1,"burkinabe|burkina"],
+["Central African Rep.","CAF",4.37,18.56,114.6,""],
+["Congo","COG",-4.26,15.28,64.5,""],
+["Gabon","GAB",0.39,9.46,35.5,""],
+["Eq. Guinea","GNQ",3.75,8.78,2.5,""],
+["Zambia","ZMB",-15.41,28.28,112.8,""],
+["Malawi","MWI",-13.98,33.78,23.3,""],
+["Mozambique","MOZ",-25.95,32.59,174.0,"mozambican"],
+["eSwatini","SWZ",-26.32,31.13,2.3,""],
+["Angola","AGO",-8.84,13.23,167.8,""],
+["Burundi","BDI",-3.38,29.36,3.7,""],
+["Israel","ISR",31.78,35.21,5.9,"israeli"],
+["Lebanon","LBN",33.87,35.51,2.3,"lebanese|hezbollah"],
+["Madagascar","MDG",-18.91,47.51,97.9,"malagasy"],
+["Palestine","PSE",31.81,35.24,0.7,"palestinian|gaza|west bank"],
+["Gambia","GMB",13.45,-16.59,2.2,""],
+["Tunisia","TUN",36.8,10.18,27.9,"tunisian"],
+["Algeria","DZA",36.77,3.05,373.6,"algerian"],
+["Jordan","JOR",31.95,35.93,17.9,""],
+["United Arab Emirates","ARE",24.47,54.37,17.1,"emirati|uae"],
+["Qatar","QAT",25.29,51.53,1.3,""],
+["Kuwait","KWT",29.37,47.98,2.8,""],
+["Iraq","IRQ",33.34,44.39,81.0,"iraqi"],
+["Oman","OMN",23.61,58.59,76.1,""],
+["Vanuatu","VUT",-17.73,168.32,2.4,""],
+["Cambodia","KHM",11.55,104.91,21.5,""],
+["Thailand","THA",13.75,100.51,121.0,"thai"],
+["Laos","LAO",17.97,102.6,63.9,""],
+["Myanmar","MMR",19.77,96.12,163.4,"burmese|myanmar|burma"],
+["Vietnam","VNM",21.04,105.85,105.7,"vietnamese"],
+["North Korea","PRK",39.02,125.75,34.6,"north korean|pyongyang|dprk"],
+["South Korea","KOR",37.57,127.0,14.1,"south korean"],
+["Mongolia","MNG",47.92,106.91,334.6,""],
+["India","IND",28.6,77.2,804.5,"indian"],
+["Bangladesh","BGD",23.73,90.41,26.5,"bangladeshi"],
+["Bhutan","BTN",27.47,89.64,5.2,""],
+["Nepal","NPL",27.72,85.31,32.5,"nepali|nepalese"],
+["Pakistan","PAK",33.7,73.16,228.0,"pakistani"],
+["Afghanistan","AFG",34.52,69.18,134.1,"afghan"],
+["Tajikistan","TJK",38.56,68.77,31.8,""],
+["Kyrgyzstan","KGZ",42.88,74.58,43.4,""],
+["Turkmenistan","TKM",37.95,58.38,105.1,""],
+["Iran","IRN",35.67,51.42,281.1,"iranian"],
+["Syria","SYR",33.5,36.3,32.7,"syrian"],
+["Armenia","ARM",40.18,44.51,7.3,"armenian"],
+["Sweden","SWE",59.35,18.1,177.0,"swedish"],
+["Belarus","BLR",53.9,27.56,46.0,"belarusian"],
+["Ukraine","UKR",50.44,30.51,126.7,"ukrainian|kyiv|kiev"],
+["Poland","POL",52.25,21.0,58.0,"polish"],
+["Austria","AUT",48.2,16.36,19.6,"austrian"],
+["Hungary","HUN",47.5,19.08,18.6,"hungarian"],
+["Moldova","MDA",47.01,28.86,10.1,""],
+["Romania","ROU",44.44,26.1,42.6,"romanian"],
+["Lithuania","LTU",54.68,25.32,13.6,""],
+["Latvia","LVA",56.95,24.1,16.8,""],
+["Estonia","EST",59.43,24.73,10.2,""],
+["Germany","DEU",52.52,13.4,69.3,"german"],
+["Bulgaria","BGR",42.69,23.31,18.5,""],
+["Greece","GRC",37.99,23.73,44.6,"greek"],
+["Turkey","TUR",39.93,32.86,118.5,"turkish|turkiye"],
+["Albania","ALB",41.33,19.82,5.3,""],
+["Croatia","HRV",45.8,16.0,23.1,"croatian"],
+["Switzerland","CHE",46.92,7.47,9.1,"swiss"],
+["Luxembourg","LUX",49.61,6.13,0.4,""],
+["Belgium","BEL",50.84,4.33,7.1,"belgian"],
+["Netherlands","NLD",52.35,4.91,10.2,"dutch|netherlands"],
+["Portugal","PRT",38.72,-9.15,17.1,"portuguese"],
+["Spain","ESP",40.4,-3.69,97.0,"spanish"],
+["Ireland","IRL",53.34,-6.25,13.7,"irish"],
+["New Caledonia","NCL",-21.18,165.51,7.1,""],
+["Solomon Is.","SLB",-9.44,159.95,25.0,""],
+["New Zealand","NZL",-41.3,174.78,146.4,"new zealand|kiwi"],
+["Australia","AUS",-35.28,149.13,1326.3,"australian"],
+["Sri Lanka","LKA",6.93,79.86,8.1,"sri lankan"],
+["China","CHN",39.93,116.39,2163.3,"chinese|prc"],
+["Taiwan","TWN",25.04,121.57,6.1,"taiwanese|taipei"],
+["Italy","ITA",41.9,12.48,123.1,"italian"],
+["Denmark","DNK",55.68,12.56,13.5,"danish"],
+["United Kingdom","GBR",51.5,-0.12,80.3,"british|u\\.k\\.|britain|england|scotland|wales"],
+["Iceland","ISL",64.15,-21.95,32.5,"icelandic"],
+["Azerbaijan","AZE",40.4,49.86,20.1,"azerbaijani"],
+["Georgia","GEO",41.73,44.79,16.6,"georgian"],
+["Philippines","PHL",14.61,120.98,121.0,"filipino|philippine"],
+["Malaysia","MYS",3.17,101.7,117.5,"malaysian"],
+["Brunei","BRN",4.88,114.93,1.8,""],
+["Slovenia","SVN",46.06,14.51,4.0,""],
+["Finland","FIN",60.18,24.93,112.2,"finnish"],
+["Slovakia","SVK",48.15,17.12,10.3,""],
+["Czechia","CZE",50.09,14.46,16.9,"czech"],
+["Eritrea","ERI",15.33,38.93,37.5,""],
+["Japan","JPN",35.69,139.75,234.3,"japanese"],
+["Paraguay","PRY",-25.29,-57.64,68.9,""],
+["Yemen","YEM",15.36,44.2,67.4,"yemeni|houthi"],
+["Saudi Arabia","SAU",24.64,46.77,332.6,"saudi"],
+["Antarctica","ATA",-73.02,-2.7,9622.6,""],
+["N. Cyprus","-99",35.18,33.43,2.4,""],
+["Cyprus","CYP",35.17,33.37,1.1,""],
+["Morocco","MAR",34.03,-6.84,227.9,"moroccan"],
+["Egypt","EGY",30.05,31.25,116.6,"egyptian"],
+["Libya","LBY",32.89,13.18,214.8,"libyan"],
+["Ethiopia","ETH",9.04,38.7,171.2,"ethiopian"],
+["Djibouti","DJI",11.6,43.15,2.9,""],
+["Somaliland","-99",10.47,46.35,2.4,""],
+["Uganda","UGA",0.32,32.58,31.1,"ugandan"],
+["Rwanda","RWA",-1.95,30.06,3.2,""],
+["Bosnia and Herz.","BIH",43.85,18.38,9.9,""],
+["North Macedonia","MKD",42.0,21.43,3.7,""],
+["Serbia","SRB",44.82,20.47,16.3,"serbian"],
+["Montenegro","MNE",42.47,19.27,3.1,""],
+["Kosovo","-99",42.55,20.96,2.4,""],
+["Trinidad and Tobago","TTO",10.65,-61.52,0.9,""],
+["S. Sudan","SSD",8.01,30.09,99.7,"south sudanese"]
+];
+const GAZ_REGION=[
+["Tibet",31.0,88.0],
+["Xinjiang",41.0,85.0],
+["Kashmir",34.1,76.5],
+["Ladakh",34.2,77.6],
+["Donbas",48.3,38.0],
+["Crimea",45.3,34.3],
+["Gaza",31.45,34.4],
+["West Bank",31.95,35.3],
+["Sinai",29.5,33.8],
+["Kurdistan",36.5,44.0],
+["Sahel",15.0,5.0],
+["Darfur",13.5,24.0],
+["Tigray",13.8,39.0],
+["Rakhine",20.1,93.5],
+["Balochistan",28.5,66.0],
+["Punjab",30.9,75.8],
+["Kerala",10.5,76.3],
+["Assam",26.2,92.9],
+["Sichuan",30.6,102.9],
+["Yunnan",25.0,101.5],
+["Guangdong",23.3,113.4],
+["Hokkaido",43.2,142.4],
+["Kyushu",32.7,130.8],
+["Luzon",16.0,121.0],
+["Mindanao",7.9,124.9],
+["Sumatra",-0.6,101.3],
+["Sulawesi",-2.0,120.5],
+["Bali",-8.4,115.2],
+["Papua",-4.3,138.0],
+["Red Sea",20.0,38.0],
+["Bab al-Mandeb",12.6,43.3],
+["Strait of Hormuz",26.6,56.3],
+["Taiwan Strait",24.5,119.5],
+["South China Sea",13.0,114.0],
+["Black Sea",43.4,34.3],
+["Baltic Sea",57.0,19.0],
+["Himalaya",28.6,84.0],
+["Everest",27.99,86.93],
+["Patagonia",-45.0,-70.0],
+["Siberia",62.0,95.0],
+["Chechnya",43.4,45.7],
+["Dagestan",42.9,47.0],
+["Nagorno-Karabakh",39.8,46.7],
+["Transnistria",47.2,29.1],
+["Kaliningrad",54.7,20.5],
+["Golan",33.0,35.8],
+["Idlib",35.9,36.6],
+["Mosul",36.34,43.13],
+["Fallujah",33.35,43.78],
+["Hodeidah",14.8,42.95],
+["Goma",-1.68,29.23]
+];
+const GAZ_CITY=[
+["Tokyo",35.69,139.75],
+["New York",40.75,-73.98],
+["Mexico City",19.44,-99.13],
+["Mumbai",19.02,72.86],
+["Sao Paulo",-23.56,-46.63],
+["Delhi",28.67,77.23],
+["Shanghai",31.22,121.43],
+["Kolkata",22.5,88.32],
+["Dhaka",23.73,90.41],
+["Buenos Aires",-34.6,-58.4],
+["Los Angeles",33.99,-118.18],
+["Karachi",24.87,66.99],
+["Cairo",30.05,31.25],
+["Rio de Janeiro",-22.92,-43.23],
+["Osaka",34.75,135.46],
+["Beijing",39.93,116.39],
+["Manila",14.61,120.98],
+["Moscow",55.75,37.61],
+["Istanbul",41.11,29.01],
+["Paris",48.87,2.33],
+["Seoul",37.57,127.0],
+["Lagos",6.45,3.39],
+["Jakarta",-6.17,106.83],
+["Chicago",41.83,-87.75],
+["Guangzhou",23.15,113.32],
+["London",51.5,-0.12],
+["Lima",-12.05,-77.05],
+["Tehran",35.67,51.42],
+["Kinshasa",-4.33,15.31],
+["Bogota",4.6,-74.09],
+["Shenzhen",22.55,114.12],
+["Wuhan",30.58,114.27],
+["Hong Kong",22.31,114.18],
+["Tianjin",39.13,117.2],
+["Chennai",13.09,80.28],
+["Taipei",25.04,121.57],
+["Bengaluru",12.97,77.56],
+["Bangkok",13.75,100.51],
+["Lahore",31.56,74.35],
+["Chongqing",29.57,106.59],
+["Hyderabad",17.4,78.48],
+["Amaravati",16.53,80.52],
+["Santiago",-33.45,-70.67],
+["Miami",25.79,-80.23],
+["Belo Horizonte",-19.91,-43.92],
+["Madrid",40.4,-3.69],
+["Philadelphia",40.0,-75.17],
+["Ahmedabad",23.03,72.58],
+["Ho Chi Minh City",10.78,106.69],
+["Toronto",43.7,-79.42],
+["Singapore",1.29,103.85],
+["Luanda",-8.84,13.23],
+["Baghdad",33.34,44.39],
+["Barcelona",41.39,2.18],
+["Dallas",32.82,-96.84],
+["Shenyeng",41.81,123.45],
+["Khartoum",15.59,32.53],
+["Pune",18.53,73.85],
+["Sydney",-33.92,151.18],
+["St. Petersburg",59.94,30.31],
+["Chattogram",22.33,91.8],
+["Dongguan",23.05,113.74],
+["Atlanta",33.83,-84.4],
+["Boston",42.33,-71.07],
+["Riyadh",24.64,46.77],
+["Houston",29.82,-95.34],
+["Hanoi",21.04,105.85],
+["Washington, D.C.",38.9,-77.01],
+["Guadalajara",20.67,-103.33],
+["Melbourne",-37.82,144.97],
+["Alexandria",31.2,29.95],
+["Chengdu",30.67,104.07],
+["Detroit",42.33,-83.08],
+["Rangoon",16.79,96.16],
+["Xian",34.28,108.89],
+["Porto Alegre",-30.05,-51.2],
+["Surat",21.2,72.84],
+["Abidjan",5.32,-4.04],
+["Brasilia",-15.78,-47.92],
+["Ankara",39.93,32.86],
+["Monterrey",25.67,-100.33],
+["Nanjing",32.05,118.78],
+["Montreal",45.5,-73.59],
+["Guiyang",26.58,106.72],
+["Recife",-8.07,-34.92],
+["Harbin",45.75,126.65],
+["Fortaleza",-3.75,-38.58],
+["Urumqi",43.81,87.57],
+["Phoenix",33.54,-112.07],
+["Salvador",-12.97,-38.48],
+["Busan",35.1,129.01],
+["San Francisco",37.77,-122.42],
+["Johannesburg",-26.17,28.03],
+["Berlin",52.52,13.4],
+["Algiers",36.77,3.05],
+["Rome",41.9,12.48],
+["Pyongyang",39.02,125.75],
+["Medellin",6.28,-75.58],
+["Kabul",34.52,69.18],
+["Athens",37.99,23.73],
+["Nagoya",35.16,136.91],
+["Cape Town",-33.92,18.43],
+["Changchun",43.87,125.34],
+["Casablanca",33.6,-7.62],
+["Dalian",38.92,121.63],
+["Kanpur",26.46,80.32],
+["Kano",12.0,8.52],
+["Tel Aviv-Yafo",32.08,34.77],
+["Addis Ababa",9.04,38.7],
+["Curitiba",-25.42,-49.32],
+["Seattle",47.57,-122.34],
+["Zibo",36.8,118.05],
+["Jeddah",21.52,39.22],
+["Nairobi",-1.28,36.81],
+["Hangzhou",30.25,120.17],
+["Caracas",10.5,-66.92],
+["Milan",45.47,9.2],
+["Kunming",25.07,102.68],
+["Dar es Salaam",-6.8,39.27],
+["Jaipur",26.92,75.81],
+["San Diego",32.82,-117.18],
+["Taiyuan",37.88,112.54],
+["Frankfurt",50.1,8.68],
+["Qingdao",36.09,120.33],
+["Surabaya",-7.25,112.75],
+["Lisbon",38.72,-9.15],
+["Jinan",36.68,116.99],
+["Fukuoka",33.6,130.41],
+["Campinas",-22.9,-47.1],
+["Kaohsiung",22.63,120.27],
+["Aleppo",36.23,37.17],
+["Durban",-29.86,30.98],
+["Kiev",50.44,30.51],
+["Lucknow",26.86,80.91],
+["Zhengzhou",34.76,113.66],
+["Taichung",24.15,120.68],
+["Ibadan",7.38,3.93],
+["Minneapolis",44.98,-93.25],
+["Fuzhou",26.08,119.3],
+["Changsha",28.2,112.97],
+["Dakar",14.72,-17.48],
+["Izmir",38.44,27.15],
+["Lanzhou",36.06,103.79],
+["Incheon",37.48,126.64],
+["Sapporo",43.08,141.34],
+["Xiamen",24.45,118.08],
+["Guayaquil",-2.22,-79.92],
+["George Town",5.41,100.33],
+["San Juan",18.44,-66.13],
+["Mashhad",36.27,59.57],
+["Damascus",33.5,36.3],
+["Nagpur",21.17,79.09],
+["Jinxi",40.75,120.83],
+["Shijiazhuang",38.05,114.48],
+["Tunis",36.8,10.18],
+["Vienna",48.2,16.36],
+["Jilin",43.85,126.55],
+["Omdurman",15.62,32.48],
+["Bandung",-6.95,107.57],
+["Wenzhou",28.02,120.65],
+["Nanchang",28.68,115.88],
+["Tampa",27.95,-82.46],
+["Vancouver",49.28,-123.12],
+["Denver",39.74,-104.99],
+["Birmingham",52.48,-1.92],
+["Baltimore",39.3,-76.62],
+["Cali",3.4,-76.5],
+["Sendai",38.29,141.02],
+["Naples",40.84,14.24],
+["Manchester",53.5,-2.25],
+["St. Louis",38.64,-90.24],
+["Puebla",19.05,-98.2],
+["Tripoli",32.89,13.18],
+["Tashkent",41.31,69.29],
+["Nanchong",30.78,106.13],
+["Havana",23.13,-82.37],
+["Nanning",22.82,108.32],
+["Belem",-1.45,-48.48],
+["Patna",25.63,85.13],
+["Santo Domingo",18.47,-69.9],
+["Zaozhuang",34.88,117.57],
+["Baku",40.4,49.86],
+["Accra",5.55,-0.22],
+["Yantai",37.53,121.4],
+["Medan",3.58,98.65],
+["Santa Cruz",-17.75,-63.23],
+["Xuzhou",34.28,117.18],
+["Linyi",35.08,118.33],
+["Maracaibo",10.73,-71.66],
+["Kuwait City",29.37,47.98],
+["Hiroshima",34.39,132.44],
+["Baotou",40.65,109.82],
+["Hefei",31.85,117.28],
+["Indore",22.72,75.86],
+["Goiania",-16.72,-49.3],
+["Sanaa",15.36,44.2],
+["Port-au-Prince",18.54,-72.34],
+["Haiphong",20.83,106.68],
+["Suzhou",33.64,116.98],
+["Nanyang",33.0,112.53],
+["Bucharest",44.44,26.1],
+["Ningbo",29.88,121.55],
+["Douala",4.06,9.71],
+["Cleveland",41.47,-81.7],
+["Portland",45.52,-122.68],
+["Asuncion",-25.29,-57.64],
+["Brisbane",-27.45,153.03],
+["Beirut",33.87,35.51],
+["Pittsburgh",40.43,-80.0],
+["Las Vegas",36.21,-115.22],
+["Kyoto",35.03,135.75],
+["Minsk",53.9,27.56],
+["Barranquilla",10.96,-74.8],
+["Valencia",10.23,-67.98],
+["Hamburg",53.55,10.0],
+["Vadodara",22.31,73.18],
+["Manaus",-3.1,-60.0],
+["Wuxi",31.58,120.3],
+["Palembang",-2.98,104.75],
+["San Bernardino",34.12,-117.3],
+["Brussels",50.84,4.33],
+["Bhopal",23.25,77.41],
+["Hohhot",40.82,111.66],
+["Warsaw",52.25,21.0],
+["Rabat",34.03,-6.84],
+["Quito",-0.21,-78.5],
+["Antananarivo",-18.91,47.51],
+["Coimbatore",11.0,76.95],
+["Daqing",46.58,125.0],
+["Budapest",47.5,19.08],
+["San Jose",37.3,-121.85],
+["Turin",45.07,7.67],
+["Ludhiana",30.93,75.87],
+["Qiqihar",47.35,123.99],
+["Anshan",41.12,122.94],
+["Cincinnati",39.16,-84.46],
+["Handan",36.58,114.48],
+["Isfahan",32.7,51.7],
+["Yaounde",3.87,11.51],
+["Sacramento",38.58,-121.47],
+["Shantou",23.37,116.67],
+["Agra",27.17,78.01],
+["Zhanjiang",21.2,110.38],
+["La Paz",-16.5,-68.15],
+["Abuja",9.09,7.53],
+["Harare",-17.82,31.04],
+["Khulna",22.84,89.56],
+["Tijuana",32.5,-117.08],
+["Perth",-31.95,115.84],
+["Vishakhapatnam",17.73,83.3],
+["Multan",30.2,71.45],
+["Kochi",10.02,76.22],
+["Gujranwala",32.16,74.18],
+["Montevideo",-34.86,-56.17],
+["Florence",43.78,11.25],
+["Bamako",12.65,-8.0],
+["Conakry",9.53,-13.68],
+["Bursa",40.2,29.07],
+["Leon",21.15,-101.7],
+["Nasik",20.0,73.78],
+["San Antonio",29.49,-98.51],
+["Kansas City",39.11,-94.61],
+["Daejeon",36.34,127.42],
+["Neijiang",29.58,105.05],
+["Phnom Penh",11.55,104.91],
+["Quanzhou",24.9,118.58],
+["Kharkiv",50.0,36.25],
+["Lome",6.13,1.22],
+["Cordoba",-31.4,-64.18],
+["Huainan",32.63,116.98],
+["Doha",25.29,51.53],
+["Kuala Lumpur",3.17,101.7],
+["Maputo",-25.95,32.59],
+["Kaduna",10.52,7.44],
+["Ft. Worth",32.74,-97.34],
+["Gwangju",35.17,126.91],
+["Indianapolis",39.75,-86.17],
+["San Salvador",13.71,-89.2],
+["Lyon",45.77,4.83],
+["Kampala",0.32,32.58],
+["Tabriz",38.09,46.3],
+["The Hague",52.08,4.27],
+["Davao",7.11,125.63],
+["Marseille",43.29,5.37],
+["Meerut",29.0,77.7],
+["Mianyang",31.47,104.77],
+["Semarang",-6.96,110.42],
+["Faridabad",28.44,77.31],
+["Novosibirsk",55.03,82.96],
+["Milwaukee",43.05,-87.92],
+["Makkah",21.43,39.82],
+["Dubai",25.23,55.28],
+["Auckland",-36.85,174.76],
+["Brazzaville",-4.26,15.28],
+["Lubumbashi",-11.68,27.48],
+["Varanasi",25.33,83.0],
+["Orlando",28.51,-81.38],
+["Ghaziabad",28.66,77.41],
+["Pretoria",-25.7,28.23],
+["Lusaka",-15.41,28.28],
+["Asansol",23.69,86.98],
+["Mosul",36.35,43.14],
+["Yekaterinburg",56.85,60.6],
+["Peshawar",34.01,71.53],
+["Mandalay",21.97,96.08],
+["Jamshedpur",22.79,86.2],
+["Mbuji-Mayi",-6.15,23.6],
+["Madurai",9.92,78.12],
+["Adana",37.0,35.32],
+["Jabalpur",23.18,79.95],
+["Panama City",8.97,-79.53],
+["Nizhny Novgorod",56.33,44.0],
+["Chifeng",42.27,118.95],
+["Munich",48.13,11.57],
+["Huaiyin",33.58,119.03],
+["Stockholm",59.35,18.1],
+["Makassar",-5.14,119.43],
+["Rajkot",22.31,70.8],
+["Dhanbad",23.8,86.42],
+["Shiraz",29.63,52.57],
+["Geneva",46.21,6.14],
+["Tianshui",34.6,105.92],
+["Liupanshui",26.6,104.83],
+["Seville",37.41,-5.98],
+["Amritsar",31.64,74.87],
+["Vila Velha",-20.37,-40.32],
+["Almaty",43.33,76.91],
+["Rosario",-32.95,-60.67],
+["Allahabad",25.46,81.84],
+["Benin City",6.34,5.62],
+["Maceio",-9.62,-35.73],
+["Sofia",42.69,23.31],
+["Banghazi",32.12,20.06],
+["Raleigh",35.82,-78.64],
+["Prague",50.09,14.46],
+["Austin",30.27,-97.74],
+["Glasgow",55.88,-4.25],
+["Ouagadougou",12.37,-1.53],
+["Ottawa",45.42,-75.7],
+["Adelaide",-34.93,138.6],
+["Torreon",25.57,-103.42],
+["Srinagar",34.1,74.81],
+["Vijayawada",16.52,80.63],
+["Samara",53.2,50.15],
+["Omsk",54.99,73.4],
+["Yulin",22.63,110.15],
+["Kazan",55.75,49.12],
+["Helsinki",60.18,24.93],
+["Aurangabad",19.9,75.32],
+["Calgary",51.08,-114.08],
+["Zurich",47.38,8.55],
+["Yerevan",40.18,44.51],
+["Ankang",32.68,109.02],
+["Mogadishu",2.07,45.36],
+["Tbilisi",41.73,44.79],
+["Huambo",-12.75,15.76],
+["Belgrade",44.82,20.47],
+["Bhilai",21.22,81.43],
+["Chelyabinsk",55.16,61.44],
+["Natal",-5.78,-35.24],
+["Dushanbe",38.56,68.77],
+["Kobenhavn",55.68,12.56],
+["Memphis",35.12,-90.0],
+["Amman",31.95,35.93],
+["Dublin",53.34,-6.25],
+["Edmonton",53.55,-113.5],
+["Sholapur",17.67,75.9],
+["Rostov",47.24,39.71],
+["Dnipro",48.48,35.0],
+["Xining",36.62,101.77],
+["Norfolk",36.85,-76.28],
+["Lille",50.65,3.08],
+["Ranchi",23.37,85.33],
+["Monrovia",6.31,-10.8],
+["Sao Luis",-2.51,-44.27],
+["Amsterdam",52.35,4.91],
+["Jerusalem",31.78,35.21],
+["Guatemala",14.62,-90.53],
+["Florianopolis",-27.58,-48.52],
+["Port Elizabeth",-33.97,25.6],
+["Port Harcourt",4.81,7.01],
+["Jiamusi",46.83,130.35],
+["Bridgeport",41.18,-73.2],
+["Ufa",54.79,56.04],
+["Hengyang",26.88,112.59],
+["Buffalo",42.88,-78.88],
+["Medina",24.5,39.58],
+["Fez",34.06,-5.0],
+["Da Nang",16.06,108.25],
+["Baoshan",25.12,99.15],
+["Aden",12.78,45.01],
+["Perm",58.0,56.25],
+["Ahvaz",31.28,48.72],
+["Jodhpur",26.29,73.01],
+["San Luis Potosi",22.17,-101.0],
+["Odessa",46.49,30.71],
+["Yinchuan",38.47,106.27],
+["Ndjamena",12.12,15.05],
+["Jacksonville",30.33,-81.67],
+["Donetsk",48.0,37.83],
+["Guilin",25.28,110.28],
+["Volgograd",48.71,44.5],
+["Guwahati",26.16,91.77],
+["Chandigarh",30.72,76.78],
+["Gwalior",26.23,78.18],
+["Salt Lake City",40.78,-111.93],
+["Jixi",45.3,130.97],
+["Merida",20.97,-89.62],
+["Pingxiang",27.62,113.85],
+["Thiruvananthapuram",8.5,76.95],
+["Kozhikode",11.25,75.77],
+["Ogbomosho",8.13,4.24],
+["Tiruchirappalli",10.81,78.69],
+["General Santos",6.11,125.17],
+["Tulsa",36.12,-95.93],
+["Tegucigalpa",14.1,-87.22],
+["Kingston",17.98,-76.77],
+["Naypyidaw",19.77,96.12],
+["Krasnoyarsk",56.02,92.86],
+["Djibouti",11.6,43.15],
+["Managua",12.15,-86.27],
+["Konya",37.88,32.47],
+["Niamey",13.52,2.11],
+["Richmond",37.55,-77.45],
+["Teresina",-5.09,-42.78],
+["Naha",26.21,127.67],
+["Albuquerque",35.1,-106.64],
+["Maiduguri",11.85,13.16],
+["Tirana",41.33,19.82],
+["Kathmandu",27.72,85.31],
+["Mendoza",-32.88,-68.82],
+["Hubballi",15.36,75.12],
+["Concepcion",-36.83,-73.05],
+["Mysuru",12.31,76.66],
+["Cartagena",10.4,-75.52],
+["Mexicali",32.65,-115.48],
+["Ulaanbaatar",47.92,106.91],
+["Tongliao",43.62,122.27],
+["Mombasa",-4.04,39.69],
+["Omaha",41.24,-96.01],
+["Nashville",36.17,-86.78],
+["Bilbao",43.25,-2.93],
+["Raipur",21.24,81.63],
+["Salem",11.67,78.18],
+["Marrakesh",31.63,-8.0],
+["Basra",30.52,47.81],
+["Bandar Lampung",-5.43,105.27],
+["Palermo",38.13,13.35],
+["Cardiff",51.5,-3.23],
+["Kigali",-1.95,30.06],
+["Tampico",22.3,-97.87],
+["Jullundur",31.34,75.57],
+["Padang",-0.96,100.36],
+["Valparaiso",-33.05,-71.62],
+["Shache",38.43,77.25],
+["Toulouse",43.62,1.45],
+["Voronezh",51.73,39.27],
+["Bhubaneshwar",20.27,85.83],
+["Saratov",51.58,46.03],
+["Bishkek",42.88,74.58],
+["Oslo",59.92,10.75],
+["Bangui",4.37,18.56],
+["Warri",5.52,5.76],
+["Tucuman",-26.81,-65.22],
+["Thessaloniki",40.7,22.88],
+["Kota",25.18,75.83],
+["Freetown",8.47,-13.24],
+["Yueyang",29.38,113.1],
+["Tucson",32.21,-110.89],
+["Arequipa",-16.42,-71.53],
+["Cebu",10.32,123.9],
+["Rajshahi",24.38,88.6],
+["Culiacan",24.83,-107.38],
+["Cuiaba",-15.57,-56.09],
+["Aligarh",27.89,78.06],
+["Malang",-7.98,112.61],
+["Lvov",49.83,24.03],
+["Bordeaux",44.85,-0.6],
+["Oran",35.71,-0.62],
+["Chihuahua",28.65,-106.09],
+["Jammu",32.71,74.84],
+["Oklahoma City",35.47,-97.52],
+["Moradabad",28.84,78.75],
+["Honolulu",21.31,-157.86],
+["New Orleans",30.0,-90.04],
+["Islamabad",33.7,73.16],
+["Campo Grande",-20.45,-54.62],
+["Mangaluru",12.9,74.85],
+["Zamboanga",6.92,122.08],
+["Quetta",30.22,67.02],
+["Trujillo",-8.12,-79.02],
+["Kananga",-5.89,22.4],
+["Cotonou",6.4,2.52],
+["Krakow",50.06,19.96],
+["Rochester",43.17,-77.62],
+["Vientiane",17.97,102.6],
+["El Paso",31.78,-106.51],
+["Taizz",13.61,44.04],
+["Kolhapur",16.7,74.22],
+["Ciudad Guayana",8.37,-62.62],
+["Riga",56.95,24.1],
+["Nouakchott",18.09,-15.98],
+["Gdansk",54.36,18.64],
+["St. Paul",44.94,-93.08],
+["Muscat",23.61,58.59],
+["Sokoto",13.06,5.24],
+["Ashgabat",37.95,58.38],
+["Zagreb",45.8,16.0],
+["Shaoguan",24.8,113.58],
+["Acapulco",16.85,-99.92],
+["Kandahar",31.61,65.69],
+["Samarqand",39.67,66.94],
+["Sarajevo",43.85,18.38],
+["Chisinau",47.01,28.86],
+["Lilongwe",-13.98,33.78],
+["Asmara",15.33,38.93],
+["Abu Dhabi",24.47,54.37],
+["Port Louis",-20.17,57.5],
+["Libreville",0.39,9.46],
+["Manama",26.24,50.58],
+["Vilnius",54.68,25.32],
+["Skopje",42.0,21.43],
+["Hargeysa",9.56,44.07],
+["Pristina",42.67,21.17],
+["Bloemfontein",-29.12,26.23],
+["Bratislava",48.15,17.12],
+["Bissau",11.87,-15.6],
+["Tallinn",59.43,24.73],
+["Wellington",-41.3,174.78],
+["Valletta",35.9,14.51],
+["Maseru",-29.32,27.48],
+["Astana",51.18,71.43],
+["Bujumbura",-3.38,29.36],
+["Canberra",-35.28,149.13],
+["New Delhi",28.6,77.2],
+["Ljubljana",46.06,14.51],
+["Bandar Seri Begawan",4.88,114.93],
+["Port-of-Spain",10.65,-61.52],
+["Port Moresby",-9.46,147.19],
+["Bern",46.92,7.47],
+["Windhoek",-22.57,17.08],
+["Georgetown",6.8,-58.17],
+["Paramaribo",5.84,-55.17],
+["Dili",-8.56,125.58],
+["Nassau",25.08,-77.35],
+["Sucre",-19.04,-65.26],
+["Nicosia",35.17,33.37],
+["Colombo",6.93,79.86],
+["Gaborone",-24.65,25.91],
+["Yamoussoukro",6.82,-5.28],
+["Bridgetown",13.1,-59.62],
+["Suva",-18.13,178.44],
+["Reykjavik",64.15,-21.95],
+["Malabo",3.75,8.78],
+["Podgorica",42.47,19.27],
+["Moroni",-11.7,43.24],
+["Praia",14.92,-23.52],
+["Male",4.17,73.5],
+["Luxembourg",49.61,6.13],
+["Thimphu",27.47,89.64],
+["Mbabane",-26.32,31.13],
+["Sao Tome",0.33,6.73],
+["Honiara",-9.44,159.95],
+["Apia",-13.84,-171.74],
+["Andorra",42.5,1.52],
+["Hamilton",32.29,-64.78],
+["Kingstown",13.15,-61.21],
+["Port Vila",-17.73,168.32],
+["Banjul",13.45,-16.59],
+["Nukualofa",-21.14,-175.22],
+["Castries",14.0,-61.0],
+["Monaco",43.74,7.41],
+["Vaduz",47.13,9.52],
+["Saint John's",17.12,-61.85],
+["Saint George's",12.05,-61.74],
+["Victoria",-4.62,55.45],
+["San Marino",43.94,12.44],
+["Tarawa",1.34,173.02],
+["Majuro",7.1,171.38],
+["Roseau",15.3,-61.39],
+["Basseterre",17.3,-62.72],
+["Belmopan",17.25,-88.77],
+["Melekeok",7.49,134.63],
+["Funafuti",-8.52,179.22],
+["Palikir",6.92,158.15],
+["Vatican City",41.9,12.45]
+];
+
+// Google News appends " - Publisher" to every title. Left in place the
+// geocoder reads "New York Post" as New York and files a Himalayan flood in
+// Manhattan, so the suffix comes off before anything else looks at the text.
+function wireStripSource(t){
+  // The publisher is whatever follows the LAST " - ", and mastheads contain
+  // hyphens of their own — Post-Gazette, Star-Advertiser. A pattern that
+  // refused hyphens left "Honolulu Star-Advertiser" in the headline, the
+  // geocoder read Honolulu, and a Himalayan flood was plotted in Hawaii.
+  const raw=(t||'').trim();
+  const i=raw.lastIndexOf(' - ');
+  if(i>0){
+    const tail=raw.slice(i+3).trim();
+    if(tail.length<=45&&tail.split(/\s+/).length<=6)
+      return{title:raw.slice(0,i).trim(),src:tail};
   }
+  return{title:raw,src:''};
 }
-// --- GDELT GEO 2.0 ---
-// The DOC API gives articles; GEO gives the places those articles are about, as
-// GeoJSON refreshed every 15 minutes. That is what belongs on a map — DOC's
-// sourcelat/sourcelon is only where the newsroom is, not where the event is.
-// NOTE (Aug 2026): api.gdeltproject.org/api/v2/geo/geo is returning 404 for
-// every documented parameter form, including GDELT's own published example,
-// while the DOC endpoint on the same host still answers. That is an upstream
-// outage, not a bad query — this is the canonical URL and will start working
-// again the moment they restore it. The feed reports OFFLINE until then.
-async function fetchGDELTGeo(){
-  feedWait('f35');
-  try{
-    const url='https://api.gdeltproject.org/api/v2/geo/geo?query='+
-      encodeURIComponent('(military OR strike OR attack OR conflict OR explosion) sourcelang:english')+
-      '&format=geojson&mode=pointdata&timespan=1d&maxpoints=500';
-    const d=await fetchR(corsUrl(url),1,15000);
-    state.gdeltMarkers.forEach(m=>map.removeLayer(m));state.gdeltMarkers=[];
-    let n=0;
-    for(const f of d.features||[]){
-      const c=f.geometry?.coordinates;
-      if(!c||!isFinite(c[0])||!isFinite(c[1]))continue;
-      const p=f.properties||{};
-      const count=Number(p.count)||1;
-      const mk=L.circleMarker([c[1],c[0]],{
-        radius:Math.min(4+Math.log2(count+1)*1.6,14),
-        color:'#4dd4ff',weight:1,fillColor:'#4dd4ff',fillOpacity:0.18
-      }).bindPopup(`<b>${p.name||'Location'}</b><br>${count} mention${count===1?'':'s'} in 24h<br><span style="opacity:.7">${(p.html||'').replace(/<[^>]+>/g,' ').slice(0,180)}</span>`);
-      if(state.layers.gdelt)mk.addTo(map);
-      state.gdeltMarkers.push(mk);n++;
-    }
-    state.sources.gdeltGeo=n;feedDot('f35',n>0);
-  }catch(e){console.warn('GDELT GEO error:',e);feedDot('f35',false);}
+function wireNorm(t){
+  return (t||'').toLowerCase().replace(/[^a-z0-9 ]+/g,' ').replace(/\s+/g,' ').trim();
 }
 
+/* ---------- GEOCODER ----------
+   Matches place names in a headline against the gazetteer. Specificity wins:
+   a city pins tighter than a region, a region tighter than a country. When a
+   story names two countries — "Nepal-China border" — the smaller one is the
+   better guess, because a centroid inside Nepal is ~200km from the event
+   while China's is ~2,000km away in Xinjiang.
+   Short names that are far more often something else in English are only
+   accepted alongside a second geographic hit.
+*/
+const WIRE_AMBIG=new Set(['georgia','jordan','chad','turkey','guinea','niger','mali','chile',
+  'panama','palau','malta','samoa','tonga','nauru','niue','bath','reading','mobile','phoenix',
+  'salvador','cordoba','valencia','santiago','victoria','columbia','washington','hamilton']);
+
+let _wireGaz=null;
+function wireGaz(){
+  if(_wireGaz)return _wireGaz;
+  const g=[];
+  for(const c of GAZ_COUNTRY){
+    const [n,iso,lat,lon,area,alias]=c;
+    g.push({n,key:iso,lat,lon,spec:2,area,
+      re:new RegExp('\\b('+wireEsc(n)+(alias?'|'+alias:'')+')\\b','i')});
+  }
+  for(const r of GAZ_REGION)
+    g.push({n:r[0],key:'R:'+r[0],lat:r[1],lon:r[2],spec:2.5,area:0,
+      re:new RegExp('\\b'+wireEsc(r[0])+'\\b','i')});
+  for(const c of GAZ_CITY.concat(GAZ_ALT))
+    g.push({n:c[0],key:'C:'+c[0],lat:c[1],lon:c[2],spec:3,area:0,
+      re:new RegExp('\\b'+wireEsc(c[0])+'\\b','i')});
+  _wireGaz=g;
+  return g;
+}
+function wireEsc(s){return s.replace(/[.*+?^${}()|[\]\\]/g,'\\$&');}
+// Natural Earth still carries Kiev, Odessa and Lvov. Headlines do not, so the
+// current spellings are added as first-class city entries.
+const GAZ_ALT=[["Kyiv",50.44,30.51],["Odesa",46.48,30.73],["Lviv",49.84,24.03],
+["Mariupol",47.10,37.54],["Zaporizhzhia",47.84,35.14],["Kherson",46.64,32.62],
+["Mumbai",19.08,72.88],["Kolkata",22.57,88.36],["Chennai",13.08,80.27],
+["Bengaluru",12.97,77.59],["Yangon",16.87,96.20],["Almaty",43.24,76.89],
+["Aleppo",36.20,37.13],["Sanaa",15.35,44.21],["Kathmandu",27.72,85.32],
+["Pokhara",28.21,83.99],["Kryvyi Rih",47.91,33.39],["Chernihiv",51.49,31.29],
+["Sumy",50.91,34.80],["Poltava",49.59,34.55],["Vinnytsia",49.23,28.47],
+["Mykolaiv",46.98,31.99],["Kramatorsk",48.73,37.58],["Pokrovsk",48.28,37.18],
+["Luhansk",48.57,39.30],["Lozova",48.89,36.32],["Dnipro",48.46,35.05],
+["Rafah",31.29,34.25],["Khan Younis",31.34,34.31],["Beit Lahia",31.55,34.50],
+["Kharkiv",49.99,36.23],["Shigatse",29.27,88.88],["Lhasa",29.65,91.10]];
+
+function wireGeocode(text){
+  const t=' '+(text||'')+' ';
+  const hits=[];
+  for(const e of wireGaz()){
+    const m=e.re.exec(t);
+    if(!m)continue;
+    // "Russia launches a strike on Kyiv" names the attacker first and the
+    // place second. Whatever sits behind a locative preposition or a verb of
+    // attack is where it happened, which beats naming order.
+    const lead=t.slice(Math.max(0,m.index-26),m.index);
+    hits.push({e,at:m.index,
+      loc:/\b(?:in|on|at|near|across|inside|into|toward|towards|hits?|hit|struck|strikes?|targets?|targeting|pummels?|batters?|slams?)\s+(?:the\s+|northern\s+|southern\s+|eastern\s+|western\s+|central\s+)?$/i.test(lead)});
+  }
+  if(!hits.length)return null;
+  const strong=hits.filter(h=>!WIRE_AMBIG.has(h.e.n.toLowerCase()));
+  const pool=strong.length?strong:(hits.length>1?hits:[]);
+  if(!pool.length)return null;
+  const wide=pool.filter(h=>h.e.spec<3);                  // countries and regions
+  // A city named alongside a country half a world away is where the story is
+  // being *reported*, not where it happened: "Cleveland Nepali student rallies
+  // support after Nepal flash flood" is a Nepal event. Kyiv-and-Ukraine sits
+  // well inside the tolerance and still pins to the city.
+  const consistent=h=>h.e.spec<3||!wide.length||
+    wide.some(w=>wireDist(h.e.lat,h.e.lon,w.e.lat,w.e.lon)<=1500);
+  const usable=pool.filter(consistent);
+  const rank=usable.length?usable:wide.length?wide:pool;
+  rank.sort((a,b)=>{
+    if(b.e.spec!==a.e.spec)return b.e.spec-a.e.spec;      // city > region > country
+    // Of two countries in one headline the smaller pins the event better —
+    // "Nepal-China border" belongs in Nepal. That only holds for neighbours
+    // though; "160 dead in Nepal, including Israeli" names two countries
+    // 4,000km apart, and there the one named first is the subject.
+    if(a.e.spec===2&&b.e.spec===2&&a.e.area!==b.e.area
+       &&wireDist(a.e.lat,a.e.lon,b.e.lat,b.e.lon)<=1500)return a.e.area-b.e.area;
+    if(a.loc!==b.loc)return a.loc?-1:1;                   // the place acted upon
+    return a.at-b.at;                                     // else whichever is named first
+  });
+  const best=rank[0].e;
+  return {name:best.n,key:best.key,lat:best.lat,lon:best.lon,spec:best.spec,
+          also:rank.slice(1,3).map(h=>h.e.n)};
+}
+
+/* ---------- SEVERITY ----------
+   Category weight plus whatever casualty figure the headline states. Both are
+   read off the text, so this is a triage score for ranking and thresholding,
+   not a claim about ground truth.
+*/
+const WIRE_CAT=[
+  {t:'NUCLEAR', w:96, re:/\bnuclear (?:test|strike|attack|weapon)|\bicbm\b|ballistic missile (?:launch|test)|detonat/i},
+  {t:'WAR',     w:88, re:/\binvasion\b|invades|declares war|\bcoup\b|martial law|mobilis|mobiliz/i},
+  {t:'STRIKE',  w:72, re:/air ?strike|missile strike|drone strike|shelling|bombard|offensive|incursion|artillery/i},
+  {t:'QUAKE',   w:74, re:/earthquake|magnitude \d|tsunami|aftershock/i},
+  {t:'FLOOD',   w:70, re:/flood|deluge|landslide|mudslide|glacial|glacier|avalanche|dam burst|torrent/i},
+  {t:'STORM',   w:66, re:/cyclone|hurricane|typhoon|tornado|super ?storm|storm surge/i},
+  {t:'ERUPT',   w:70, re:/volcan|erupt|lava|ash cloud/i},
+  {t:'ATTACK',  w:68, re:/terror|bombing|suicide attack|massacre|mass shooting|gunmen|hostage|ambush/i},
+  {t:'BLAST',   w:62, re:/explosion|blast|detonation|derail|collapse|capsiz|sinks|crash(?:es|ed)?\b/i},
+  {t:'FIRE',    w:52, re:/wildfire|bushfire|forest fire|blaze/i},
+  {t:'HEALTH',  w:58, re:/outbreak|epidemic|pandemic|cholera|ebola|marburg|bird flu|h5n1/i},
+  {t:'EMERG',   w:56, re:/evacuat|state of emergency|mass casualt|disaster declar|rescue operation/i},
+  {t:'UNREST',  w:42, re:/protest|unrest|riot|crackdown|clashes|uprising|curfew/i},
+  {t:'CYBER',   w:40, re:/cyber ?attack|ransomware|data breach|hacked/i},
+  {t:'DIPLO',   w:26, re:/sanction|embargo|expels|summon(?:s|ed) (?:the )?ambassador|treaty|ceasefire/i},
+];
+const WIRE_WORDNUM={dozens:24,scores:40,hundreds:200,thousands:2000,'tens of thousands':20000,millions:1000000};
+
+// "at least 160 killed", "nearly 1,000 missing", "hundreds feared dead".
+function wireToll(text){
+  const t=' '+(text||'').toLowerCase()+' ';
+  const grab=(re)=>{
+    const m=re.exec(t);
+    if(!m)return 0;
+    const raw=m[1];
+    if(/^\d/.test(raw))return parseInt(raw.replace(/,/g,''),10)||0;
+    return WIRE_WORDNUM[raw]||0;
+  };
+  const num='([\\d][\\d,]*|tens of thousands|thousands|hundreds|dozens|scores|millions)';
+  const dead=grab(new RegExp(num+'\\s+(?:\\w+\\s+){0,3}?(?:killed|dead|died|deaths|fatalities|bodies)\\b'))
+          || grab(new RegExp('(?:kills?|killed|leaves?|claims)\\s+(?:at least\\s+|nearly\\s+|about\\s+|some\\s+)?'+num));
+  const missing=grab(new RegExp(num+'\\s+(?:\\w+\\s+){0,3}?(?:missing|unaccounted)\\b'));
+  const hurt=grab(new RegExp(num+'\\s+(?:\\w+\\s+){0,3}?(?:injured|wounded|hurt)\\b'));
+  const displaced=grab(new RegExp(num+'\\s+(?:\\w+\\s+){0,3}?(?:displaced|evacuated|homeless|stranded)\\b'));
+  return {dead,missing,hurt,displaced};
+}
+
+// Casualties dominate the score once they are in the hundreds, which is what
+// stops a big word like "offensive" outranking an actual mass-casualty event.
+// "Putin could eventually use a tactical nuclear weapon" is a report about a
+// possibility, and it was scoring the same 96 as a detonation. Anything hedged
+// is damped so speculation cannot outrank an event that has actually happened.
+const WIRE_HEDGE=/\b(could|may|might|would|possible|potential|prepar\w+ to|plans to|threaten\w*|warns?|warned|fears?|feared to|risk of|if\b|urges?|calls? for|consider\w*|weigh\w*|mull\w*|assess\w*|believes?|expects?|proposals?|proposed|debate|denies|denied)\b/i;
+function wireScore(text){
+  let cat=null;
+  for(const c of WIRE_CAT){if(c.re.test(text)){cat=c;break;}}
+  const toll=wireToll(text);
+  const human=toll.dead*3+toll.missing*1.5+toll.hurt*0.3+toll.displaced*0.02;
+  const mag=human>0?Math.min(46,14*Math.log10(1+human)):0;
+  let s=(cat?cat.w:0)+mag;
+  // A stated casualty figure is evidence the thing happened, so hedged
+  // language only damps the category weight, never a reported toll.
+  if(cat&&human<=0&&WIRE_HEDGE.test(text))s=cat.w*0.55;
+  if(!cat&&human<=0)s=0;
+  return {score:Math.round(Math.min(100,s)),cat:cat?cat.t:'',toll};
+}
+
+/* ---------- SELF-TEST ----------
+   Every case below is a headline that this pipeline got wrong at some point
+   during development, with the answer it should give. Run wireSelfTest() in
+   the console after touching the geocoder or the scorer.
+*/
+const WIRE_TESTS=[
+  // the event that started this: a flood on a border, named alongside a
+  // country whose citizens were caught in it, reported from US newsrooms
+  ['Floods caused by a glacial collapse kill at least 160 people on Nepal-China border','Nepal',null],
+  ['Cleveland Nepali student rallies support as friends remain missing after Nepal flash flood','Nepal',null],
+  ['Nepal flood disaster: 160 dead, 341 foreign tourists missing, including Israeli','Nepal',null],
+  // a border event may legitimately resolve to either side; what matters is
+  // that the publisher's home city never wins
+  ['Hundreds missing after flood hits Nepal-Tibet border - Honolulu Star-Advertiser',['Nepal','Tibet'],null],
+  ['At least 160 killed and hundreds missing after flash floods in Nepal - Pittsburgh Post-Gazette','Nepal',null],
+  // the place acted upon, not the actor
+  ['Russia launches missile strike on Kyiv, Ukraine reports 12 killed','Kyiv',null],
+  ['Russia strikes gas facilities in Kharkiv and Chernihiv oblasts','Kharkiv',null],
+  ['Israeli airstrikes hit several areas in southern Lebanon','Lebanon',null],
+  // speculation must not outrank events that happened
+  ['Russia Is Considering a Nuclear Strike on Ukraine','Ukraine','lt:70'],
+  ['Kremlin sources say Putin could eventually use a tactical nuclear weapon','Russia','lt:70'],
+  // ordinary news must score zero and never reach the map
+  ['Manchester United sign new striker',null,'eq:0'],
+  ['Nepal cricket team face Kingsmen in Top End T20 opener',null,'eq:0'],
+];
+function wireSelfTest(){
+  const fails=[];
+  for(const[text,place,cond]of WIRE_TESTS){
+    const g=wireGeocode(text),sc=wireScore(text);
+    const got=g?g.name:null;
+    const want=Array.isArray(place)?place:[place];
+    if(place!==null&&!want.includes(got))fails.push({text,want,got});
+    if(cond==='eq:0'&&sc.score!==0)fails.push({text,want:'score 0',got:sc.score});
+    if(cond==='lt:70'&&sc.score>=70)fails.push({text,want:'score < 70',got:sc.score});
+  }
+  console[fails.length?'error':'log'](`wire self-test: ${WIRE_TESTS.length-fails.length}/${WIRE_TESTS.length} passed`,fails);
+  return fails;
+}
+
+/* ---------- ROLLING 24-HOUR STORE ----------
+   Items expire 24 hours after they were ingested, not after their publish
+   date, so a wire that backdates a timestamp still gets its full window. The
+   store is persisted so a page reload does not throw away the corroboration
+   history that decides what is real.
+*/
+const WIRE={
+  TTL:864e5,            // 24h — the whole retention policy is this one number
+  MAX:1500,             // hard cap so localStorage can never be filled
+  POLL:90000,           // ingest cadence
+  store:new Map(),      // id -> raw item
+  events:[],            // clusters promoted or not
+  lastRun:0,running:false,
+  stats:{ingested:0,dropped:0,expired:0}
+};
+
+function wireLoad(){
+  try{
+    const raw=localStorage.getItem('sentinel_wire_v1');
+    if(!raw)return;
+    const d=JSON.parse(raw);
+    const now=Date.now();
+    for(const it of d.items||[])if(now-it.at<WIRE.TTL)WIRE.store.set(it.id,it);
+    for(const ev of d.events||[]){
+      if(now-ev.last>=WIRE.TTL)continue;
+      ev.srcs=new Set(ev.srcs||[]);
+      if(!Array.isArray(ev.anchor))ev.anchor=[ev.lat,ev.lon];   // written before anchors existed
+      WIRE.events.push(ev);
+    }
+  }catch(e){/* corrupt or full — start clean rather than break the dashboard */}
+}
+function wireSave(){
+  try{
+    const items=[...WIRE.store.values()].sort((a,b)=>b.at-a.at).slice(0,WIRE.MAX);
+    localStorage.setItem('sentinel_wire_v1',JSON.stringify({
+      items,
+      events:WIRE.events.map(e=>({...e,srcs:[...e.srcs],items:e.items.slice(0,12)}))
+    }));
+  }catch(e){
+    // Quota exceeded: halve the window rather than lose ingest entirely.
+    try{
+      const items=[...WIRE.store.values()].sort((a,b)=>b.at-a.at).slice(0,400);
+      localStorage.setItem('sentinel_wire_v1',JSON.stringify({items,events:[]}));
+      console.warn('wire: store trimmed to 400 items to fit localStorage');
+    }catch(e2){
+      // Say so. A silent failure here looks identical to a working cache and
+      // quietly throws away the 24h corroboration history on every reload.
+      WIRE.saveError=String(e2&&e2.message||e2);
+      console.warn('wire: could not persist store —',WIRE.saveError);
+    }
+  }
+}
+function wirePrune(){
+  const cut=Date.now()-WIRE.TTL;
+  for(const[id,it]of WIRE.store)if(it.at<cut){WIRE.store.delete(id);WIRE.stats.expired++;}
+  WIRE.events=WIRE.events.filter(ev=>{
+    ev.items=ev.items.filter(i=>i.at>=cut);
+    return ev.items.length>0;
+  });
+}
+
+function wireDist(a,b,c,d){
+  const R=6371,r=Math.PI/180;
+  const dl=(c-a)*r,dn=(d-b)*r;
+  const x=Math.sin(dl/2)**2+Math.cos(a*r)*Math.cos(c*r)*Math.sin(dn/2)**2;
+  return 2*R*Math.asin(Math.min(1,Math.sqrt(x)));
+}
+
+/* An event is a place plus a kind, not a headline. "Nepal", "Tibet",
+   "Himalaya" and "Everest" are four gazetteer entries describing one flood,
+   so clustering is by distance rather than by name — otherwise corroboration
+   is split four ways and nothing ever clears the threshold.
+*/
+const WIRE_RADIUS=650;   // km
+// Grouping was by place AND category, which split one disaster four ways: the
+// same Nepal flood filed separately as FLOOD and as QUAKE because a headline
+// mentioned the tremor it triggered. A place only supports one major event at
+// a time, so distance alone decides membership and the category is whatever
+// the members mostly say it is.
+// Distance alone merged Gaza, Syria and Lebanon into a single blob, and swept
+// in a Nepal flood story that mentioned an Israeli casualty. Families are
+// coarse enough to keep one disaster together when a flood is also reported as
+// a quake, and sharp enough to keep a war and a flood apart.
+const WIRE_FAMILY={NUCLEAR:'C',WAR:'C',STRIKE:'C',ATTACK:'C',BLAST:'C',
+  QUAKE:'D',FLOOD:'D',STORM:'D',ERUPT:'D',FIRE:'D',
+  HEALTH:'O',EMERG:'O',UNREST:'O',CYBER:'O',DIPLO:'O'};
+function wireFam(c){return WIRE_FAMILY[c]||'O';}
+function wireCluster(item){
+  for(const ev of WIRE.events)
+    if(wireFam(ev.cat)===wireFam(item.cat)
+       &&wireDist(ev.anchor[0],ev.anchor[1],item.geo.lat,item.geo.lon)<=WIRE_RADIUS)return ev;
+  const ev={id:'e'+Math.random().toString(36).slice(2,9),cat:item.cat,
+    lat:item.geo.lat,lon:item.geo.lon,name:item.geo.name,
+    anchor:[item.geo.lat,item.geo.lon],
+    items:[],srcs:new Set(),score:0,toll:{dead:0,missing:0,hurt:0,displaced:0},
+    first:item.at,last:item.at,promoted:false,alerted:false,enrichedAt:0};
+  WIRE.events.push(ev);
+  return ev;
+}
+// Does this item belong to this event at all? Enrichment searches return
+// loosely-related results, and without this test they were attached anyway.
+function wireBelongs(ev,item){
+  return !!item.geo&&wireFam(ev.cat)===wireFam(item.cat)
+    &&wireDist(ev.anchor[0],ev.anchor[1],item.geo.lat,item.geo.lon)<=WIRE_RADIUS;
+}
+
+// The cluster takes the highest figure any outlet is reporting and the tightest
+// placement anyone gave it, which is how a vague first report sharpens as the
+// story develops.
+function wireRescore(ev){
+  let best=0,tightest=0;
+  const toll={dead:0,missing:0,hurt:0,displaced:0};
+  const catScore={};
+  for(const it of ev.items){
+    if(it.score>best)best=it.score;
+    for(const k in toll)if(it.toll[k]>toll[k])toll[k]=it.toll[k];
+    // Refine placement only towards points inside the cluster, so one stray
+    // city match can no longer drag the whole event across the planet.
+    if(it.geo.spec>tightest&&wireDist(ev.anchor[0],ev.anchor[1],it.geo.lat,it.geo.lon)<=WIRE_RADIUS){
+      tightest=it.geo.spec;ev.lat=it.geo.lat;ev.lon=it.geo.lon;ev.name=it.geo.name;
+    }
+    if(it.cat)catScore[it.cat]=(catScore[it.cat]||0)+it.score;
+    if(it.at>ev.last)ev.last=it.at;
+    if(it.at<ev.first)ev.first=it.at;
+  }
+  const fam=wireFam(ev.cat);
+  const top=Object.keys(catScore).filter(c=>wireFam(c)===fam)
+    .sort((a,b)=>catScore[b]-catScore[a])[0];
+  if(top)ev.cat=top;
+  ev.toll=toll;
+  // Corroboration is worth real score: five outlets on the same event is the
+  // strongest signal available that it is not a bad headline.
+  ev.score=Math.min(100,best+Math.min(12,(ev.srcs.size-1)*3));
+  ev.sources=ev.srcs.size;
+  return ev;
+}
+
+/* What actually reaches the map. A single headline is never enough on its own
+   unless it is reporting mass casualties, because the cost of missing a real
+   one is higher than the cost of showing a wire report that later revises down.
+*/
+function wirePromotable(ev){
+  const t=ev.toll;
+  if(t.dead>=20||t.missing>=50)return true;
+  if((ev.cat==='NUCLEAR'||ev.cat==='WAR')&&ev.srcs.size>=2)return true;
+  return ev.srcs.size>=2&&ev.score>=55;
+}
+
+/* ---------- SOURCES ----------
+   The wires are pulled unfiltered. The old GDELT query asked only for
+   military terms, which is exactly why a flood that killed 165 people was
+   invisible — the topic searches below exist so nothing has to be predicted
+   in advance to be seen.
+*/
+const WIRE_SOURCES=[
+  {u:'https://feeds.bbci.co.uk/news/world/rss.xml',n:'BBC'},
+  {u:'https://www.aljazeera.com/xml/rss/all.xml',n:'Al Jazeera'},
+  {u:'https://www.theguardian.com/world/rss',n:'Guardian'},
+  {u:'https://feeds.skynews.com/feeds/rss/world.xml',n:'Sky News'},
+  {u:'https://rss.nytimes.com/services/xml/rss/nyt/World.xml',n:'NYT'},
+  {u:'https://www.defensenews.com/arc/outboundfeeds/rss/?outputType=xml',n:'Defense News'},
+  {u:'https://www.defense.gov/DesktopModules/ArticleCS/RSS.ashx?max=20&ContentType=1&Site=945',n:'DoD'},
+  {u:'https://news.google.com/rss/headlines/section/topic/WORLD?hl=en-US&gl=US&ceid=US:en',n:''},
+  {u:gnews('disaster OR earthquake OR flood OR landslide OR eruption OR cyclone when:3h'),n:''},
+  {u:gnews('killed OR dead OR casualties OR missing when:2h'),n:''},
+  {u:gnews('strike OR offensive OR missile OR attack OR explosion when:2h'),n:''},
+  {u:gnews('evacuation OR "state of emergency" OR outbreak when:3h'),n:''},
+];
+function gnews(q){
+  return 'https://news.google.com/rss/search?q='+encodeURIComponent(q)+'&hl=en-US&gl=US&ceid=US:en';
+}
+
+async function wirePull(url,fallbackSrc,tagEvent){
+  const resp=await fetch(corsUrl(url),{signal:AbortSignal.timeout(12000)});
+  const xml=new DOMParser().parseFromString(await resp.text(),'text/xml');
+  if(xml.querySelector('parsererror'))return 0;
+  const now=Date.now();
+  let added=0;
+  for(const item of xml.querySelectorAll('item')){
+    const rawTitle=item.querySelector('title')?.textContent||'';
+    if(!rawTitle)continue;
+    const {title,src}=wireStripSource(rawTitle);
+    const source=src||item.querySelector('source')?.textContent||fallbackSrc||'wire';
+    const id='w'+wireHash(wireNorm(title));
+    if(WIRE.store.has(id)){
+      // The same headline from a second outlet is corroboration, not a
+      // duplicate — record the source against whichever event already holds
+      // it. Never hang the event object off the item: that makes the store
+      // circular and every attempt to persist it throws.
+      const prev=WIRE.store.get(id),key=(source||'').toLowerCase();
+      if(key&&prev.geo&&prev.cat){
+        const host=(tagEvent&&wireBelongs(tagEvent,prev))?tagEvent
+          :WIRE.events.find(e=>e.items.some(i=>i.id===id));
+        if(host&&!host.srcs.has(key)){host.srcs.add(key);wireRescore(host);}
+      }
+      continue;
+    }
+    const sig=wireScore(title);
+    const geo=wireGeocode(title);
+    const it={id,title,src:source,link:extractRSSLink(item),
+      pub:item.querySelector('pubDate')?.textContent||'',
+      at:now,score:sig.score,cat:sig.cat,toll:sig.toll,
+      geo:geo?{name:geo.name,lat:geo.lat,lon:geo.lon,spec:geo.spec}:null};
+    WIRE.store.set(id,it);
+    WIRE.stats.ingested++;
+    added++;
+    // Unscored or unplaceable items stay in the store for dedupe and for the
+    // headline ticker, but they never become events.
+    if(!it.cat||!it.geo){WIRE.stats.dropped++;continue;}
+    const ev=tagEvent?(wireBelongs(tagEvent,it)?tagEvent:wireCluster(it)):wireCluster(it);
+    ev.items.push(it);
+    ev.srcs.add((source||'').toLowerCase());
+    wireRescore(ev);
+  }
+  return added;
+}
+// djb2 — only needs to be stable and cheap, not cryptographic.
+function wireHash(s){let h=5381;for(let i=0;i<s.length;i++)h=((h<<5)+h+s.charCodeAt(i))|0;return (h>>>0).toString(36);}
+
+/* ---------- ENRICHMENT ----------
+   A cluster that crosses the bar gets a second, targeted pass: the ingester
+   goes back out and asks specifically about that place and that kind of
+   event. That is where the real detail lives — first reports say "deadly
+   flood", the follow-ups carry the toll, the cause and the location.
+   Throttled to one pass per event per 20 minutes so a running story does not
+   turn into a request loop.
+*/
+const WIRE_TERM={NUCLEAR:'nuclear',WAR:'war',STRIKE:'strike',QUAKE:'earthquake',FLOOD:'flood',
+  STORM:'storm',ERUPT:'eruption',ATTACK:'attack',BLAST:'explosion',FIRE:'wildfire',
+  HEALTH:'outbreak',EMERG:'emergency',UNREST:'protest',CYBER:'cyberattack',DIPLO:'sanctions'};
+async function wireEnrich(ev){
+  ev.enrichedAt=Date.now();
+  const term=WIRE_TERM[ev.cat]||'';
+  try{
+    await wirePull(gnews(`"${ev.name}" ${term} when:1d`),'',ev);
+    wireRescore(ev);
+  }catch(e){/* enrichment is a bonus pass; the event stands without it */}
+}
+
+/* ---------- THE LOOP ---------- */
+async function wireIngest(){
+  if(WIRE.running)return;
+  WIRE.running=true;
+  feedWait('f9');
+  try{
+    wirePrune();
+    const before=WIRE.stats.ingested;
+    const r=await Promise.allSettled(WIRE_SOURCES.map(s=>wirePull(s.u,s.n,null)));
+    const live=r.filter(x=>x.status==='fulfilled').length;
+
+    for(const ev of WIRE.events){
+      const was=ev.promoted;
+      ev.promoted=wirePromotable(ev);
+      if(ev.promoted&&!was)ev.promotedAt=Date.now();
+    }
+    // Enrich the two most severe un-enriched promoted events per cycle.
+    const due=WIRE.events.filter(e=>e.promoted&&Date.now()-e.enrichedAt>12e5)
+      .sort((a,b)=>b.score-a.score).slice(0,2);
+    for(const ev of due)await wireEnrich(ev);
+    for(const ev of WIRE.events)ev.promoted=wirePromotable(ev);
+
+    wirePrune();
+    renderWireMarkers();
+    renderWire();
+    wireAlerts();
+    wireSave();
+    WIRE.lastRun=Date.now();
+    const promoted=WIRE.events.filter(e=>e.promoted).length;
+    state.sources.wire=promoted;
+    // feedDot clears dataset.note, so the note has to be written after it.
+    feedDot('f9',live>0&&WIRE.stats.ingested>before||WIRE.store.size>0);
+    const el=document.getElementById('f9');
+    if(el)el.dataset.note=WIRE.store.size+' held / '+promoted+' events';
+  }catch(e){console.warn('wire ingest failed:',e);feedDot('f9',false);}
+  finally{WIRE.running=false;}
+}
+
+const WIRE_COL={NUCLEAR:'#ff2b2b',WAR:'#ff2b2b',STRIKE:'#ff5522',QUAKE:'#ff8800',FLOOD:'#3aa0ff',
+  STORM:'#4dd4ff',ERUPT:'#ff6600',ATTACK:'#ff3355',BLAST:'#ff7744',FIRE:'#ff9900',
+  HEALTH:'#c86bff',EMERG:'#ffcc00',UNREST:'#ffaa00',CYBER:'#b06bff',DIPLO:'#7fd4ff'};
+
+function renderWireMarkers(){
+  state.wireMarkers.forEach(m=>map.removeLayer(m));
+  state.wireMarkers=[];
+  for(const ev of WIRE.events){
+    if(!ev.promoted)continue;
+    const col=WIRE_COL[ev.cat]||'#4dd4ff';
+    const size=Math.min(46,20+Math.log10(1+ev.toll.dead*3+ev.toll.missing)*9);
+    const mk=L.marker([ev.lat,ev.lon],{icon:overlayIcon('wire',col,size)});
+    mk.bindTooltip(wireLabel(ev),{className:'quake-tooltip',direction:'top',offset:[0,-10]});
+    mk.bindPopup(wirePopup(ev),{maxWidth:340});
+    if(state.layers.wire)mk.addTo(map);
+    state.wireMarkers.push(mk);
+  }
+}
+function wireTollText(ev){
+  const t=ev.toll,p=[];
+  if(t.dead)p.push(t.dead.toLocaleString()+' dead');
+  if(t.missing)p.push(t.missing.toLocaleString()+' missing');
+  if(t.hurt)p.push(t.hurt.toLocaleString()+' injured');
+  if(t.displaced)p.push(t.displaced.toLocaleString()+' displaced');
+  return p.join(' · ');
+}
+function wireLabel(ev){
+  const t=wireTollText(ev);
+  return ev.cat+' — '+ev.name.toUpperCase()+(t?' | '+t:'');
+}
+function wirePopup(ev){
+  const t=wireTollText(ev);
+  const recent=ev.items.slice().sort((a,b)=>b.at-a.at).slice(0,5);
+  const li=recent.map(i=>{
+    const safeT=(i.title||'').replace(/'/g,"\\'").replace(/"/g,'&quot;');
+    const safeL=(i.link||'').replace(/'/g,"\\'");
+    return `<div style="margin:4px 0;line-height:1.35">`
+      +(safeL?`<a href="#" onclick="openArticle('${safeL}','${safeT}');return false" style="color:#4dd4ff;text-decoration:none">`:'<span>')
+      +i.title+(safeL?'</a>':'</span>')
+      +`<br><span style="opacity:.55;font-size:10px">${i.src}</span></div>`;
+  }).join('');
+  return `<b>${ev.cat} — ${ev.name}</b><br>`
+    +(t?`<span style="color:#ff6b6b">${t}</span><br>`:'')
+    +`<span style="opacity:.7;font-size:11px">Severity ${ev.score} · ${ev.srcs.size} independent sources · first seen ${timeAgo(new Date(ev.first).toISOString())}</span>`
+    +`<hr style="border:0;border-top:1px solid rgba(255,255,255,.15);margin:6px 0">${li}`
+    +`<div style="opacity:.5;font-size:10px;margin-top:6px">Figures as reported by the wires, not a confirmed toll.</div>`;
+}
+
+// Only promoted events alert, and each event alerts once. A story that keeps
+// getting worse re-alerts when its reported death toll passes the next
+// order of magnitude rather than on every poll.
+function wireAlerts(){
+  for(const ev of WIRE.events){
+    if(!ev.promoted)continue;
+    const tier=ev.toll.dead>=1000?3:ev.toll.dead>=100?2:ev.toll.dead>=10?1:0;
+    if(ev.alerted&&tier<=ev.alertTier)continue;
+    ev.alerted=true;ev.alertTier=tier;
+    const t=wireTollText(ev);
+    const level=ev.score>=75?'red':ev.score>=55?'orange':'yellow';
+    addAlert(level,`${ev.cat}: ${ev.name.toUpperCase()}${t?' — '+t:''}`,
+      {lat:ev.lat,lon:ev.lon,zoom:6,kind:ev.cat});
+    if(level==='red')flashAlert();
+  }
+}
 // --- RELIEFWEB (UN OCHA) ---
 async function fetchReliefWeb(){
   feedWait('f36');
@@ -3752,32 +5119,51 @@ async function fetchACLED(){
   }catch(e){console.warn('ACLED error:',e);}
 }
 
-function renderGDELT(){
+// The events tab shows events, not headlines — one row per corroborated
+// incident with its toll and how many outlets carry it. Everything the
+// ingester is holding but has not promoted is counted in the footer rather
+// than listed, so the panel says "quiet" only when it genuinely is.
+function renderWire(){
   const el=document.getElementById('tabEvents');
-  if(!state.gdeltEvents.length){el.innerHTML='<div style="padding:12px;color:var(--td);font-size:11px;text-align:center">No events detected</div>';return;}
-  // GDELT geocodes the source of an article, not every article. Scoping drops
-  // the ones placed elsewhere and keeps the ungeocoded remainder, which is
-  // said plainly in the header rather than presented as a country's events.
-  let ungeocoded=0;
-  const list=state.gdeltEvents.filter(e=>{
-    if(!_scope)return true;
-    const la=parseFloat(e.lat),lo=parseFloat(e.lon);
-    if(!isFinite(la)||!isFinite(lo)){ungeocoded++;return true;}
-    return inScope(la,lo,2);
-  });
-  if(!list.length){el.innerHTML='<div style="padding:12px;color:var(--td);font-size:11px;text-align:center">No events in '+_scope.name+'</div>';return;}
-  const title=_scope?_scope.name.toUpperCase()+' EVENTS \u2014 '+list.length
-    +(ungeocoded?' ('+ungeocoded+' UNPLACED)':''):'GDELT GLOBAL EVENTS \u2014 '+list.length+' DETECTED';
-  let html='<div style="padding:8px 12px;border-bottom:1px solid var(--brd);font-size:10px;color:var(--tm);font-family:Orbitron;letter-spacing:2px">'+title+'</div>';
-  for(const e of list){
-    const ago=e.date?timeAgo(e.date.replace(/(\d{4})(\d{2})(\d{2})(\d{2})(\d{2})(\d{2})/,'$1-$2-$3T$4:$5:$6Z')):'';
-    const tone=e.tone?parseFloat(e.tone):0;
-    const toneColor=tone<-3?'var(--r)':tone<0?'var(--o)':'var(--c)';
-    const safeTitle=(e.title||'').replace(/'/g,"\\'").replace(/"/g,'&quot;');
-    const safeUrl=(e.url||'').replace(/'/g,"\\'");
-    html+=`<div class="news-item" onclick="openArticle('${safeUrl}','${safeTitle}')"><div class="news-src">${e.source} <span style="color:${toneColor};margin-left:6px">TONE: ${tone.toFixed(1)}</span></div><div class="news-title">${e.title}</div><div class="news-time">${ago}</div></div>`;
+  if(!el)return;
+  const all=WIRE.events.filter(e=>e.promoted)
+    .sort((a,b)=>(b.score-a.score)||(b.last-a.last));
+  const list=all.filter(e=>!_scope||inScope(e.lat,e.lon,2));
+  const held=WIRE.store.size, watching=WIRE.events.length-all.length;
+  const foot=`<div style="padding:8px 12px;border-top:1px solid var(--brd);font-size:10px;color:var(--td)">`
+    +`${held} items held (24h rolling) · ${watching} candidate${watching===1?'':'s'} below threshold`
+    +(WIRE.lastRun?` · updated ${timeAgo(new Date(WIRE.lastRun).toISOString())}`:'')+`</div>`;
+  if(!list.length){
+    el.innerHTML='<div style="padding:12px;color:var(--td);font-size:11px;text-align:center">'
+      +(_scope?'No significant events in '+_scope.name:'No events above threshold')+'</div>'+foot;
+    return;
   }
-  el.innerHTML=html;
+  const title=(_scope?_scope.name.toUpperCase()+' EVENTS':'SIGNIFICANT EVENTS')+' \u2014 '+list.length;
+  let html='<div style="padding:8px 12px;border-bottom:1px solid var(--brd);font-size:10px;color:var(--tm);font-family:Orbitron;letter-spacing:2px">'+title+'</div>';
+  for(const ev of list){
+    const col=WIRE_COL[ev.cat]||'#4dd4ff';
+    const t=wireTollText(ev);
+    const lead=ev.items.slice().sort((a,b)=>b.score-a.score)[0]||{};
+    const safeT=(lead.title||'').replace(/'/g,"\\'").replace(/"/g,'&quot;');
+    const safeL=(lead.link||'').replace(/'/g,"\\'");
+    html+=`<div class="news-item" onclick="wireFocus('${ev.id}')">`
+      +`<div class="news-src"><span style="color:${col};font-weight:700">${ev.cat}</span>`
+      +` <span style="opacity:.8">${ev.name}</span>`
+      +` <span style="float:right;opacity:.6">SEV ${ev.score} · ${ev.srcs.size} SRC</span></div>`
+      +(t?`<div style="color:var(--r);font-size:11px;margin:2px 0">${t}</div>`:'')
+      +`<div class="news-title">${lead.title||''}</div>`
+      +`<div class="news-time">${ev.last?timeAgo(new Date(ev.last).toISOString()):''}`
+      +(safeL?` · <a href="#" onclick="event.stopPropagation();openArticle('${safeL}','${safeT}');return false" style="color:var(--c)">read</a>`:'')
+      +`</div></div>`;
+  }
+  el.innerHTML=html+foot;
+}
+function wireFocus(id){
+  const ev=WIRE.events.find(e=>e.id===id);
+  if(!ev)return;
+  map.setView([ev.lat,ev.lon],6);
+  const mk=state.wireMarkers.find(m=>{const p=m.getLatLng();return Math.abs(p.lat-ev.lat)<1e-6&&Math.abs(p.lng-ev.lon)<1e-6;});
+  if(mk&&state.layers.wire)mk.openPopup();
 }
 
 // --- NEWS (Multiple RSS sources) ---
@@ -4232,9 +5618,15 @@ function generateAlerts(){
   // Periodic status line — at most once every 5 minutes (the live numbers change constantly)
   const now=Date.now();
   if(!state._lastStatusAlert||now-state._lastStatusAlert>300000){
-    state._lastStatusAlert=now;
     const total=state.assets.size;const src=Object.values(state.sources).filter(v=>v>0).length;
-    addAlert('green',`STATUS: Tracking ${total} assets from ${src} sources`);
+    // This fires before the first fetch has landed, so it posted "0 assets
+    // from 0 sources" on startup — and addAlert's hour-long dedupe then
+    // pinned that line at the top of the feed, reading as a dead system for
+    // the next hour. Wait until there is something to report.
+    if(total||src){
+      state._lastStatusAlert=now;
+      addAlert('green',`STATUS: Tracking ${total} assets from ${src} sources`);
+    }
   }
 }
 function renderAlerts(){
@@ -4464,8 +5856,8 @@ function togC(c){state.categories[c]=!state.categories[c];const on=state.categor
 // Single source of truth for which button belongs to which layer and what
 // colour it lights up. The markup used to hard-code "on" classes, which drifted
 // the moment a default changed.
-const LAYER_BTN={hotspots:'fHotspot',wx:'fWx',ausEm:'fAusEm',bom:'fBOM',radar:'fRadar',quakes:'fQuake',fires:'fFire',gdelt:'fGdelt',chokes:'fChoke',jamming:'fJam',notams:'fNotam',piracy:'fPiracy',volcanoes:'fVolcano',tsunami:'fTsunami',cyber:'fCyber',cables:'fCables',nukes:'fNuke',bases:'fBases',conflict:'fConflict',rf:'fRF',drones:'fDrone',refugees:'fRefugee',dark:'fDark'};
-const LAYER_COL={hotspots:'on-o',wx:'on-y',ausEm:'on-r',bom:'on-y',radar:'on',quakes:'on-r',fires:'on-o',gdelt:'on',chokes:'on-y',jamming:'on-p',notams:'on-y',piracy:'on-r',volcanoes:'on-o',tsunami:'on-r',cyber:'on-p',cables:'on',nukes:'on-o',bases:'on',conflict:'on-r',rf:'on-p',drones:'on-o',refugees:'on-y',dark:'on-p'};
+const LAYER_BTN={hotspots:'fHotspot',wx:'fWx',ausEm:'fAusEm',bom:'fBOM',radar:'fRadar',quakes:'fQuake',fires:'fFire',wire:'fWire',chokes:'fChoke',jamming:'fJam',notams:'fNotam',piracy:'fPiracy',volcanoes:'fVolcano',tsunami:'fTsunami',cyber:'fCyber',cables:'fCables',nukes:'fNuke',bases:'fBases',conflict:'fConflict',rf:'fRF',drones:'fDrone',refugees:'fRefugee',dark:'fDark'};
+const LAYER_COL={hotspots:'on-o',wx:'on-y',ausEm:'on-r',bom:'on-y',radar:'on',quakes:'on-r',fires:'on-o',wire:'on',chokes:'on-y',jamming:'on-p',notams:'on-y',piracy:'on-r',volcanoes:'on-o',tsunami:'on-r',cyber:'on-p',cables:'on',nukes:'on-o',bases:'on',conflict:'on-r',rf:'on-p',drones:'on-o',refugees:'on-y',dark:'on-p'};
 const ALL_ON_CLASSES=['on','on-r','on-o','on-y','on-p','on-g'];
 function syncLayerButtons(){
   for(const[l,id]of Object.entries(LAYER_BTN)){
@@ -4533,7 +5925,7 @@ document.addEventListener('keydown',e=>{
   if(e.key==='Escape'){closeCountryBrief();closeArticle();closeDetail();document.getElementById('shortcutsOverlay').classList.remove('show');document.getElementById('statusOverlay').classList.remove('show');document.getElementById('defconPop').classList.remove('show');}
   if(e.key==='?')document.getElementById('shortcutsOverlay').classList.toggle('show');
   if(e.key==='/'){e.preventDefault();document.getElementById('searchInput').focus();}
-  if(e.key==='r'||e.key==='R'){fetchAll();fetchEarthquakes();fetchGDELT();fetchNews();fetchFIRMS();}
+  if(e.key==='r'||e.key==='R'){fetchAll();fetchEarthquakes();wireIngest();fetchNews();fetchFIRMS();}
   if(e.key==='[')togglePanel('L');
   if(e.key===']')togglePanel('R');
   if(e.key==='f'||e.key==='F')focusMode();
@@ -4605,7 +5997,7 @@ async function fetchAll(){
   // WAVE 3: Intel overlays (static + slow feeds)
   try{
     await Promise.allSettled([fetchNOTAMs(),fetchWildfires(),fetchVolcanoes(),fetchTsunami(),fetchNuclearTests(),fetchRefugees(),
-      fetchGDELTGeo(),fetchDarkVessels(),fetchReliefWeb(),fetchACLED(),fetchGDACS(),fetchBOM(),fetchRadar(),fetchWHO(),fetchSatellite(),fetchAusEmergency()]);
+      fetchDarkVessels(),fetchReliefWeb(),fetchACLED(),fetchGDACS(),fetchBOM(),fetchRadar(),fetchWHO(),fetchSatellite(),fetchAusEmergency()]);
   }catch(e){}
   renderAll();
   try{cleanStaleAssets();}catch(e){}
@@ -4867,7 +6259,7 @@ function spaceView(){
     Object.keys(state.layers).forEach(k=>{state.layers[k]=false;});
 
     // Remove overlay markers from map
-    const overlayArrays=['quakeMarkers','fireMarkers','chokeMarkers','gdeltMarkers','notamMarkers','piracyMarkers','volcanoMarkers','tsunamiMarkers','cyberMarkers','cableLines','nukeMarkers','milbaseMarkers','conflictMarkers','rfMarkers','droneMarkers','refugeeMarkers','ntestMarkers','wildfireMarkers'];
+    const overlayArrays=['quakeMarkers','fireMarkers','chokeMarkers','wireMarkers','notamMarkers','piracyMarkers','volcanoMarkers','tsunamiMarkers','cyberMarkers','cableLines','nukeMarkers','milbaseMarkers','conflictMarkers','rfMarkers','droneMarkers','refugeeMarkers','ntestMarkers','wildfireMarkers'];
     overlayArrays.forEach(key=>{
       if(state[key]&&Array.isArray(state[key]))state[key].forEach(m=>{try{map.removeLayer(m);}catch(e){}});
     });
@@ -4911,8 +6303,8 @@ function spaceView(){
     Object.keys(fbm).forEach(k=>{const btn=document.getElementById(fbm[k]);if(btn){if(state.filters[k])btn.classList.add(fcm[k]);else btn.classList.remove(fcm[k]);}});
     const cbm={military:'cMil',coastguard:'cCG',police:'cPol',government:'cGov',sar:'cSar',tanker:'cTanker',cargo:'cCargo',passenger:'cPassenger',fishing:'cFishing'};
     Object.keys(cbm).forEach(k=>{const btn=document.getElementById(cbm[k]);if(btn){if(state.categories[k])btn.classList.add('on-g');else btn.classList.remove('on-g');}});
-    const lbm={quakes:'fQuake',fires:'fFire',gdelt:'fGdelt',chokes:'fChoke',jamming:'fJam',notams:'fNotam',piracy:'fPiracy',volcanoes:'fVolcano',tsunami:'fTsunami',cyber:'fCyber',cables:'fCables',nukes:'fNuke',bases:'fBases',conflict:'fConflict',rf:'fRF',drones:'fDrone',refugees:'fRefugee'};
-    const lcm={quakes:'on-r',fires:'on-o',gdelt:'on',chokes:'on-y',jamming:'on-p',notams:'on-y',piracy:'on-r',volcanoes:'on-o',tsunami:'on-r',cyber:'on-p',cables:'on',nukes:'on-o',bases:'on',conflict:'on-r',rf:'on-p',drones:'on-o',refugees:'on-y'};
+    const lbm={quakes:'fQuake',fires:'fFire',wire:'fWire',chokes:'fChoke',jamming:'fJam',notams:'fNotam',piracy:'fPiracy',volcanoes:'fVolcano',tsunami:'fTsunami',cyber:'fCyber',cables:'fCables',nukes:'fNuke',bases:'fBases',conflict:'fConflict',rf:'fRF',drones:'fDrone',refugees:'fRefugee'};
+    const lcm={quakes:'on-r',fires:'on-o',wire:'on',chokes:'on-y',jamming:'on-p',notams:'on-y',piracy:'on-r',volcanoes:'on-o',tsunami:'on-r',cyber:'on-p',cables:'on',nukes:'on-o',bases:'on',conflict:'on-r',rf:'on-p',drones:'on-o',refugees:'on-y'};
     Object.keys(lbm).forEach(k=>{const btn=document.getElementById(lbm[k]);if(btn){if(state.layers[k])btn.classList.add(lcm[k]);else btn.classList.remove(lcm[k]);}});
 
     // Re-render everything
@@ -5615,7 +7007,7 @@ var _scope=null;                                   // selected country, or null
 const SCOPED=[
   ['quakeMarkers','quakes',0],['fireMarkers','fires',0],['wildfireMarkers','fires',0],
   ['wxMarkers','wx',0],['bomMarkers','bom',0],['ausEmMarkers','ausEm',0],
-  ['gdacsMarkers','gdacs',0],['gdeltMarkers','gdelt',0],['volcanoMarkers','volcanoes',0],
+  ['gdacsMarkers','gdacs',0],['wireMarkers','wire',0],['volcanoMarkers','volcanoes',0],
   ['notamMarkers','notams',0],['cyberMarkers','cyber',0],['conflictMarkers','conflict',0],
   ['rfMarkers','rf',0],['droneMarkers','drones',0],['refugeeMarkers','refugees',0],
   ['nukeMarkers','nukes',0],['ntestMarkers','nukes',0],['milbaseMarkers','bases',0],
@@ -5681,7 +7073,7 @@ async function setCountryScope(iso){
   _scope=list.find(c=>c.iso===iso)||list.find(c=>c.iso3===iso)||null;
   applyCountryScope();
   updateScopeBadge();
-  try{renderAlerts();renderGDELT();renderAssetList();}catch(e){}
+  try{renderAlerts();renderWire();renderAssetList();}catch(e){}
   if(_scope){
     const[s,w,n,e]=_scope.bbox;
     try{map.fitBounds([[s,w],[n,e]],{padding:[30,30],maxZoom:7});}catch(err){}
@@ -5727,7 +7119,7 @@ function buildCountryBrief(c){
     return false;
   });
   b.acled=(state.acledEvents||[]).filter(inC);
-  b.news=(state.gdeltEvents||[]).filter(inC);
+  b.news=(typeof WIRE!=='undefined'?WIRE.events.filter(e=>e.promoted):[]).filter(inC);
   b.dark=(state.darkEvents||[]).filter(e=>e&&isFinite(e.lat)&&nearCountry(e.lat,e.lon,c,2));
   // GDACS carries its own ISO3, which is more reliable than a point-in-polygon
   // test for a cyclone whose plotted centre may sit offshore. Fall back to
@@ -5963,7 +7355,7 @@ function renderCountryBrief(){
           <span class="cb-a" style="flex:3">${esc((n.title||'').slice(0,72))}</span><span class="cb-c">${esc(n.source||'')}</span></div>`)
     +briefFlush()
     +`<div class="cb-foot">
-        <b>Coverage.</b> Global sources: GDACS, Open-Meteo, USGS seismic, WHO, FCDO, GDELT, rain radar.
+        <b>Coverage.</b> Global sources: GDACS, Open-Meteo, USGS seismic, WHO, FCDO, wire ingest, rain radar.
         Single-country sources: Bureau of Meteorology (Australia), National Weather Service (United States),
         FAA airspace notices (United States). NASA EONET's named wildfire events are currently
         30 of 30 inside the United States, so that count reflects where the programme reports rather
@@ -6211,7 +7603,7 @@ async function boot(){
     bootSysRow(3,true);
 
     txt.textContent='SCANNING GLOBAL EVENTS...';bar.style.width='44%';
-    await Promise.race([fetchGDELT(),new Promise(r=>setTimeout(r,8000))]);
+    await Promise.race([wireIngest(),new Promise(r=>setTimeout(r,8000))]);
     bootSysRow(4,true);
 
     txt.textContent='GATHERING INTELLIGENCE FEEDS...';bar.style.width='54%';
@@ -6339,7 +7731,11 @@ boot();
 
 // Periodic refreshes
 setInterval(fetchEarthquakes,120000);
-setInterval(fetchGDELT,300000);
+// The ingester keeps its own cadence so it stays awake regardless of what the
+// map refresh is doing, and sweeps the 24h store on every pass.
+wireLoad();
+wireIngest();
+setInterval(wireIngest,WIRE.POLL);
 setInterval(fetchNews,300000);
 setInterval(fetchFIRMS,300000);
 setInterval(fetchSpaceWeather,120000);
