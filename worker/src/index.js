@@ -53,10 +53,20 @@ const ALLOWED_HOSTS = new Set([
   'rss.nytimes.com',
   'www.defensenews.com',
   'www.defense.gov',
-  'news.google.com',
   'www.aljazeera.com',
   'www.theguardian.com',
   'feeds.skynews.com',
+  // news.google.com was removed on 27 Aug 2026. It answers 200 from a
+  // residential IP and 503 from the Cloudflare edge — the same datacenter-range
+  // block the ADS-B aggregators apply. Every dashboard request goes through
+  // this Worker, so from the app's point of view Google News is simply dead.
+  // Measure from `wrangler dev --remote`, not `wrangler dev`, before re-adding.
+  'www.bing.com',                  // News RSS — search-capable, works from edge
+  'feeds.npr.org',
+  'www.france24.com',
+  'www.cbc.ca',
+  'www.abc.net.au',
+  'www.channelnewsasia.com',
   'api.reliefweb.int',
 ]);
 
@@ -64,7 +74,7 @@ const ALLOWED_HOSTS = new Set([
 const TTL = [
   [/adsb|airplanes\.live|opensky/, 8],
   [/digitraffic/, 20],
-  [/rss|feeds\.|xml|reliefweb|news\.google/, 180],
+  [/rss|feeds\.|xml|reliefweb|bing\.com/, 180],
   [/rainviewer/, 60],
   [/gdacs|bom\.gov\.au/, 300],
   [/rfs\.nsw|emergency\.vic|psba\.qld/, 120],
@@ -184,7 +194,7 @@ async function passthrough(request, env, ctx) {
   // this caller gets stale data now, the next one gets a warm cache. This was
   // written for GDELT; it now matters for Google News, which the wire ingester
   // polls every 90 seconds from every open tab.
-  if (res.status === 429 && /news\.google|gdeltproject/.test(upstream.hostname)) {
+  if (res.status === 429 && /bing\.com/.test(upstream.hostname)) {
     ctx.waitUntil(warmCache(upstream.toString(), upstreamHeaders, cache, ttlFor(upstream.toString()), env));
   }
 
@@ -238,7 +248,7 @@ async function passthrough(request, env, ctx) {
     );
     // KV is globally replicated, unlike the per-colo cache — worth the write
     // for the feeds that throttle or that every client needs.
-    if (env.FEED_CACHE && /news\.google|reliefweb/.test(upstream.hostname)) {
+    if (env.FEED_CACHE && /bing\.com|reliefweb/.test(upstream.hostname)) {
       ctx.waitUntil(
         env.FEED_CACHE.put(kvKey(upstream.toString()), new TextDecoder().decode(body), { expirationTtl: 86400 })
       );
