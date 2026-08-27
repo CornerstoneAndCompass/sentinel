@@ -644,6 +644,11 @@ html,body{width:100%;height:100%;overflow:hidden;background:#050a12;font-family:
 /* SPACE VIEW MODE — banner only, map stays visible */
 .space-mode-banner{position:fixed;top:55px;left:50%;transform:translateX(-50%);z-index:500;font-family:Orbitron,monospace;font-size:10px;letter-spacing:5px;color:#aa66ff;text-shadow:0 0 15px rgba(170,102,255,0.5);pointer-events:none;opacity:0;transition:opacity 0.8s ease;background:rgba(10,14,24,0.85);padding:6px 20px;border:1px solid rgba(170,102,255,0.4);border-radius:4px}
 .space-mode-banner.active{opacity:1}
+
+/* Esri's Dark Gray Canvas sits a few shades lighter than the CARTO tiles this
+   display was designed against. Filtering the tile pane rather than #map keeps
+   markers, labels and overlays at full brightness. */
+.basemap-dim{filter:brightness(0.45) contrast(1.2) saturate(0.85);}
 </style>
 </head>
 <body>
@@ -1035,7 +1040,21 @@ const BOOT_START=Date.now();
 
 // --- MAP ---
 const map = L.map('map',{center:[25,20],zoom:3,zoomControl:false,attributionControl:false,preferCanvas:true,minZoom:1,maxZoom:20,worldCopyJump:true,maxBoundsViscosity:0});
-const _baseTile=L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',{maxNativeZoom:19,maxZoom:20,subdomains:'abcd'}).addTo(map);
+// CARTO began requiring an API key on its keyless basemap tiers. It does not
+// fail — it answers 200 with a valid PNG that has "API KEY REQUIRED" burned
+// into the image, and those tiles carry max-age=15552000, so a browser holding
+// months-old clean tiles shows nothing wrong until its cache turns over.
+// Esri's Dark Gray Canvas needs no key and is the provider already behind SAT
+// mode. It renders a few shades lighter than CARTO did, so the tile panes are
+// filtered back down to the near-black this display is built around.
+const ESRI_DARK='https://services.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}';
+const ESRI_DARK_LABELS='https://services.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Reference/MapServer/tile/{z}/{y}/{x}';
+const _esriOpts={maxNativeZoom:16,maxZoom:20,className:'basemap-dim',attribution:'Esri'};
+const _baseTile=L.tileLayer(ESRI_DARK,_esriOpts);
+const _baseLabels=L.tileLayer(ESRI_DARK_LABELS,_esriOpts);
+// Grouped so the mode switcher can add and remove the pair as one layer, while
+// _baseTile stays a real tile layer for the redraw() call further down.
+const _baseGroup=L.layerGroup([_baseTile,_baseLabels]).addTo(map);
 
 // --- STATE ---
 // --- FEED PROXY ---
@@ -6100,9 +6119,11 @@ setInterval(cleanStaleAssets,120000);
 // server and upscales the deepest real tile beyond that, so zooming in keeps
 // working (blurrier, but present) at every level.
 const MAP_TILES={
-  dark:_baseTile,
+  dark:_baseGroup,
   satellite:L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',{maxNativeZoom:18,maxZoom:20,attribution:'Esri'}),
-  nvg:L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_nolabels/{z}/{x}/{y}{r}.png',{maxNativeZoom:19,maxZoom:20,subdomains:'abcd'}),
+  // NVG drops the city-label overlay; the base keeps country names, which is
+  // the closest keyless equivalent to CARTO's dark_nolabels.
+  nvg:L.tileLayer(ESRI_DARK,_esriOpts),
   topo:L.tileLayer('https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png',{maxNativeZoom:17,maxZoom:20,subdomains:'abc'})
 };
 let currentMapMode='dark';
