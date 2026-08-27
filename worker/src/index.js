@@ -71,7 +71,12 @@ const ALLOWED_HOSTS = new Set([
 
 // How long the edge may serve a cached copy, by upstream host or path hint.
 const TTL = [
-  [/adsb|airplanes\.live|opensky/, 8],
+  // adsb.lol allows roughly one request per window from Cloudflare's shared
+  // egress and 429s the rest, so an 8s TTL guaranteed a miss on almost every
+  // call. A longer window plus the stale copy below keeps real aircraft on the
+  // map: measured, /v2/mil serves 187 aircraft as STALE while the upstream is
+  // still refusing.
+  [/adsb|airplanes\.live|opensky/, 45],
   [/digitraffic/, 20],
   [/rss|feeds\.|xml|reliefweb|bing\.com/, 180],
   [/rainviewer/, 60],
@@ -193,7 +198,7 @@ async function passthrough(request, env, ctx) {
   // this caller gets stale data now, the next one gets a warm cache. This was
   // written for GDELT; it now matters for Google News, which the wire ingester
   // polls every 90 seconds from every open tab.
-  if (res.status === 429 && /bing\.com/.test(upstream.hostname)) {
+  if (res.status === 429 && /bing\.com|adsb/.test(upstream.hostname)) {
     ctx.waitUntil(warmCache(upstream.toString(), upstreamHeaders, cache, ttlFor(upstream.toString()), env));
   }
 
@@ -247,7 +252,7 @@ async function passthrough(request, env, ctx) {
     );
     // KV is globally replicated, unlike the per-colo cache — worth the write
     // for the feeds that throttle or that every client needs.
-    if (env.FEED_CACHE && /bing\.com|reliefweb/.test(upstream.hostname)) {
+    if (env.FEED_CACHE && /bing\.com|reliefweb|adsb/.test(upstream.hostname)) {
       ctx.waitUntil(
         env.FEED_CACHE.put(kvKey(upstream.toString()), new TextDecoder().decode(body), { expirationTtl: 86400 })
       );

@@ -1240,6 +1240,12 @@ function feedDot(id,ok){const e=document.getElementById(id);if(e){e.className='f
 function feedWait(id){const e=document.getElementById(id);if(e)e.className='fd wait';updateFeedSummary();}
 // A feed that cannot run because it needs a proxy or an API key is not a
 // failure — showing it red just trains you to ignore red.
+// A feed the upstream is throttling is not an offline feed. adsb.lol answers
+// roughly one request per window from Cloudflare's shared egress and 429s the
+// rest, so reporting those as OFFLINE made the status panel read as a broken
+// app when it was actually waiting its turn.
+function isThrottle(e){return /\b429\b|cooling|Too Many/i.test(String(e&&e.message||e));}
+function feedThrottled(id){feedIdle(id,'upstream throttled \u2014 retrying');}
 function feedIdle(id,note){const e=document.getElementById(id);if(e){e.className='fd idle';e.dataset.note=note||'not configured';}updateFeedSummary();}
 /* ---- circuit breaker ----
    Measured over one refresh cycle: 95 requests, 52 of them failures. The same
@@ -2011,7 +2017,7 @@ async function liveTrackAsset(){
   if(!state.selectedId)return;const a=state.assets.get(state.selectedId);if(!a||!a.hex)return;
   try{
     if(a.type==='aircraft'||a.type==='heli'){
-      const data=await fetchJ(`${AL_BASE}/hex/${a.hex}`,6000);
+      const data=await fetchJ(adsbUrl(`/hex/${a.hex}`),6000);
       const ac=(data.ac||[])[0];
       if(ac&&ac.lat&&ac.lon){const old=state.assets.get(state.selectedId);const trail=old?.trail?[...old.trail.slice(-30),[ac.lat,ac.lon]]:[[ac.lat,ac.lon]];state.assets.set(state.selectedId,{...old,lat:ac.lat,lon:ac.lon,alt:ac.alt_baro||ac.alt_geom||old.alt,gs:ac.gs??old.gs,track:ac.track??old.track,vrate:ac.baro_rate??old.vrate,squawk:ac.squawk??old.squawk,t:ac.t||old.t,trail,_lastSeen:Date.now()});}
     }else if(a.type==='ship'){
@@ -2099,21 +2105,39 @@ function safeBounds(){
   return{south:s,north:n,west:w,east:e};
 }
 
-// airplanes.live is the only ADS-B aggregator that sends Access-Control-Allow-Origin:*,
-// so it is the primary and works with no proxy at all. adsb.lol and adsb.fi are
-// identical in shape but CORS-blocked, so they ride the Worker as backups.
-// (adsb.one was dropped in Aug 2026 — it now 403s every request.)
-const AL_BASE='https://api.airplanes.live/v2';
+/* ADS-B, Aug 2026. airplanes.live used to send Access-Control-Allow-Origin:*
+   and was fetched browser-direct. It now answers 403 to this network for every
+   endpoint, and — measured from the page itself — no aggregator sends CORS any
+   more: adsb.lol, adsb.fi and airplanes.live are all blocked from the browser.
+   So aircraft have to ride the Worker like everything else.
+
+   adsb.lol is the one that still answers Cloudflare at all, and only about once
+   per window before it 429s; adsb.fi and airplanes.live 403 the edge outright.
+   The Worker holds a 45s TTL, a KV copy and a stale fallback for these, which
+   is what keeps real aircraft on the map — measured, /v2/mil serves 187
+   aircraft marked STALE while the upstream is still refusing.
+
+   Six aircraft requests per cycle (mil, ladd, point and three squawk codes)
+   against a one-per-window budget meant five of them 429'd. The military sweep
+   runs every cycle because it is the point of the display; everything else
+   takes one turn per cycle in rotation, so each refreshes about every two
+   minutes and none of them starve the sweep. */
+const ADSB_BASE='https://api.adsb.lol/v2';
+const AL_BASE='https://api.airplanes.live/v2';    // kept for a direct retry if it recovers
+function adsbUrl(path){return hasProxy()?corsUrl(ADSB_BASE+path):AL_BASE+path;}
+let _adsbTurn=0;
+// Returns true once every N cycles for the given slot.
+function adsbSlot(slot,of){return (_adsbTurn%of)===slot;}
 async function fetchADSBMil(){
   feedWait('f1');
   try{
-    const d=await fetchR(AL_BASE+'/mil',1,10000);
-    const n=processAC(d.ac||[],'AIRPLANES.LIVE');state.sources.adsb=n;feedDot('f1',n>0);
+    _adsbTurn++;
+    const d=await fetchR(adsbUrl('/mil'),1,12000);
+    const n=processAC(d.ac||[],'ADSB.LOL');state.sources.adsb=n;feedDot('f1',n>0);
   }catch(e){
-    // Fall back to adsb.lol through the proxy if airplanes.live is having a day.
-    if(!hasProxy()){feedDot('f1',false);return;}
-    try{const d=await fetchR(corsUrl('https://api.adsb.lol/v2/mil'),1,12000);const n=processAC(d.ac||[],'ADSB.LOL');state.sources.adsb=n;feedDot('f1',n>0);}
-    catch(e2){feedDot('f1',false);}
+    // Only worth a direct attempt if airplanes.live has come back.
+    try{const d=await fetchR(AL_BASE+'/mil',0,8000);const n=processAC(d.ac||[],'AIRPLANES.LIVE');state.sources.adsb=n;feedDot('f1',n>0);}
+    catch(e2){if(isThrottle(e)||isThrottle(e2))feedThrottled('f1');else feedDot('f1',false);}
   }
 }
 // Radius follows the view: at country zoom a 250nm sweep pulls in hundreds of
@@ -2126,11 +2150,12 @@ function viewRadiusNm(){
 async function fetchADSBRegion(){
   feedWait('f2');
   try{
+    if(!adsbSlot(SQUAWKS.length+1,SQUAWKS.length+2)){feedIdle('f2','rotating');return;}
     const c=map.getCenter();
-    const d=await fetchR(`${AL_BASE}/point/${c.lat.toFixed(3)}/${c.lng.toFixed(3)}/${viewRadiusNm()}`,1,12000);
+    const d=await fetchR(adsbUrl(`/point/${c.lat.toFixed(3)}/${c.lng.toFixed(3)}/${viewRadiusNm()}`),0,12000);
     const mil=(d.ac||[]).filter(a=>{const cs=(a.flight||'').trim();return a.dbFlags===1||MIL_P.some(p=>p.test(cs))||CG_P.some(p=>p.test(cs))||POL_P.some(p=>p.test(cs))||GOV_P.some(p=>p.test(cs))||SAR_P.some(p=>p.test(cs));});
     const n=processAC(mil,'REGIONAL');state.sources.region=n;feedDot('f2',true);
-  }catch(e){feedDot('f2',false);}
+  }catch(e){if(isThrottle(e))feedThrottled('f2');else feedDot('f2',false);}
 }
 // OpenSky pins Access-Control-Allow-Origin to its own domain, so it can only
 // ever be read server-side. The Worker also holds the OAuth2 client credentials
@@ -2160,8 +2185,11 @@ async function fetchSquawks(){
   feedWait('f4');
   try{
     let n=0;
-    for(const sq of SQUAWKS){
-      const d=await fetchR(`${AL_BASE}/squawk/${sq.code}`,0,10000);
+    // One emergency code per cycle. All three every cycle spent the whole
+    // request budget and 429'd, which meant none of them ever answered.
+    const due=SQUAWKS.filter((_,i)=>adsbSlot(i,SQUAWKS.length+2));
+    for(const sq of due){
+      const d=await fetchR(adsbUrl(`/squawk/${sq.code}`),0,10000);
       for(const ac of d.ac||[]){
         if(!ac.lat||!ac.lon)continue;
         const cs=(ac.flight||ac.hex||'').trim();
@@ -2175,9 +2203,11 @@ async function fetchSquawks(){
     // Zero aircraft squawking emergency is the normal case and a healthy
     // result — only a failed request counts as an offline feed.
     feedDot('f4',true);
-  }catch(e){feedDot('f4',false);}
+  }catch(e){if(isThrottle(e))feedThrottled('f4');else feedDot('f4',false);}
 }
-async function fetchLADD(){feedWait('f5');try{const d=await fetchR(AL_BASE+'/ladd',1,12000);const n=processAC(d.ac||[],'LADD');state.sources.ladd=n;feedDot('f5',n>0);}catch(e){feedDot('f5',false);}}
+async function fetchLADD(){
+  if(!adsbSlot(SQUAWKS.length,SQUAWKS.length+2)){feedIdle('f5','rotating');return;}
+  feedWait('f5');try{const d=await fetchR(adsbUrl('/ladd'),0,12000);const n=processAC(d.ac||[],'LADD');state.sources.ladd=n;feedDot('f5',n>0);}catch(e){if(isThrottle(e))feedThrottled('f5');else feedDot('f5',false);}}
 // AIS vessel type classification: 35=military, 55=law enforcement, 51=SAR
 // Only show government/military/CG vessels — no civilian merchant ships
 const AIS_MIL_TYPES=new Set([35,51,55]);
