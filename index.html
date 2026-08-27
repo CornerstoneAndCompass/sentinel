@@ -3794,7 +3794,7 @@ const GAZ_COUNTRY=[
 ["North Korea","PRK",39.02,125.75,34.6,"north korean|pyongyang|dprk"],
 ["South Korea","KOR",37.57,127.0,14.1,"south korean"],
 ["Mongolia","MNG",47.92,106.91,334.6,""],
-["India","IND",28.6,77.2,804.5,"indian"],
+["India","IND",28.6,77.2,804.5,"indian(?! ocean)"],
 ["Bangladesh","BGD",23.73,90.41,26.5,"bangladeshi"],
 ["Bhutan","BTN",27.47,89.64,5.2,""],
 ["Nepal","NPL",27.72,85.31,32.5,"nepali|nepalese"],
@@ -4640,7 +4640,7 @@ const WIRE_CAT=[
   {t:'ERUPT',   w:70, re:/volcan|erupt|lava|ash cloud/i},
   {t:'ATTACK',  w:68, re:/terror|bombing|suicide attack|massacre|mass shooting|gunmen|hostage|ambush/i},
   {t:'BLAST',   w:62, re:/explosion|blast|detonation|derail|collapse|capsiz|sinks|crash(?:es|ed)?\b/i},
-  {t:'FIRE',    w:52, re:/wildfire|bushfire|forest fire|blaze/i},
+  {t:'FIRE',    w:52, re:/wildfire|bushfire|forest fire|blaze|fire (?:at|in|swept|engulf|breaks? out|broke out|kills?|tears?)/i},
   {t:'HEALTH',  w:58, re:/outbreak|epidemic|pandemic|cholera|ebola|marburg|bird flu|h5n1/i},
   {t:'EMERG',   w:56, re:/evacuat|state of emergency|mass casualt|disaster declar|rescue operation/i},
   {t:'UNREST',  w:42, re:/protest|unrest|riot|crackdown|clashes|uprising|curfew/i},
@@ -4734,6 +4734,7 @@ function wireSelfTest(){
    store is persisted so a page reload does not throw away the corroboration
    history that decides what is real.
 */
+const WIRE_MAX_AGE=1.728e8;   // 48h — how old a story may be to be ingested at all
 const WIRE={
   TTL:864e5,            // 24h — the whole retention policy is this one number
   MAX:1500,             // hard cap so localStorage can never be filled
@@ -4741,7 +4742,7 @@ const WIRE={
   store:new Map(),      // id -> raw item
   events:[],            // clusters promoted or not
   lastRun:0,running:false,
-  stats:{ingested:0,dropped:0,expired:0}
+  stats:{ingested:0,dropped:0,expired:0,stale:0}
 };
 
 function wireLoad(){
@@ -4877,27 +4878,65 @@ function wirePromotable(ev){
 }
 
 /* ---------- SOURCES ----------
-   The wires are pulled unfiltered. The old GDELT query asked only for
-   military terms, which is exactly why a flood that killed 165 people was
-   invisible — the topic searches below exist so nothing has to be predicted
-   in advance to be seen.
+   Every host here was measured through `wrangler dev --remote`, i.e. from
+   Cloudflare's edge, because that is the only path the deployed app ever uses.
+   Measuring from `wrangler dev` (local) is misleading: it egresses from the
+   developer's own IP. news.google.com answers 200 residentially and 503 from
+   the edge, which is how nine sources and the whole enrichment pass shipped
+   broken. Anything added below must be re-measured the same way.
+
+   The wires are pulled unfiltered — the old GDELT query asked only for
+   military terms, which is why a flood that killed 165 people was invisible.
 */
-const WIRE_SOURCES=[
+const WIRE_WIRES=[
   {u:'https://feeds.bbci.co.uk/news/world/rss.xml',n:'BBC'},
   {u:'https://www.aljazeera.com/xml/rss/all.xml',n:'Al Jazeera'},
   {u:'https://www.theguardian.com/world/rss',n:'Guardian'},
   {u:'https://feeds.skynews.com/feeds/rss/world.xml',n:'Sky News'},
   {u:'https://rss.nytimes.com/services/xml/rss/nyt/World.xml',n:'NYT'},
+  {u:'https://feeds.npr.org/1004/rss.xml',n:'NPR'},
+  {u:'https://www.france24.com/en/rss',n:'France 24'},
+  {u:'https://www.abc.net.au/news/feed/2942460/rss.xml',n:'ABC News'},
+  {u:'https://www.channelnewsasia.com/api/v1/rss-outbound-feed?_format=xml',n:'CNA'},
   {u:'https://www.defensenews.com/arc/outboundfeeds/rss/?outputType=xml',n:'Defense News'},
   {u:'https://www.defense.gov/DesktopModules/ArticleCS/RSS.ashx?max=20&ContentType=1&Site=945',n:'DoD'},
-  {u:'https://news.google.com/rss/headlines/section/topic/WORLD?hl=en-US&gl=US&ceid=US:en',n:''},
-  {u:gnews('disaster OR earthquake OR flood OR landslide OR eruption OR cyclone when:3h'),n:''},
-  {u:gnews('killed OR dead OR casualties OR missing when:2h'),n:''},
-  {u:gnews('strike OR offensive OR missile OR attack OR explosion when:2h'),n:''},
-  {u:gnews('evacuation OR "state of emergency" OR outbreak when:3h'),n:''},
 ];
-function gnews(q){
-  return 'https://news.google.com/rss/search?q='+encodeURIComponent(q)+'&hl=en-US&gl=US&ceid=US:en';
+// Bing News is the search-capable feed that survives the edge. It ignores the
+// OR-groups and quoted phrases Google accepted — "flood OR earthquake" returns
+// nothing — so these are deliberately single terms, and they are rotated a few
+// per cycle rather than all at once to keep the request rate civil.
+const WIRE_QUERIES=['flood','earthquake','landslide','cyclone','wildfire','killed',
+  'evacuated','outbreak','airstrike','explosion','missile','famine'];
+const WIRE_QUERIES_PER_CYCLE=4;
+let _wireQ=0;
+function bingNews(q){
+  return 'https://www.bing.com/news/search?q='+encodeURIComponent(q)+'&format=RSS';
+}
+function wireCycleQueries(){
+  const out=[];
+  for(let i=0;i<WIRE_QUERIES_PER_CYCLE;i++)
+    out.push(WIRE_QUERIES[(_wireQ+i)%WIRE_QUERIES.length]);
+  _wireQ=(_wireQ+WIRE_QUERIES_PER_CYCLE)%WIRE_QUERIES.length;
+  return out;
+}
+// Bing wraps every link in an apiclick redirect with the real URL as a query
+// parameter. Left alone, every article opens as bing.com and every publisher
+// looks like the same outlet, which would wreck corroboration counting.
+function wireUnwrap(u){
+  if(!u||u.indexOf('bing.com/news/apiclick')<0)return u;
+  try{
+    const real=new URL(u,'https://www.bing.com').searchParams.get('url');
+    return real||u;
+  }catch(e){return u;}
+}
+// Bing surfaces MSN's syndicated copies alongside the originals, so "BBC" and
+// "BBC on MSN" arrived as two outlets and corroboration counted the same
+// newsroom twice. Normalise before it reaches the source set.
+function wireOutlet(n){
+  return (n||'').replace(/\s+on\s+MSN$/i,'').replace(/\s+/g,' ').trim()||'wire';
+}
+function wireHost(u){
+  try{return new URL(u).hostname.replace(/^www\./,'');}catch(e){return '';}
 }
 
 async function wirePull(url,fallbackSrc,tagEvent){
@@ -4909,8 +4948,29 @@ async function wirePull(url,fallbackSrc,tagEvent){
   for(const item of xml.querySelectorAll('item')){
     const rawTitle=item.querySelector('title')?.textContent||'';
     if(!rawTitle)continue;
-    const {title,src}=wireStripSource(rawTitle);
-    const source=src||item.querySelector('source')?.textContent||fallbackSrc||'wire';
+    // No surviving source appends " - Publisher" to its titles; Bing names the
+    // publisher in its own field and the wires are known by feed. Splitting on
+    // " - " now only mangles real headlines — "Kidnapped for ransom - inside
+    // Nigeria's kidnapping crisis" lost half its text and invented a publisher.
+    const title=rawTitle.trim();
+    // Bing names the real publisher in News:Source and hides the real URL
+    // inside a redirect; both matter, because the publisher is the unit of
+    // corroboration and bing.com is not a news outlet.
+    const nsSrc=item.getElementsByTagName('News:Source')[0];
+    const link=wireUnwrap(extractRSSLink(item));
+    // For a known feed the feed name IS the publisher. Trusting the generic
+    // <source> element ahead of it credited France 24 stories to whoever took
+    // the photo — "© Prakash Mathema, AFP" — which then counted as a distinct
+    // outlet and inflated corroboration.
+    const source=wireOutlet((nsSrc&&nsSrc.textContent.trim())||fallbackSrc
+      ||item.querySelector('source')?.textContent||wireHost(link));
+    // Google News accepted when:2h. Bing has no such operator and returned
+    // Cyclone Chido (Dec 2024) and Ditwah (Nov 2025) as current events, so
+    // recency has to be enforced here instead. Items with no parseable date
+    // are kept — most wires date correctly, and dropping undated items would
+    // silently lose whole feeds.
+    const pub=Date.parse(item.querySelector('pubDate')?.textContent||'');
+    if(isFinite(pub)&&now-pub>WIRE_MAX_AGE){WIRE.stats.stale++;continue;}
     const id='w'+wireHash(wireNorm(title));
     if(WIRE.store.has(id)){
       // The same headline from a second outlet is corroboration, not a
@@ -4925,9 +4985,27 @@ async function wirePull(url,fallbackSrc,tagEvent){
       }
       continue;
     }
+    // Score on the summary as well as the headline — a first report often
+    // reads "deadly flood" in the title and "at least eight people have been
+    // killed" in the description. Geocode on the headline alone: the summary
+    // names extra places (relatives abroad, aid donors) that drag the pin off
+    // the event.
+    const desc=(item.querySelector('description')?.textContent||'')
+      .replace(/<[^>]+>/g,' ').slice(0,400);
+    // Category comes from the headline only. Read from the description it
+    // turned a Guardian live-blog into a flood and a maternity-ward fire into
+    // a volcanic eruption, because "a fire erupted" and a rolling politics
+    // page that happened to mention Nepal both matched. The description is
+    // still worth reading for the toll: first reports often say "deadly
+    // flood" in the title and "at least eight killed" in the summary.
     const sig=wireScore(title);
+    if(sig.cat&&desc){
+      const d=wireToll(desc);
+      for(const k in sig.toll)if(d[k]>sig.toll[k])sig.toll[k]=d[k];
+      sig.score=Math.max(sig.score,wireScore(title+' \u2014 '+desc).score);
+    }
     const geo=wireGeocode(title);
-    const it={id,title,src:source,link:extractRSSLink(item),
+    const it={id,title,src:source,link,
       pub:item.querySelector('pubDate')?.textContent||'',
       at:now,score:sig.score,cat:sig.cat,toll:sig.toll,
       geo:geo?{name:geo.name,lat:geo.lat,lon:geo.lon,spec:geo.spec}:null};
@@ -4962,7 +5040,7 @@ async function wireEnrich(ev){
   ev.enrichedAt=Date.now();
   const term=WIRE_TERM[ev.cat]||'';
   try{
-    await wirePull(gnews(`"${ev.name}" ${term} when:1d`),'',ev);
+    await wirePull(bingNews(`${ev.name} ${term}`),'',ev);
     wireRescore(ev);
   }catch(e){/* enrichment is a bonus pass; the event stands without it */}
 }
@@ -4975,7 +5053,9 @@ async function wireIngest(){
   try{
     wirePrune();
     const before=WIRE.stats.ingested;
-    const r=await Promise.allSettled(WIRE_SOURCES.map(s=>wirePull(s.u,s.n,null)));
+    const batch=WIRE_WIRES.map(s=>wirePull(s.u,s.n,null))
+      .concat(wireCycleQueries().map(q=>wirePull(bingNews(q),'',null)));
+    const r=await Promise.allSettled(batch);
     const live=r.filter(x=>x.status==='fulfilled').length;
 
     for(const ev of WIRE.events){
@@ -5196,18 +5276,12 @@ async function fetchNews(){
     // No newsroom serves RSS with CORS headers, so every one of these needs the
     // proxy. Reuters killed its public RSS in 2020 and AP's feeds went dead in
     // 2026 — both are covered by the Google News queries instead.
-    const feeds=[
-      {url:corsUrl('https://www.defense.gov/DesktopModules/ArticleCS/RSS.ashx?max=20&ContentType=1&Site=945'),name:'DoD'},
-      {url:corsUrl('https://www.defensenews.com/arc/outboundfeeds/rss/?outputType=xml'),name:'Defense News'},
-      {url:corsUrl('https://feeds.bbci.co.uk/news/world/rss.xml'),name:'BBC World'},
-      {url:corsUrl('https://rss.nytimes.com/services/xml/rss/nyt/World.xml'),name:'NYT World'},
-      {url:corsUrl('https://www.aljazeera.com/xml/rss/all.xml'),name:'Al Jazeera'},
-      {url:corsUrl('https://www.theguardian.com/world/rss'),name:'Guardian World'},
-      {url:corsUrl('https://feeds.skynews.com/feeds/rss/world.xml'),name:'Sky World'},
-      // when:1h keeps this to genuinely breaking items rather than the day's digest.
-      {url:corsUrl('https://news.google.com/rss/search?q=breaking+when:1h&hl=en-US&gl=US&ceid=US:en'),name:'Breaking'},
-      {url:corsUrl('https://news.google.com/rss/search?q=military+OR+strike+OR+conflict+when:2h&hl=en-US&gl=US&ceid=US:en'),name:'Open Source'},
-    ];
+    // The two Google News queries that used to sit here returned 503 through
+    // the proxy — Google blocks Cloudflare's egress ranges — so this feed was
+    // quietly running on the newsroom RSS alone. The ingester already holds a
+    // rolling 24h store from these same wires plus Bing, so this reads from
+    // that instead of duplicating the fetches.
+    const feeds=WIRE_WIRES.map(w=>({url:corsUrl(w.u),name:w.n}));
     state.news=[];
     await Promise.allSettled(feeds.map(async(feed)=>{
       try{
