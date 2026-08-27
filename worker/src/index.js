@@ -64,7 +64,6 @@ const ALLOWED_HOSTS = new Set([
   'www.bing.com',                  // News RSS — search-capable, works from edge
   'feeds.npr.org',
   'www.france24.com',
-  'www.cbc.ca',
   'www.abc.net.au',
   'www.channelnewsasia.com',
   'api.reliefweb.int',
