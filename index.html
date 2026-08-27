@@ -1102,7 +1102,10 @@ const state={
   // All overlays start off. Painting twenty layers at once on first run is the
   // overload; the map should open quiet and you switch on what you want.
   layers:{radar:false,satimg:false,bom:false,ausEm:false,gdacs:false,quakes:false,fires:false,
-    wire:false,chokes:false,notams:false,piracy:false,volcanoes:false,tsunami:false,cyber:false,
+    // On by default. Every other overlay is opt-in, but this one is the whole
+    // point of the display: a corroborated mass-casualty event should be on
+    // the map when you open it, not behind a toggle you have to know about.
+    wire:true,chokes:false,notams:false,piracy:false,volcanoes:false,tsunami:false,cyber:false,
     cables:false,nukes:false,bases:false,conflict:false,rf:false,drones:false,refugees:false,dark:false,
     jamming:false,wx:false,hotspots:false},
   countryFilter:'',searchTerm:'',selectedId:null,
@@ -4697,7 +4700,12 @@ function wireScore(text){
   let cat=null;
   for(const c of WIRE_CAT){if(c.re.test(text)){cat=c;break;}}
   const toll=wireToll(text);
-  const human=toll.dead*3+toll.missing*1.5+toll.hurt*0.3+toll.displaced*0.02;
+  let human=toll.dead*3+toll.missing*1.5+toll.hurt*0.3+toll.displaced*0.02;
+  // Epidemics are reported as cumulative totals — "2,500 dead" in an Ebola
+  // story means the outbreak to date, not today. Left at full weight it
+  // outranked a flood that killed 200 people this week, so the running total
+  // is damped rather than treated as a same-day toll.
+  if(cat&&cat.t==='HEALTH')human*=0.25;
   const mag=human>0?Math.min(46,14*Math.log10(1+human)):0;
   let s=(cat?cat.w:0)+mag;
   // A stated casualty figure is evidence the thing happened, so hedged
@@ -5233,8 +5241,15 @@ function renderWire(){
     +`${held} items held (24h rolling) · ${watching} candidate${watching===1?'':'s'} below threshold`
     +(WIRE.lastRun?` · updated ${timeAgo(new Date(WIRE.lastRun).toISOString())}`:'')+`</div>`;
   if(!list.length){
-    el.innerHTML='<div style="padding:12px;color:var(--td);font-size:11px;text-align:center">'
-      +(_scope?'No significant events in '+_scope.name:'No events above threshold')+'</div>'+foot;
+    // A cold start has nothing promoted for the first cycle or two, because an
+    // event needs corroboration before it is allowed on the map. Saying so
+    // beats "No events above threshold", which reads as a quiet world when the
+    // ingester has simply not finished its first pass.
+    const warming=!WIRE.lastRun;
+    const msg=warming?'INGESTING \u2014 building 24h window\u2026'
+      :_scope?'No significant events in '+_scope.name
+      :'No events above threshold';
+    el.innerHTML='<div style="padding:12px;color:var(--td);font-size:11px;text-align:center">'+msg+'</div>'+foot;
     return;
   }
   const title=(_scope?_scope.name.toUpperCase()+' EVENTS':'SIGNIFICANT EVENTS')+' \u2014 '+list.length;
@@ -7829,6 +7844,7 @@ setInterval(fetchEarthquakes,120000);
 // The ingester keeps its own cadence so it stays awake regardless of what the
 // map refresh is doing, and sweeps the 24h store on every pass.
 wireLoad();
+renderWire();          // replace the hardcoded "Loading events..." immediately
 wireIngest();
 setInterval(wireIngest,WIRE.POLL);
 setInterval(fetchNews,300000);
