@@ -1241,20 +1241,67 @@ function feedWait(id){const e=document.getElementById(id);if(e)e.className='fd w
 // A feed that cannot run because it needs a proxy or an API key is not a
 // failure — showing it red just trains you to ignore red.
 function feedIdle(id,note){const e=document.getElementById(id);if(e){e.className='fd idle';e.dataset.note=note||'not configured';}updateFeedSummary();}
+/* ---- circuit breaker ----
+   Measured over one refresh cycle: 95 requests, 52 of them failures. The same
+   dead endpoints were retried every 30 seconds forever — airplanes.live 403s,
+   volcano.si.edu 403s, the TLE host 508s and then times out, and fetchR
+   politely retried each one after 800ms. A single TLE call cost 8.2 seconds of
+   the 13.6-second cycle.
+
+   A host that has just failed repeatedly is skipped without touching the
+   network until its cooling period expires, so a broken upstream costs
+   microseconds instead of seconds. Back-off doubles to a five-minute ceiling
+   and resets the moment the host answers, so nothing is hidden permanently.
+*/
+const _breaker=new Map();
+function breakerHost(u){
+  try{
+    const p=new URL(u,location.href);
+    // Requests through the proxy must key on the upstream, or one bad feed
+    // would trip the breaker for every feed that shares the Worker.
+    if(p.pathname==='/p'&&p.searchParams.get('url'))
+      return new URL(p.searchParams.get('url')).hostname;
+    return p.hostname;
+  }catch(e){return String(u).slice(0,60);}
+}
+function breakerOpen(u){
+  const b=_breaker.get(breakerHost(u));
+  return !!(b&&b.until>Date.now());
+}
+function breakerFail(u){
+  const h=breakerHost(u);
+  const b=_breaker.get(h)||{fails:0,until:0};
+  b.fails++;
+  // One blip is not an outage; start cooling from the third consecutive miss.
+  if(b.fails>=3)b.until=Date.now()+Math.min(3e5,15000*Math.pow(2,b.fails-3));
+  _breaker.set(h,b);
+}
+function breakerOk(u){
+  const h=breakerHost(u);
+  if(_breaker.has(h))_breaker.delete(h);
+}
+function breakerState(){
+  const now=Date.now(),out=[];
+  for(const[h,b]of _breaker)if(b.until>now)out.push({host:h,fails:b.fails,forSec:Math.round((b.until-now)/1000)});
+  return out;
+}
+
 function fetchJ(url,t=8000){
+  if(breakerOpen(url))return Promise.reject(new Error('cooling: '+breakerHost(url)));
   const c=new AbortController();
   const tm=setTimeout(()=>c.abort(),t);
   return fetch(url,{signal:c.signal}).then(r=>{
     clearTimeout(tm);
-    if(!r.ok)throw new Error('HTTP '+r.status);
+    if(!r.ok){breakerFail(url);throw new Error('HTTP '+r.status);}
+    breakerOk(url);
     return r.json();
-  }).catch(e=>{clearTimeout(tm);throw e;});
+  }).catch(e=>{clearTimeout(tm);breakerFail(url);throw e;});
 }
 async function fetchR(url,retries=1,t=8000){
   for(let i=0;i<=retries;i++){
     try{return await fetchJ(url,t);}
     catch(e){
-      if(i>=retries)throw e;
+      if(i>=retries||breakerOpen(url))throw e;
       if(url.includes('allorigins')||url.includes('corsproxy')||url.includes('codetabs'))rotateCors();
       await new Promise(r=>setTimeout(r,800*(i+1)));
     }
@@ -1968,7 +2015,9 @@ async function liveTrackAsset(){
       const ac=(data.ac||[])[0];
       if(ac&&ac.lat&&ac.lon){const old=state.assets.get(state.selectedId);const trail=old?.trail?[...old.trail.slice(-30),[ac.lat,ac.lon]]:[[ac.lat,ac.lon]];state.assets.set(state.selectedId,{...old,lat:ac.lat,lon:ac.lon,alt:ac.alt_baro||ac.alt_geom||old.alt,gs:ac.gs??old.gs,track:ac.track??old.track,vrate:ac.baro_rate??old.vrate,squawk:ac.squawk??old.squawk,t:ac.t||old.t,trail,_lastSeen:Date.now()});}
     }else if(a.type==='ship'){
-      try{const data=await fetchJ(`https://meri.digitraffic.fi/api/ais/v1/locations?mmsi=${a.hex}`,6000);const f=(data.features||[])[0];if(f?.geometry?.coordinates){const[lon,lat]=f.geometry.coordinates;const old=state.assets.get(state.selectedId);const trail=old?.trail?[...old.trail.slice(-30),[lat,lon]]:[[lat,lon]];state.assets.set(state.selectedId,{...old,lat,lon,gs:f.properties?.sog??old.gs,track:f.properties?.cog??old.track,trail,_lastSeen:Date.now()});}}catch(e){}
+      try{const cached=_aisByMmsi.get(String(a.hex));
+        const data=cached?{features:[cached]}:await fetchJ(`https://meri.digitraffic.fi/api/ais/v1/locations?mmsi=${a.hex}`,6000);
+        const f=(data.features||[])[0];if(f?.geometry?.coordinates){const[lon,lat]=f.geometry.coordinates;const old=state.assets.get(state.selectedId);const trail=old?.trail?[...old.trail.slice(-30),[lat,lon]]:[[lat,lon]];state.assets.set(state.selectedId,{...old,lat,lon,gs:f.properties?.sog??old.gs,track:f.properties?.cog??old.track,trail,_lastSeen:Date.now()});}}catch(e){}
     }
   }catch(e){}
   updateDetailPanel();
@@ -2134,6 +2183,7 @@ async function fetchLADD(){feedWait('f5');try{const d=await fetchR(AL_BASE+'/lad
 const AIS_MIL_TYPES=new Set([35,51,55]);
 const AIS_MIL_NAMES=[/NAVY/i,/COAST\s?GUARD/i,/PATROL/i,/RESCUE/i,/POLICE/i,/BORDER/i,/CUSTOMS/i,/USCG/i,/HMCG/i,/MILITARY/i,/WARSHIP/i,/FRIGATE/i,/CORVETTE/i,/DESTROYER/i,/SUBMARINE/i,/MINESWEEP/i,/SURVEY/i,/^KV\s/i,/^FGS\s/i,/^HMS\s/i,/^HNLMS\s/i,/^KNM\s/i,/^HDMS\s/i,/^HSwMS\s/i,/^ORP\s/i,/^TCG\s/i,/^FS\s/i,/^ITS\s/i,/^ESPS\s/i];
 // Finnish AIS — direct fetch, classify by MMSI prefix (no metadata needed)
+const _aisByMmsi=new Map();   // mmsi -> GeoJSON feature, refreshed by fetchAIS
 async function fetchAIS(){
   feedWait('f6');
   try{
@@ -2141,6 +2191,11 @@ async function fetchAIS(){
     // routing it through one is what killed this feed when the proxies died.
     const d=await fetchR('https://meri.digitraffic.fi/api/ais/v1/locations',1,12000);
     const f=d.features||[];let n=0;
+    // This one response already contains every vessel Digitraffic knows about.
+    // Indexing it by MMSI lets the warship resolver and the detail panel read
+    // from it instead of asking the API about hulls one at a time.
+    _aisByMmsi.clear();
+    for(const ft of f){const m=ft.properties&&ft.properties.mmsi;if(m!=null)_aisByMmsi.set(String(m),ft);}
     const maxVessels=5000;
     for(const ft of f){
       const p=ft.properties||{};const g=ft.geometry?.coordinates;
@@ -2287,20 +2342,19 @@ async function fetchOSINT(){
   // No proxy: Digitraffic is the only direct-fetchable AIS source, so only
   // hulls currently in Finnish/Baltic waters will resolve.
   const nordic=WARSHIPS.filter(s=>['NO','FI','SE','DK','EE','LV','LT','PL','DE','RU'].includes(s.f));
-  for(let i=0;i<nordic.length;i+=10){
-    await Promise.allSettled(nordic.slice(i,i+10).map(async ship=>{
-      try{
-        const d=await fetchJ(`https://meri.digitraffic.fi/api/ais/v1/locations?mmsi=${ship.m}`,6000);
-        const f=(d.features||[])[0];
-        if(f?.geometry?.coordinates){
-          const[lon,lat]=f.geometry.coordinates;
-          placeWarship(ship,{lat,lon,sog:f.properties?.sog,cog:f.properties?.cog},'AIS-FI');n++;
-        }
-      }catch(e){}
-    }));
+  // This used to issue one request per hull — roughly fifty per refresh — and
+  // Digitraffic answered 429 to all of them, which took the ship feed down
+  // with it. Every one of those positions is already in the bulk response
+  // fetchAIS just pulled, so this now costs no requests at all.
+  for(const ship of nordic){
+    const f=_aisByMmsi.get(String(ship.m));
+    if(!f||!f.geometry||!f.geometry.coordinates)continue;
+    const[lon,lat]=f.geometry.coordinates;
+    placeWarship(ship,{lat,lon,sog:f.properties?.sog,cog:f.properties?.cog},'AIS-FI');n++;
   }
   state.sources.osint=n;
-  if(n>0)feedDot('f7',true);else feedIdle('f7','needs proxy for global');
+  if(n>0)feedDot('f7',true);
+  else feedIdle('f7',_aisByMmsi.size?'no listed hull in Baltic AIS':'waiting on AIS');
 }
 
 /* ==================== GLOBAL HAZARD WARNINGS ====================
@@ -2613,25 +2667,55 @@ function showRadarFrame(i,opts){
    the client rate-limited. Runs after the app has finished its first render, so
    it costs nothing visible. */
 let _preloading=false;
-function preloadRadarFrames(){
+// Wait for a frame's tiles, or give up on it. Leaflet fires `load` when every
+// tile in view has settled; a frame already warmed will not fire it again, so
+// an existing success counts immediately.
+function radarFrameReady(l,ms){
+  return new Promise(res=>{
+    if(l.__ok>0&&!l._loading)return res(true);
+    let done=false;
+    const fin=v=>{if(done)return;done=true;l.off('load',onLoad);res(v);};
+    const onLoad=()=>fin(true);
+    l.on('load',onLoad);
+    setTimeout(()=>fin(l.__ok>0),ms);
+  });
+}
+
+/* Warming used to add all thirteen frames to the map 120ms apart and hope.
+   Thirteen layers x ~18 tiles is 230-odd requests against one host, and a
+   browser will only run six at a time — measured, frames 0-4 loaded, frame 5
+   loaded two tiles, and frames 6-12 loaded nothing at all with no errors,
+   because their requests never left the queue. The frame actually on screen
+   was the last one queued, which is why the radar so often showed nothing and
+   the loop was full of holes.
+
+   Frames are now warmed one at a time, and the visible frame goes first. */
+async function preloadRadarFrames(){
   if(_preloading||!state.layers.radar)return;
   _preloading=true;
-  let i=0;
-  const add=()=>{
-    // The walk spans a couple of seconds, so the layer can be switched off
-    // half way through it. Without this the remaining frames are recreated and
-    // added to a map the user just cleared.
-    if(!state.layers.radar||i>=_radarFrames.length){_preloading=false;return;}
-    const l=radarLayerFor(i);
-    if(l&&!map.hasLayer(l)){l.setOpacity(0);l.addTo(map);}
-    // Warming must not promote a frame the display deliberately skipped, or a
-    // frame with no tiles gets drawn at full opacity over the good one.
-    if(l&&i===_radarIdx&&!(_radarFrames[i]&&_radarFrames[i].dead))
-      l.setOpacity(state.radarOpacity!=null?state.radarOpacity:0.55);
-    i++;
-    setTimeout(add,120);
-  };
-  add();
+  try{
+    const order=[];
+    if(_radarIdx>=0&&_radarFrames[_radarIdx])order.push(_radarIdx);
+    for(let i=_radarFrames.length-1;i>=0;i--)if(i!==_radarIdx)order.push(i);
+    for(const i of order){
+      if(!state.layers.radar)break;            // switched off mid-walk
+      const f=_radarFrames[i];
+      const l=radarLayerFor(i);
+      if(!f||!l)continue;
+      if(!map.hasLayer(l)){l.setOpacity(0);l.addTo(map);}
+      const ok=await radarFrameReady(l,9000);
+      // A frame listed in the index before its tiles are published loads
+      // nothing at all. Marking it lets the loop skip it instead of showing
+      // a blank pass.
+      f.dead=!ok&&l.__ok===0;
+      if(i===_radarIdx&&!f.dead)
+        l.setOpacity(state.radarOpacity!=null?state.radarOpacity:0.55);
+    }
+  }catch(e){console.warn('radar preload:',e);}
+  finally{
+    _preloading=false;
+    try{buildWxScrubber();}catch(e){}
+  }
 }
 
 // Looping is handled by toggleWxLoop in the weather panel, which steps radar
@@ -3057,12 +3141,20 @@ const SAT_SEARCHES=['starlink','iridium','gps','glonass','galileo','goes','noaa'
 state.tleCache=new Map();state.satOrbits=[];state.sources.sats=0;
 
 async function fetchTLEPage(url){
+  // Raw fetch here meant the circuit breaker never saw this host, and it is
+  // the most expensive one in the app: fetchSats fires roughly thirty of these
+  // in parallel at an 8s timeout each, against a host that answers 508 and
+  // then stops answering. Measured, it owned every one of the ten slowest
+  // requests in a cycle. Going through the breaker makes a dead TLE host cost
+  // nothing until it recovers. 5s is plenty for a page that is working.
+  if(breakerOpen(url))return[];
   try{
-    const r=await fetch(url,{signal:AbortSignal.timeout(8000)});
-    if(!r.ok)return[];
+    const r=await fetch(url,{signal:AbortSignal.timeout(5000)});
+    if(!r.ok){breakerFail(url);return[];}
+    breakerOk(url);
     const d=await r.json();
     return(d.member||[]).map(m=>({name:m.name,line1:m.line1,line2:m.line2,norad:m.satelliteId})).filter(t=>t.line1&&t.line2);
-  }catch(e){return[];}
+  }catch(e){breakerFail(url);return[];}
 }
 
 async function fetchSats(){
@@ -6240,14 +6332,17 @@ async function fetchAll(){
   // community ADS-B coverage is thin, which is most of the interesting ones.
   // Only the bulk feeds — private aircraft — are dropped when zoomed in.
   try{
+    // fetchOSINT reads the vessel index that fetchAIS builds, so it is chained
+    // behind it rather than raced against it in the same wave.
+    const ais=fetchAIS().then(fetchOSINT).catch(()=>{});
     await Promise.allSettled(local
-      ?[fetchADSBMil(),fetchSquawks(),fetchOSINT()]
-      :[fetchADSBMil(),fetchSquawks(),fetchLADD(),fetchOSINT()]);
+      ?[fetchADSBMil(),fetchSquawks(),ais]
+      :[fetchADSBMil(),fetchSquawks(),fetchLADD(),ais]);
   }catch(e){}
   renderAll();
   // WAVE 2: viewport-scoped and slower feeds
   try{
-    await Promise.allSettled([fetchADSBRegion(),fetchOpenSky(),fetchAIS(),fetchSpaceWeather(),fetchSevereWeather(),fetchSats()]);
+    await Promise.allSettled([fetchADSBRegion(),fetchOpenSky(),fetchSpaceWeather(),fetchSevereWeather(),fetchSats()]);
   }catch(e){}
   renderAll();
   // WAVE 3: Intel overlays (static + slow feeds)
