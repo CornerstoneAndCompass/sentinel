@@ -23,7 +23,11 @@ const ALLOWED_HOSTS = new Set([
   // maritime
   'meri.digitraffic.fi',
   // events / hazards
-  'api.gdeltproject.org',
+  // api.gdeltproject.org was removed on 27 Aug 2026: the host refuses
+  // connections outright (ECONNREFUSED), reproduced from Cloudflare and from
+  // a residential IP. Both dashboard news layers depended on it and reported
+  // "no events" while it was dead. Breaking news is now ingested from wire
+  // RSS instead. Do not re-add it without measuring the host first.
   'api.rainviewer.com',            // precipitation radar index
   'www.gdacs.org',                 // global disaster alerts, EU JRC + UN OCHA
   'www.nhc.noaa.gov',              // tropical cyclones, Atlantic + E Pacific
@@ -60,7 +64,6 @@ const ALLOWED_HOSTS = new Set([
 const TTL = [
   [/adsb|airplanes\.live|opensky/, 8],
   [/digitraffic/, 20],
-  [/gdeltproject/, 300],
   [/rss|feeds\.|xml|reliefweb|news\.google/, 180],
   [/rainviewer/, 60],
   [/gdacs|bom\.gov\.au/, 300],
@@ -176,11 +179,12 @@ async function passthrough(request, env, ctx) {
     return err(`upstream fetch failed: ${e.message}`, 502);
   }
 
-  // GDELT throttles hard but not absolutely: the same query 429s a few times
-  // then succeeds, and its own message asks for one request every 5 seconds.
-  // Waiting that out in the request path costs 45s+, so retry after responding
-  // instead — this caller gets stale data now, the next one gets a warm cache.
-  if (res.status === 429 && /gdeltproject/.test(upstream.hostname)) {
+  // Throttled upstreams 429 a few times and then succeed. Waiting that out in
+  // the request path costs tens of seconds, so retry after responding instead:
+  // this caller gets stale data now, the next one gets a warm cache. This was
+  // written for GDELT; it now matters for Google News, which the wire ingester
+  // polls every 90 seconds from every open tab.
+  if (res.status === 429 && /news\.google|gdeltproject/.test(upstream.hostname)) {
     ctx.waitUntil(warmCache(upstream.toString(), upstreamHeaders, cache, ttlFor(upstream.toString()), env));
   }
 
@@ -232,7 +236,9 @@ async function passthrough(request, env, ctx) {
     ctx.waitUntil(
       cache.put(new Request(upstream.toString() + '#stale'), new Response(body, { status: 200, headers: staleHeaders }))
     );
-    if (env.FEED_CACHE && /gdeltproject|reliefweb/.test(upstream.hostname)) {
+    // KV is globally replicated, unlike the per-colo cache — worth the write
+    // for the feeds that throttle or that every client needs.
+    if (env.FEED_CACHE && /news\.google|reliefweb/.test(upstream.hostname)) {
       ctx.waitUntil(
         env.FEED_CACHE.put(kvKey(upstream.toString()), new TextDecoder().decode(body), { expirationTtl: 86400 })
       );

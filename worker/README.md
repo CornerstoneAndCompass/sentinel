@@ -99,6 +99,28 @@ Check what landed:
 curl https://sentinel-feeds.<subdomain>.workers.dev/health
 ```
 
+## Removed: GDELT
+
+Both map news layers used to be GDELT — `/api/v2/doc/doc` for the events list
+and `/api/v2/geo/geo` for the map markers. On 27 August 2026 the whole API host
+stopped answering: `api.gdeltproject.org` refuses connections outright
+(`ECONNREFUSED`), reproduced from Cloudflare and from a residential IP, while
+`www.gdeltproject.org` still serves. The GEO endpoint had already been 404ing
+for weeks before that.
+
+The failure was worse than an outage. Both layers caught the error and rendered
+"no events", so a dead feed was indistinguishable from a quiet news day — and
+on the day it was noticed, the largest humanitarian event in the world (a
+glacial-lake outburst flood on the Nepal–Tibet border, 165+ dead) was nowhere
+on the dashboard. Compounding it, both GDELT queries were hardcoded to
+`(military OR conflict OR attack OR strike)`, so a flood could never have
+matched even with the API up.
+
+Breaking news is now ingested browser-side from wire RSS through this proxy —
+see the WIRE section in `index.html`. `news.google.com` is the busiest upstream
+as a result, so it gets the 429-backoff-and-warm treatment GDELT used to have,
+plus a KV copy.
+
 ## Removed: aisstream
 
 A Durable Object here used to hold a WebSocket to aisstream.io for global
