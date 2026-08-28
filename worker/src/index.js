@@ -67,6 +67,9 @@ const ALLOWED_HOSTS = new Set([
   'www.abc.net.au',
   'www.channelnewsasia.com',
   'api.reliefweb.int',
+  // reliefweb.int serves the same disaster list as RSS with no appname, which
+  // the JSON API refuses without one. See fetchReliefWeb.
+  'reliefweb.int',
 ]);
 
 // How long the edge may serve a cached copy, by upstream host or path hint.

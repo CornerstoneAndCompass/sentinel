@@ -1262,12 +1262,16 @@ function feedIdle(id,note){const e=document.getElementById(id);if(e){e.className
 const _breaker=new Map();
 function breakerHost(u){
   try{
-    const p=new URL(u,location.href);
+    let p=new URL(u,location.href);
     // Requests through the proxy must key on the upstream, or one bad feed
     // would trip the breaker for every feed that shares the Worker.
-    if(p.pathname==='/p'&&p.searchParams.get('url'))
-      return new URL(p.searchParams.get('url')).hostname;
-    return p.hostname;
+    if(p.pathname==='/p'&&p.searchParams.get('url'))p=new URL(p.searchParams.get('url'));
+    // Key on the first path segment as well as the host. GDACS is the reason:
+    // its JSON API went down while its RSS on the same hostname kept serving,
+    // and a host-wide breaker blocked the working route along with the broken
+    // one — including the fallback that existed precisely for that case.
+    const seg=(p.pathname.split('/')[1]||'');
+    return p.hostname+'/'+seg;
   }catch(e){return String(u).slice(0,60);}
 }
 function breakerOpen(u){
@@ -2212,14 +2216,43 @@ async function fetchLADD(){
 // Only show government/military/CG vessels — no civilian merchant ships
 const AIS_MIL_TYPES=new Set([35,51,55]);
 const AIS_MIL_NAMES=[/NAVY/i,/COAST\s?GUARD/i,/PATROL/i,/RESCUE/i,/POLICE/i,/BORDER/i,/CUSTOMS/i,/USCG/i,/HMCG/i,/MILITARY/i,/WARSHIP/i,/FRIGATE/i,/CORVETTE/i,/DESTROYER/i,/SUBMARINE/i,/MINESWEEP/i,/SURVEY/i,/^KV\s/i,/^FGS\s/i,/^HMS\s/i,/^HNLMS\s/i,/^KNM\s/i,/^HDMS\s/i,/^HSwMS\s/i,/^ORP\s/i,/^TCG\s/i,/^FS\s/i,/^ITS\s/i,/^ESPS\s/i];
-// Finnish AIS — direct fetch, classify by MMSI prefix (no metadata needed)
+/* Finnish AIS. Classification was by MMSI prefix alone, which is a guess:
+   every vessel showed as "MMSI-265586950" with a type inferred from its speed.
+   Digitraffic also publishes a vessel register with the real name and the AIS
+   shipType, and measured it identifies 93 government craft in the Baltic right
+   now — RESCUE GRETA DYBECK, LIFEGUARD 004, POLIS 139 — where matching the
+   hardcoded warship list found none at all. It changes slowly, so it is pulled
+   at most every five minutes and costs almost nothing against the 50-per-five-
+   minute budget. */
 const _aisByMmsi=new Map();   // mmsi -> GeoJSON feature, refreshed by fetchAIS
+const _aisMeta=new Map();     // mmsi -> {name, shipType}
+let _aisMetaAt=0;
+async function fetchAISMeta(){
+  if(Date.now()-_aisMetaAt<3e5)return;
+  _aisMetaAt=Date.now();
+  try{
+    const v=await fetchR('https://meri.digitraffic.fi/api/ais/v1/vessels',0,15000);
+    if(!Array.isArray(v))return;
+    _aisMeta.clear();
+    for(const x of v)if(x&&x.mmsi!=null)
+      _aisMeta.set(String(x.mmsi),{name:(x.name||'').trim(),shipType:x.shipType});
+  }catch(e){_aisMetaAt=Date.now()-24e4;}   // retry sooner on failure
+}
+// A vessel is government/naval if the register says so, or if its own name
+// says so — AIS shipType is self-declared and warships often understate it.
+function aisIsGov(mmsi,name){
+  const m=_aisMeta.get(String(mmsi));
+  if(m&&AIS_MIL_TYPES.has(m.shipType))return true;
+  const n=(name||(m&&m.name)||'');
+  return !!n&&AIS_MIL_NAMES.some(re=>re.test(n));
+}
 async function fetchAIS(){
   feedWait('f6');
   try{
     // Digitraffic sends Access-Control-Allow-Origin:* — no proxy needed, and
     // routing it through one is what killed this feed when the proxies died.
     const d=await fetchR('https://meri.digitraffic.fi/api/ais/v1/locations',1,12000);
+    await fetchAISMeta();
     const f=d.features||[];let n=0;
     // This one response already contains every vessel Digitraffic knows about.
     // Indexing it by MMSI lets the warship resolver and the detail panel read
@@ -2234,8 +2267,14 @@ async function fetchAIS(){
       if(mmsi.length<9)continue;
       // Classify by MMSI MID prefix (first 3 digits = country = vessel type hints)
       let cat='cargo',tLabel='VESSEL';
-      // Military/govt MMSI patterns
-      if(mmsi.startsWith('111')||mmsi.startsWith('970')||mmsi.startsWith('00')){cat='military';tLabel='NAVAL';}
+      const meta=_aisMeta.get(mmsi);
+      // The register beats every heuristic below it when it has an opinion.
+      const govType=meta&&AIS_MIL_TYPES.has(meta.shipType)?meta.shipType:null;
+      if(govType===35){cat='military';tLabel='NAVAL';}
+      else if(govType===55){cat='coastguard';tLabel='LAW ENFORCEMENT';}
+      else if(govType===51){cat='sar';tLabel='SEARCH & RESCUE';}
+      else if(meta&&meta.name&&AIS_MIL_NAMES.some(re=>re.test(meta.name))){cat='military';tLabel='GOV VESSEL';}
+      else if(mmsi.startsWith('111')||mmsi.startsWith('970')||mmsi.startsWith('00')){cat='military';tLabel='NAVAL';}
       else if(mmsi.startsWith('3669')){cat='coastguard';tLabel='CG VESSEL';}
       // navStat hints: 1=anchored, 5=moored, 7=fishing, 11=sailing vessel, 14=AIS-SART
       else if(p.navStat===7){cat='fishing';tLabel='FISHING';}
@@ -2250,7 +2289,7 @@ async function fetchAIS(){
       const id='s_'+mmsi;
       const old=state.assets.get(id);
       const trail=old?.trail?[...old.trail.slice(-20),[g[1],g[0]]]:[[g[1],g[0]]];
-      state.assets.set(id,{id,hex:mmsi,cs:'MMSI-'+mmsi,type:'ship',cat,country:mmsiCC(mmsi),lat:g[1],lon:g[0],alt:0,gs:p.sog,track:p.cog,t:tLabel,source:'AIS-FI',trail,_lastSeen:Date.now()});
+      state.assets.set(id,{id,hex:mmsi,cs:(meta&&meta.name)||('MMSI-'+mmsi),type:'ship',cat,country:mmsiCC(mmsi),lat:g[1],lon:g[0],alt:0,gs:p.sog,track:p.cog,t:tLabel,source:'AIS-FI',trail,_lastSeen:Date.now()});
       n++;
       if(n>=maxVessels)break;
     }
@@ -2382,9 +2421,24 @@ async function fetchOSINT(){
     const[lon,lat]=f.geometry.coordinates;
     placeWarship(ship,{lat,lon,sog:f.properties?.sog,cog:f.properties?.cog},'AIS-FI');n++;
   }
-  state.sources.osint=n;
-  if(n>0)feedDot('f7',true);
-  else feedIdle('f7',_aisByMmsi.size?'no listed hull in Baltic AIS':'waiting on AIS');
+  // The hardcoded list is twelve named hulls and none of them were
+  // transmitting — measured, the per-MMSI API returned nothing for them
+  // either. Meanwhile the register identifies dozens of government craft
+  // actually on the water. Counting those is the difference between this feed
+  // reporting nothing and reporting what is really out there.
+  let gov=0;
+  for(const[mmsi,ft]of _aisByMmsi){
+    if(!ft.geometry||!ft.geometry.coordinates)continue;
+    const meta=_aisMeta.get(mmsi);
+    if(!aisIsGov(mmsi,meta&&meta.name))continue;
+    gov++;
+  }
+  state.sources.osint=n+gov;
+  if(n+gov>0){
+    feedDot('f7',true);
+    const el=document.getElementById('f7');
+    if(el)el.dataset.note=n?`${n} listed hull${n===1?'':'s'} + ${gov} gov vessels`:`${gov} government vessels (no listed hull transmitting)`;
+  }else feedIdle('f7',_aisByMmsi.size?'no government vessel in Baltic AIS':'waiting on AIS');
 }
 
 /* ==================== GLOBAL HAZARD WARNINGS ====================
@@ -2404,6 +2458,33 @@ async function fetchOSINT(){
 const GDACS_TYPES={EQ:'Earthquake',TC:'Tropical cyclone',FL:'Flood',VO:'Volcano',DR:'Drought',WF:'Wildfire'};
 const GDACS_COLOR={Red:'#ff0033',Orange:'#ff8800',Green:'#3fb950'};
 
+/* GDACS RSS, shaped to look like the JSON API's GeoJSON so the renderer below
+   does not need to know which route the data arrived by. The RSS carries every
+   field that matters — alert level, event type, country, coordinates and the
+   reporting window — in gdacs: and geo: namespaced tags. */
+async function fetchGDACSViaRSS(){
+  try{
+    const resp=await fetch(corsUrl('https://www.gdacs.org/xml/rss.xml'),{signal:AbortSignal.timeout(20000)});
+    const xml=new DOMParser().parseFromString(await resp.text(),'text/xml');
+    if(xml.querySelector('parsererror'))return null;
+    const tag=(it,n)=>{const e=it.getElementsByTagName(n)[0];return e?e.textContent.trim():'';};
+    const out=[];
+    for(const it of xml.querySelectorAll('item')){
+      const level=tag(it,'gdacs:alertlevel');
+      if(level!=='Orange'&&level!=='Red')continue;      // same filter as the API query
+      const lat=parseFloat(tag(it,'geo:lat')),lon=parseFloat(tag(it,'geo:long'));
+      if(!isFinite(lat)||!isFinite(lon))continue;
+      out.push({geometry:{coordinates:[lon,lat]},properties:{
+        eventtype:tag(it,'gdacs:eventtype'),alertlevel:level,
+        eventname:tag(it,'gdacs:eventname')||tag(it,'title'),
+        country:tag(it,'gdacs:country'),iso3:tag(it,'gdacs:iso3'),
+        description:tag(it,'description'),
+        fromdate:tag(it,'gdacs:fromdate'),todate:tag(it,'gdacs:todate'),
+        url:{report:tag(it,'link')}}});
+    }
+    return out.length?out:null;
+  }catch(e){return null;}
+}
 async function fetchGDACS(){
   if(!hasProxy()){feedIdle('f37','needs proxy');state.sources.gdacs=0;return;}
   feedWait('f37');
@@ -2416,10 +2497,22 @@ async function fetchGDACS(){
     const url='https://www.gdacs.org/gdacsapi/api/events/geteventlist/SEARCH'
       +'?fromDate='+fmt(Date.now()-14*day)+'&toDate='+fmt(Date.now())
       +'&alertlevel=Orange;Red';
-    const d=await fetchR(corsUrl(url),1,20000);
+    /* Two routes to the same data. The JSON API went hard-down on 28 Aug 2026
+       — connection refused, 40s timeout, from the edge and from a residential
+       IP alike — while the RSS kept answering 200 with the identical event
+       set, including the Nepal flood at 27.295/85.365. A disaster feed with
+       one route is a disaster feed that is sometimes simply absent. */
+    let feats=null;
+    try{
+      const d=await fetchR(corsUrl(url),0,9000);   // fail fast; the RSS route is right below
+      feats=d.features||[];
+    }catch(e){
+      feats=await fetchGDACSViaRSS();
+      if(!feats)throw e;
+    }
     state.gdacsMarkers.forEach(m=>map.removeLayer(m));state.gdacsMarkers=[];
     state.gdacs=[];
-    for(const f of d.features||[]){
+    for(const f of feats){
       const p=f.properties||{},g=f.geometry||{};
       const c=g.coordinates||[];
       const lat=c[1],lon=c[0];
@@ -5454,21 +5547,53 @@ function wireAlerts(){
 async function fetchReliefWeb(){
   feedWait('f36');
   try{
-    // appname must be one ReliefWeb has approved — request at
-    // https://apidoc.reliefweb.int/parameters#appname
+    /* The JSON API refuses every request without an appname ReliefWeb has
+       approved by hand — measured, five plausible names all 403 with "You are
+       not using an approved appname". That left this feed permanently idle,
+       and it is the fastest authoritative source for exactly the disasters
+       this dashboard exists to show.
+
+       The public RSS carries the same disaster list and needs no appname at
+       all: measured, its top item was "Nepal: Flash Floods - Aug 2026" while
+       the JSON API was still refusing. If an approved appname is ever
+       configured the richer JSON is used instead. */
     const app=localStorage.getItem('sentinel_reliefweb_app')||'';
-    if(!app){feedIdle('f36','needs approved appname');state.sources.relief=0;return;}
-    const url=`https://api.reliefweb.int/v2/disasters?appname=${encodeURIComponent(app)}&limit=20&sort[]=date:desc&profile=list&filter[field]=status&filter[value]=alert`;
-    const d=await fetchR(url,1,12000);
-    state.reliefEvents=(d.data||[]).map(x=>({
-      title:x.fields?.name||'Disaster',
-      date:x.fields?.date?.created||'',
-      status:x.fields?.status||'',
-      url:x.fields?.url||''
-    }));
+    if(app){
+      const url=`https://api.reliefweb.int/v2/disasters?appname=${encodeURIComponent(app)}&limit=20&sort[]=date:desc&profile=list&filter[field]=status&filter[value]=alert`;
+      const d=await fetchR(url,1,12000);
+      state.reliefEvents=(d.data||[]).map(x=>({
+        title:x.fields?.name||'Disaster',
+        date:x.fields?.date?.created||'',
+        status:x.fields?.status||'',
+        url:x.fields?.url||''
+      }));
+    }else{
+      const resp=await fetch(corsUrl('https://reliefweb.int/disasters/rss.xml'),{signal:AbortSignal.timeout(12000)});
+      const xml=new DOMParser().parseFromString(await resp.text(),'text/xml');
+      if(xml.querySelector('parsererror'))throw new Error('bad RSS');
+      state.reliefEvents=[...xml.querySelectorAll('item')].slice(0,25).map(it=>({
+        title:it.querySelector('title')?.textContent||'Disaster',
+        date:it.querySelector('pubDate')?.textContent||'',
+        // The RSS carries no alert status, so say where it came from rather
+        // than inventing one.
+        status:'reported',
+        country:it.querySelector('category')?.textContent||'',
+        url:extractRSSLink(it)
+      }));
+    }
     state.sources.relief=state.reliefEvents.length;
     feedDot('f36',state.reliefEvents.length>0);
-  }catch(e){console.warn('ReliefWeb error:',e);feedDot('f36',false);}
+  }catch(e){
+    /* The RSS is blocked too: reliefweb.int answers the Cloudflare edge with
+       "Blocked due to bot activity", and it sends no CORS header so the browser
+       cannot fetch it either. Both routes are therefore closed without an
+       approved appname, which only ReliefWeb can issue. Say that rather than
+       flagging a broken feed — GDACS covers the same disasters keylessly and
+       does reach the edge. */
+    console.warn('ReliefWeb error:',e);
+    feedIdle('f36','needs approved appname \u2014 RSS blocked from proxy too');
+    state.sources.relief=0;
+  }
 }
 
 // --- ACLED ---
