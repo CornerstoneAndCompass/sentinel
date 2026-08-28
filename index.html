@@ -3354,6 +3354,7 @@ const SUBMARINE_CABLES=[
 function renderCables(){
   feedWait('f21');
   state.cableLines.forEach(m=>map.removeLayer(m));state.cableLines=[];
+  if(!state.layers.cables)feedIdle('f21','layer off');
   if(state.layers.cables){
     SUBMARINE_CABLES.forEach(c=>{
       const color=c.status==='ACTIVE'?'#00e8ff':c.status==='PLANNED'?'#aa66ff':'#666';
@@ -3418,6 +3419,7 @@ const PIRACY_ZONES=[
 function renderPiracy(){
   feedWait('f23');
   state.piracyMarkers.forEach(m=>map.removeLayer(m));state.piracyMarkers=[];
+  if(!state.layers.piracy)feedIdle('f23','layer off');
   if(state.layers.piracy){
     PIRACY_ZONES.forEach(z=>{
       const color=z.risk==='EXTREME'?'#ff0000':z.risk==='HIGH'?'#ff3355':z.risk==='MODERATE'?'#ff8800':'#ffcc00';
@@ -3486,6 +3488,7 @@ const CYBER_THREAT_ORIGINS=[
 function renderCyber(){
   feedWait('f25');
   state.cyberMarkers.forEach(m=>map.removeLayer(m));state.cyberMarkers=[];
+  if(!state.layers.cyber)feedIdle('f25','layer off');
   if(state.layers.cyber){
     CYBER_THREAT_ORIGINS.forEach(c=>{
       const color=c.threat==='EXTREME'?'#ff0044':c.threat==='HIGH'?'#ff3355':'#ff8800';
@@ -3587,7 +3590,7 @@ const RF_STATIONS=[
 function renderRF(){
   feedWait('f28');
   state.rfMarkers.forEach(m=>map.removeLayer(m));state.rfMarkers=[];
-  if(!state.layers.rf){feedDot('f28',false);return;}
+  if(!state.layers.rf){feedIdle('f28','layer off');return;}
   RF_STATIONS.forEach(s=>{
     const color=s.type.includes('JAMMER')?'#ff3355':s.type.includes('SIGINT')?'#aa66ff':s.type.includes('OTH')?'#ff8800':'#00e8ff';
     const m=L.marker([s.lat,s.lon],{icon:overlayIcon('rf',color,24)}).addTo(map);
@@ -3613,7 +3616,7 @@ const DRONE_HOTSPOTS=[
 function renderDrones(){
   feedWait('f29');
   state.droneMarkers.forEach(m=>map.removeLayer(m));state.droneMarkers=[];
-  if(!state.layers.drones){feedDot('f29',false);return;}
+  if(!state.layers.drones){feedIdle('f29','layer off');return;}
   DRONE_HOTSPOTS.forEach(d=>{
     const color=d.density==='EXTREME'?'#ff0044':d.density==='HIGH'?'#ff3355':'#ff8800';
     const c=L.circle([d.lat,d.lon],{radius:d.radius,color,fillColor:color,fillOpacity:0.04,weight:1,opacity:0.4,dashArray:'4 6'}).addTo(map);
@@ -3691,6 +3694,7 @@ const CONFLICT_ZONES=[
 function renderConflicts(){
   feedWait('f31');
   state.conflictMarkers.forEach(m=>map.removeLayer(m));state.conflictMarkers=[];
+  if(!state.layers.conflict)feedIdle('f31','layer off');
   if(state.layers.conflict){
     CONFLICT_ZONES.forEach(z=>{
       const color=z.intensity==='WAR'?'#ff0000':z.intensity==='HIGH'?'#ff3355':z.intensity==='MODERATE'?'#ff8800':'#ffcc00';
@@ -6344,6 +6348,7 @@ function renderStaticOverlays(){
     renderRF();
     renderDrones();
     renderConflicts();
+    if(typeof renderChokepoints==='function')renderChokepoints();
   }catch(e){console.warn('Static overlay error:',e);}
 }
 function renderAll(){
@@ -8077,6 +8082,13 @@ async function boot(){
 
     txt.textContent='LOADING CONFLICT DATA (ACLED)...';bar.style.width='98.7%';
     if(state.layers.conflict)renderConflicts();
+    // Boot only rendered each static overlay when its layer happened to be on,
+    // and they all default off — so their feeds called feedWait at startup and
+    // then nothing ever resolved them. Nine chips sat on WAITING forever,
+    // which is most of what made the status bar look broken. These renderers
+    // touch no network; run them all so each reports its real state, drawing
+    // nothing when the layer is off.
+    try{renderStaticOverlays();}catch(e){}
     bootSysRow(26,true);
     await new Promise(r=>setTimeout(r,80));
 
@@ -8118,7 +8130,11 @@ setInterval(fetchEarthquakes,120000);
 // map refresh is doing, and sweeps the 24h store on every pass.
 wireLoad();
 geoCacheLoad();
-renderWire();          // replace the hardcoded "Loading events..." immediately
+renderWire();
+// The boot sequence renders these only when their layer is on, and it does not
+// run for every load; without this the static overlays never resolve the
+// feedWait they set at startup and sit on WAITING indefinitely.
+setTimeout(()=>{try{renderStaticOverlays();}catch(e){}},0);          // replace the hardcoded "Loading events..." immediately
 wireIngest();
 setInterval(wireIngest,WIRE.POLL);
 setInterval(fetchNews,300000);
