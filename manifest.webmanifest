@@ -1,0 +1,16 @@
+{
+  "name": "SENTINEL // COMMAND",
+  "short_name": "SENTINEL",
+  "description": "Full-spectrum intelligence picture — live air, maritime and orbital tracking with corroborated global event monitoring.",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#050a12",
+  "theme_color": "#050a12",
+  "categories": ["utilities", "news"],
+  "icons": [
+    { "src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" },
+    { "src": "icon-maskable.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "maskable" }
+  ]
+}
