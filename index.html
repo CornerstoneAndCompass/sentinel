@@ -2,8 +2,21 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>SENTINEL // COMMAND v20</title>
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="theme-color" content="#050a12">
+<meta name="color-scheme" content="dark">
+<meta name="description" content="Full-spectrum intelligence picture — live air, maritime and orbital tracking with corroborated global event monitoring.">
+<!-- Belt and braces with the X-Robots-Tag header in _headers: the header is the
+     authoritative signal, this covers the case where a crawler reads the markup
+     but the header is stripped by an intermediary. -->
+<meta name="robots" content="noindex, nofollow, noarchive, nosnippet">
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="icon.svg">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="SENTINEL">
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/satellite.js/5.0.0/satellite.min.js"></script>
@@ -63,7 +76,15 @@ html,body{width:100%;height:100%;overflow:hidden;background:#050a12;font-family:
 @keyframes defcon-flash{0%,100%{opacity:1}50%{opacity:0.5}}
 
 /* THREAT BANNER — seamless marquee */
-.threat-banner{position:fixed;top:40px;left:0;right:0;height:28px;background:rgba(255,51,85,0.06);border-bottom:1px solid rgba(255,51,85,0.15);display:flex;align-items:center;z-index:4999;overflow:hidden}
+/* The banner used to be red and scrolling at all times, which spent the loudest
+   thing on the page on a quiet Tuesday and left nothing in reserve for a real
+   one. It now takes its colour and its motion from the actual severity: calm is
+   still, grey and readable at a glance; only genuine escalation moves. */
+.threat-banner{position:fixed;top:40px;left:0;right:0;height:28px;background:rgba(140,160,180,0.04);border-bottom:1px solid rgba(255,255,255,0.06);display:flex;align-items:center;z-index:4999;overflow:hidden}
+.threat-banner.sev-elevated{background:rgba(255,136,0,0.06);border-bottom-color:rgba(255,136,0,0.18)}
+.threat-banner.sev-critical{background:rgba(255,51,85,0.07);border-bottom-color:rgba(255,51,85,0.22)}
+.threat-banner.sev-calm .marquee-track{animation:none}
+.threat-banner.sev-calm #threatMarquee2{display:none}
 .marquee-track{display:flex;animation:marquee-scroll 60s linear infinite;white-space:nowrap}
 .marquee-track:hover{animation-play-state:paused}
 /* Hover-pause is not enough when the thing scrolls all day in your peripheral
@@ -80,7 +101,10 @@ html,body{width:100%;height:100%;overflow:hidden;background:#050a12;font-family:
   .marquee-track{animation:none!important}
   .threat-banner{overflow-x:auto}
 }
-.marquee-text{font-family:'Orbitron',sans-serif;font-size:11px;letter-spacing:3px;color:#ff6680;text-shadow:0 0 8px rgba(255,51,85,0.4);padding-right:80px}
+.marquee-text{font-family:'Orbitron',sans-serif;font-size:11px;letter-spacing:3px;color:var(--td);text-shadow:none;padding-right:80px}
+.sev-elevated .marquee-text{color:#ffb04d}
+.sev-critical .marquee-text{color:#ff6680;text-shadow:0 0 8px rgba(255,51,85,0.35)}
+.marquee-ref{opacity:.55}
 @keyframes marquee-scroll{0%{transform:translateX(0)}100%{transform:translateX(-50%)}}
 
 /* LEFT PANEL */
@@ -474,7 +498,7 @@ html,body{width:100%;height:100%;overflow:hidden;background:#050a12;font-family:
 .timeline-item.warning::before{background:var(--o)}
 .timeline-item.info::before{background:var(--c)}
 
-@media(max-width:1200px){.left-panel{width:200px}.right-panel{width:260px}.article-viewer{left:210px;right:270px}.map-modes,.geofence-ctrl{left:210px}}
+@media(max-width:1200px){.left-panel{width:200px}.right-panel{width:260px}.article-viewer{left:210px;right:270px}.map-modes,.geofence-ctrl,.sensor-modes{left:210px}}
 
 /* ORBIT GROUND TRACKS */
 .orbit-track{opacity:0.4}
@@ -590,6 +614,8 @@ html,body{width:100%;height:100%;overflow:hidden;background:#050a12;font-family:
   /* MAP MODES */
   .map-modes{left:8px;bottom:102px}
   .geofence-ctrl{left:8px;bottom:138px}
+  .sensor-modes{left:8px;bottom:174px}
+  .sensor-btn{padding:6px 8px;font-size:10px}
 
   /* DETAIL PANEL */
   .detail-panel{left:8px;right:8px;bottom:64px;transform:none;min-width:auto;width:auto;flex-direction:column;gap:10px;padding:12px 14px;max-height:45vh;overflow-y:auto}
@@ -649,6 +675,222 @@ html,body{width:100%;height:100%;overflow:hidden;background:#050a12;font-family:
    display was designed against. Filtering the tile pane rather than #map keeps
    markers, labels and overlays at full brightness. */
 .basemap-dim{filter:brightness(0.85) contrast(1.02) saturate(0.9);}
+
+/* ===== SENSOR MODES =====
+   A treatment of the imagery, not of the whole map. The old NVG mode filtered
+   #map, which dragged every marker, label and overlay through the same green
+   shift and made the contacts harder to read than with it off. Filtering the
+   tile pane alone keeps the picture treated and the symbology crisp, which is
+   the point of a sensor view. */
+#map[data-sensor] .leaflet-tile-pane{transition:filter .25s ease}
+#map[data-sensor="flir"] .leaflet-tile-pane{
+  filter:grayscale(1) contrast(1.45) sepia(1) hue-rotate(212deg) saturate(5) brightness(1.05)}
+#map[data-sensor="noir"] .leaflet-tile-pane{filter:grayscale(1) contrast(1.4) brightness(0.85)}
+#map[data-sensor="crt"] .leaflet-tile-pane{
+  filter:sepia(1) hue-rotate(62deg) saturate(3.2) contrast(1.25) brightness(0.8)}
+#map[data-sensor="nvg"] .leaflet-tile-pane{
+  filter:grayscale(1) sepia(1) hue-rotate(58deg) saturate(4.5) brightness(0.9) contrast(1.2)}
+/* CRT earns the scanlines the rest of the app only hints at. */
+#map[data-sensor="crt"] ~ .scanlines{
+  background:repeating-linear-gradient(0deg,transparent,transparent 1px,
+    rgba(0,255,120,0.05) 1px,rgba(0,255,120,0.05) 3px)}
+/* The three control rows are pinned beside the left panel, so when it is
+   collapsed — focus mode, or just [ — they were left stranded in open map.
+   They follow it now. */
+.map-modes,.geofence-ctrl,.sensor-modes{transition:left .22s ease}
+body.lpanel-shut .map-modes,
+body.lpanel-shut .geofence-ctrl,
+body.lpanel-shut .sensor-modes{left:14px}
+.sensor-modes{position:fixed;bottom:114px;left:270px;z-index:5000;display:flex;gap:3px;background:var(--pnl);
+  border:1px solid var(--brd);border-radius:4px;padding:3px;backdrop-filter:blur(12px)}
+.sensor-btn{background:transparent;border:1px solid transparent;color:var(--td);
+  font-family:'Share Tech Mono',monospace;font-size:9px;letter-spacing:1px;padding:3px 7px;
+  border-radius:3px;cursor:pointer;-webkit-tap-highlight-color:transparent}
+.sensor-btn:hover{color:var(--tm)}
+.sensor-btn.active{background:var(--cd);border-color:var(--cg);color:var(--c)}
+
+/* ===== LEFT PANEL — SECTIONED CONTROL SURFACE =====
+   The panel used to be one 1,900px scroll: 37 counters, 37 layer toggles and
+   15 nav buttons stacked in a column 866px tall. Nothing was findable because
+   everything was present at once. It is now split by the job you are doing —
+   choosing layers, reading numbers, or moving the view — with the scope
+   selector and the three headline numbers pinned above the switcher so they
+   never go behind a tab. */
+.lp-fixed{background:var(--pnl);border:1px solid var(--brd);border-radius:4px;
+  padding:8px 10px;backdrop-filter:blur(12px);display:flex;flex-direction:column;gap:7px;flex-shrink:0}
+.lp-scope{display:flex;align-items:center;gap:7px}
+.lp-scope-lbl{font-family:'Orbitron',sans-serif;font-size:8px;letter-spacing:2px;color:var(--td);flex-shrink:0}
+.lp-vitals{display:grid;grid-template-columns:repeat(3,1fr);gap:4px;border-top:1px solid var(--brd);padding-top:7px}
+.lp-vital{display:flex;flex-direction:column;gap:1px;min-width:0}
+.lp-vital.act{cursor:pointer;-webkit-tap-highlight-color:transparent}
+.lp-vital.act:hover .lp-vital-k{color:var(--c)}
+.lp-vital-k{font-size:8px;letter-spacing:1px;color:var(--td);text-transform:uppercase;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;transition:color .2s}
+.lp-vital-v{font-family:'Orbitron',sans-serif;font-size:15px;line-height:1.15}
+
+/* section switcher */
+.lp-seg{display:grid;grid-template-columns:repeat(3,1fr);gap:3px;background:var(--pnl);
+  border:1px solid var(--brd);border-radius:4px;padding:3px;backdrop-filter:blur(12px);flex-shrink:0}
+.lp-seg button{background:transparent;border:1px solid transparent;color:var(--td);
+  font-family:'Orbitron',sans-serif;font-size:9px;letter-spacing:2px;padding:7px 2px;
+  border-radius:3px;cursor:pointer;transition:all .18s;-webkit-tap-highlight-color:transparent}
+.lp-seg button:hover{color:var(--tm);background:rgba(0,232,255,.05)}
+.lp-seg button.active{background:var(--cd);border-color:var(--cg);color:var(--c)}
+.lp-sec{display:none;flex-direction:column;gap:5px}
+.lp-sec.active{display:flex}
+
+/* layers card header — master on/off plus a running total */
+.lp-sechead{display:flex;align-items:center;gap:7px;padding-bottom:7px;margin-bottom:2px;
+  border-bottom:1px solid var(--brd);flex-wrap:nowrap}
+.lp-sechead-t{font-family:'Orbitron',sans-serif;font-size:10px;letter-spacing:2px;
+  color:var(--tm);text-transform:uppercase;white-space:nowrap}
+.lp-sechead-n{font-size:9px;letter-spacing:1px;color:var(--td);margin-left:auto;
+  white-space:nowrap;flex-shrink:0}
+.lp-sechead-t{min-width:0;overflow:hidden;text-overflow:ellipsis}
+
+/* layer groups — a real rule between sections, and a count so a folded group
+   still tells you whether anything inside it is switched on */
+.lgrp{border-top:1px solid var(--brd);margin-top:7px;padding-top:7px}
+.lgrp:first-of-type{border-top:none;margin-top:4px;padding-top:0}
+.lgrp-head{display:flex;align-items:center;gap:5px;cursor:pointer;user-select:none;
+  padding:2px 0;flex-wrap:nowrap;-webkit-tap-highlight-color:transparent}
+.lgrp-head:hover .lgrp-name{color:var(--c)}
+.lgrp-caret{color:var(--td);font-size:10px;line-height:1;width:9px;flex-shrink:0;
+  transition:transform .2s}
+.lgrp.shut .lgrp-caret{transform:rotate(-90deg)}
+.lgrp-name{font-family:'Orbitron',sans-serif;font-size:9px;letter-spacing:1px;color:var(--tm);
+  text-transform:uppercase;transition:color .2s;white-space:nowrap;overflow:hidden;
+  text-overflow:ellipsis;min-width:0}
+.lgrp-badge{margin-left:auto;font-size:9px;letter-spacing:1px;color:var(--td);flex-shrink:0}
+.lgrp-badge.lit{color:var(--c)}
+.lgrp-ctl{display:flex;gap:3px;flex-shrink:0}
+.lgrp-ctl button{background:transparent;border:1px solid var(--brd);color:var(--td);
+  font-family:inherit;font-size:8px;letter-spacing:1px;padding:1px 5px;cursor:pointer;
+  line-height:1.5;white-space:nowrap}
+.lgrp-ctl button:hover{border-color:var(--c);color:var(--c)}
+.lgrp-body{display:flex;flex-wrap:wrap;padding-top:4px}
+.lgrp.shut .lgrp-body{display:none}
+
+/* counters — two columns halves the height of every readout card */
+.stat-grid{display:grid;grid-template-columns:1fr 1fr;gap:0 10px}
+.stat-grid .stat-row{padding:2px 0;min-width:0;gap:6px}
+.stat-grid .stat-label{font-size:10px;letter-spacing:.2px;white-space:nowrap;
+  overflow:hidden;text-overflow:ellipsis}
+.stat-grid .stat-val{font-size:13px;flex-shrink:0}
+/* A counter whose value is a level plus a word ("5 STORM", "7 BUOYS") does not
+   fit a half column beside its label. */
+.stat-grid .stat-row.full{grid-column:1/-1}
+
+/* Below 1200px the panel drops to 200px, which is not enough for a group name
+   at 9px/2px tracking alongside its count and its ALL/NONE pair. Scale the
+   chrome down rather than letting the names truncate — the label is the part
+   you navigate by. */
+@media(max-width:1200px) and (min-width:769px){
+  .lp-sechead-t{font-size:9px;letter-spacing:1px}
+  .lp-sechead-n{font-size:8px;letter-spacing:0}
+  .lgrp-name{font-size:8px;letter-spacing:.5px}
+  .lgrp-badge{font-size:8px;letter-spacing:0}
+  .lgrp-ctl button{padding:1px 2px;letter-spacing:0}
+  .lgrp-head{gap:4px}
+  .lp-seg button{font-size:8px;letter-spacing:1px}
+  .lp-vital-v{font-size:13px}
+  .lp-vital-k{letter-spacing:0}
+  .lp-scope-lbl{letter-spacing:1px}
+}
+
+/* ===== SINCE YOU LAST LOOKED =====
+   The one thing a board that runs on a cron can say that a page-load dashboard
+   cannot. It sits above the section switcher because it is the first thing you
+   should read and the only thing that expires. */
+.spine-card{border-color:var(--cg);background:linear-gradient(180deg,rgba(0,232,255,.05),transparent 60%),var(--pnl)}
+.spine-head{display:flex;align-items:center;gap:7px;padding-bottom:7px;margin-bottom:6px;
+  border-bottom:1px solid var(--brd);flex-wrap:nowrap}
+.spine-title{font-family:'Orbitron',sans-serif;font-size:10px;letter-spacing:2px;color:var(--c);
+  text-transform:uppercase;white-space:nowrap}
+.spine-gap{font-size:9px;color:var(--td);letter-spacing:1px;margin-left:auto;white-space:nowrap}
+.spine-ack{background:transparent;border:1px solid var(--brd);color:var(--td);font-family:inherit;
+  font-size:8px;letter-spacing:1px;padding:1px 5px;cursor:pointer;line-height:1.5;white-space:nowrap}
+.spine-ack:hover{border-color:var(--c);color:var(--c)}
+.spine-row{display:flex;gap:7px;align-items:baseline;padding:3px 0;font-size:11px;line-height:1.35}
+.spine-row+.spine-row{border-top:1px solid rgba(255,255,255,.04)}
+.spine-dot{width:5px;height:5px;border-radius:50%;flex-shrink:0;margin-top:5px;background:var(--td)}
+.spine-dot.high{background:var(--r);box-shadow:0 0 6px var(--r)}
+.spine-dot.moderate{background:var(--o);box-shadow:0 0 6px var(--o)}
+.spine-dot.low{background:var(--td)}
+.spine-txt{color:var(--tm);min-width:0}
+.spine-when{margin-left:auto;color:var(--td);font-size:9px;white-space:nowrap;flex-shrink:0}
+.spine-delta{color:var(--td);font-size:10px}
+.spine-delta b{font-family:'Orbitron',sans-serif;font-size:11px;font-weight:400}
+.spine-up{color:var(--o)}.spine-down{color:var(--c)}
+.spine-empty{color:var(--td);font-size:11px;padding:2px 0}
+
+/* acknowledgement — the difference between a list of things that happened and
+   a list of things that still want you */
+.alert-sec{display:flex;align-items:center;gap:8px;padding:6px 12px 4px;font-family:'Orbitron',sans-serif;
+  font-size:8px;letter-spacing:2px;color:var(--td);text-transform:uppercase;
+  border-bottom:1px solid var(--brd);background:rgba(255,255,255,.02)}
+.alert-sec.muted{opacity:.6;margin-top:6px}
+.alert-ackall{margin-left:auto;background:transparent;border:1px solid var(--brd);color:var(--td);
+  font-family:inherit;font-size:8px;letter-spacing:1px;padding:1px 6px;cursor:pointer}
+.alert-ackall:hover{border-color:var(--c);color:var(--c)}
+.alert-ack{margin-left:auto;background:transparent;border:1px solid var(--brd);color:var(--td);
+  font-family:inherit;font-size:8px;letter-spacing:1px;padding:0 5px;cursor:pointer;line-height:1.6}
+.alert-ack:hover{border-color:var(--c);color:var(--c)}
+.alert-item .alert-time{display:flex;align-items:center;gap:6px}
+.alert-item.acked{opacity:.42}
+.alert-item.acked .alert-text{text-decoration:none;color:var(--td)}
+
+/* provenance — the single most important thing this board can tell you about
+   any figure on it is where the figure came from */
+.prov{font-size:7px;letter-spacing:1px;padding:0 3px;border:1px solid;border-radius:2px;
+  flex-shrink:0;line-height:1.6;text-transform:uppercase}
+.prov.live{color:var(--g);border-color:rgba(0,255,136,.45)}
+.prov.derived{color:var(--c);border-color:var(--cg)}
+.prov.ref{color:var(--o);border-color:rgba(255,136,0,.45)}
+.defcon-term{display:flex;align-items:center;gap:6px;padding:3px 0}
+.defcon-term span{color:var(--tm);flex:1;min-width:0}
+.defcon-term b{font-family:'Orbitron',sans-serif;font-weight:400;color:var(--td);flex-shrink:0}
+
+/* A layer built from a hand-maintained table gets a corner mark, so it never
+   reads with the same authority as one that is actually being fed. */
+.fbtn.is-ref::after{content:'';position:absolute;top:2px;right:2px;width:0;height:0;
+  border-top:5px solid var(--o);border-left:5px solid transparent;opacity:.75}
+.lgrp-legend{display:flex;gap:5px;align-items:center;padding-top:7px;margin-top:5px;
+  border-top:1px solid var(--brd);font-size:8px;color:var(--td);letter-spacing:1px;flex-wrap:wrap}
+.lgrp-legend span:not(.prov){margin-right:5px}
+
+/* baseline chip — a live number next to what normal looks like for it */
+.base-chip{font-size:9px;letter-spacing:0;color:var(--td);margin-left:5px;white-space:nowrap}
+.base-chip.high{color:var(--o)}
+.base-chip.low{color:var(--c)}
+
+/* navigation — even grid instead of a ragged wrap */
+.nav-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:3px}
+.nav-grid.one{grid-template-columns:1fr}
+.nav-grid .nav-btn{margin:0;padding:6px 4px;text-align:center;font-size:10px;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+
+/* The mobile drawer is the full 375px, so it gets the opposite of the narrow
+   desktop treatment: room to breathe, and finger-sized targets. Last in the
+   sheet so it wins over the base sizing above. */
+@media(max-width:768px){
+  .lp-seg button{padding:12px 2px;font-size:10px;letter-spacing:2px}
+  .lp-sechead{padding-bottom:9px}
+  .lp-sechead-t{font-size:11px;letter-spacing:2px}
+  .lp-sechead-n{font-size:10px}
+  .lgrp-head{padding:7px 0;gap:7px}
+  .lgrp-name{font-size:10px;letter-spacing:1.5px}
+  .lgrp-badge{font-size:10px}
+  .lgrp-ctl{gap:5px}
+  .lgrp-ctl button{padding:6px 9px;font-size:9px;letter-spacing:1px}
+  .lp-vital-v{font-size:17px}
+  .lp-vital-k{font-size:9px}
+  .stat-grid{gap:0 12px}
+  .stat-grid .stat-label{font-size:11px}
+  .stat-grid .stat-val{font-size:14px}
+  .nav-grid{gap:5px}
+  .nav-grid .nav-btn{padding:11px 4px;font-size:11px}
+}
 </style>
 </head>
 <body>
@@ -725,134 +967,239 @@ html,body{width:100%;height:100%;overflow:hidden;background:#050a12;font-family:
 
 <!-- LEFT PANEL -->
 <div class="left-panel" id="panelL">
-<div class="card" id="cardWatch" style="display:none">
-<div class="card-title">Watchlist</div>
-<div id="watchBody"></div>
+<div class="mob-panel-head"><div><div class="mob-panel-title">CONTROL PANEL</div><div class="mob-panel-sub">Scope, map layers, counts &amp; navigation</div></div><button class="mob-panel-x" onclick="toggleMobPanel('left')">&#x2715;</button></div>
+
+<!-- ALWAYS ON SCREEN: what you are looking at, and the three numbers that matter -->
+<div class="lp-fixed">
+  <div class="lp-scope">
+    <span class="lp-scope-lbl">SCOPE</span>
+    <select class="country-sel" id="countryFilter" onchange="applyFilters()" title="Scope the whole picture to one country — tracked assets and every overlay with a position. Raster layers (rain radar, thermal hotspots) cannot be clipped, so the view moves to the country instead."><option value="">ALL COUNTRIES</option></select>
+  </div>
+  <div class="lp-vitals">
+    <div class="lp-vital" title="Everything currently tracked, all types combined"><span class="lp-vital-k">Tracked</span><span class="lp-vital-v cc" id="sTotal">--</span></div>
+    <div class="lp-vital" title="Assets inside the current map view"><span class="lp-vital-k">On screen</span><span class="lp-vital-v cg" id="sVis">--</span></div>
+    <div class="lp-vital act" onclick="toggleStatusPanel()" title="Data feeds currently delivering — click for the full system status"><span class="lp-vital-k">Feeds</span><span class="lp-vital-v cg" id="sSrc">--</span></div>
+  </div>
 </div>
-<div class="mob-panel-head"><div><div class="mob-panel-title">CONTROL PANEL</div><div class="mob-panel-sub">Live counts, map layers &amp; navigation</div></div><button class="mob-panel-x" onclick="toggleMobPanel('left')">&#x2715;</button></div>
+
+<div class="card spine-card" id="spineSince" style="display:none">
+  <div class="spine-head">
+    <span class="spine-title">Since you last looked</span>
+    <span class="spine-gap" id="spineGap"></span>
+    <button class="spine-ack" onclick="ackSince()" title="Clear this and reset the marker to now">SEEN</button>
+  </div>
+  <div id="spineSinceBody"></div>
+</div>
+
+<div class="card" id="cardWatch" style="display:none">
+  <div class="card-title">Watchlist</div>
+  <div id="watchBody"></div>
+</div>
+
+<!-- One job on screen at a time: pick layers, read numbers, or move the view -->
+<div class="lp-seg">
+  <button id="segLayers" class="active" onclick="setPanelSection('layers')" title="Choose what is drawn on the map">LAYERS</button>
+  <button id="segCounts" onclick="setPanelSection('counts')" title="Live counts — assets, hazards and security">COUNTS</button>
+  <button id="segNav" onclick="setPanelSection('nav')" title="Jump to a region, brief a country, write a SITREP">NAV</button>
+</div>
+
+<!-- ==================== LAYERS ==================== -->
+<div class="lp-sec active" id="secLayers">
+<div class="card" id="cardLayers">
+  <div class="lp-sechead">
+    <span class="lp-sechead-t">Map Layers</span>
+    <span class="lp-sechead-n" id="layersOnCount">--</span>
+    <span class="lgrp-ctl"><button onclick="setAllGroups(true)" title="Turn every map layer on">ALL</button><button onclick="setAllGroups(false)" title="Turn every map layer off">NONE</button></span>
+  </div>
+
+  <div class="lgrp" id="lgAssets">
+    <div class="lgrp-head" onclick="toggleLGroup('lgAssets')" title="Show or hide this group">
+      <span class="lgrp-caret">&#x25be;</span><span class="lgrp-name">Asset types</span>
+      <span class="lgrp-badge" id="bdgAssets">--</span>
+      <span class="lgrp-ctl" onclick="event.stopPropagation()"><button onclick="setGroup('grpAssets',true)" title="Turn every layer in this group on">ALL</button><button onclick="setGroup('grpAssets',false)" title="Turn every layer in this group off">NONE</button></span>
+    </div>
+    <div class="lgrp-body" id="grpAssets">
+      <button class="fbtn on" id="fAir" onclick="togF('aircraft')" title="Show or hide fixed-wing aircraft">AIRCRAFT</button>
+      <button class="fbtn on-y" id="fHeli" onclick="togF('heli')" title="Show or hide helicopters">HELICOPTERS</button>
+      <button class="fbtn on-o" id="fShip" onclick="togF('ship')" title="Show or hide ships and vessels">SHIPS</button>
+      <button class="fbtn on-p" id="fSat" onclick="togF('satellite')" title="Show or hide satellites">SATELLITES</button>
+      <button class="fbtn" id="fOrbit" onclick="toggleOrbits()" title="Draw the orbital path each satellite follows over the ground">ORBIT PATHS</button>
+      <button class="fbtn" id="fLaunch" onclick="togLayer('launches')" title="Orbital launches — the next 20 scheduled and the last 10 flown, plotted at their pad">SPACE MISSIONS</button>
+    </div>
+  </div>
+
+  <div class="lgrp" id="lgOps">
+    <div class="lgrp-head" onclick="toggleLGroup('lgOps')" title="Show or hide this group">
+      <span class="lgrp-caret">&#x25be;</span><span class="lgrp-name">Operators</span>
+      <span class="lgrp-badge" id="bdgOps">--</span>
+      <span class="lgrp-ctl" onclick="event.stopPropagation()"><button onclick="setGroup('grpOps',true)" title="Turn every layer in this group on">ALL</button><button onclick="setGroup('grpOps',false)" title="Turn every layer in this group off">NONE</button></span>
+    </div>
+    <div class="lgrp-body" id="grpOps">
+      <button class="fbtn on-g" id="cMil" onclick="togC('military')" title="Armed forces aircraft and vessels">MILITARY</button>
+      <button class="fbtn on-g" id="cCG" onclick="togC('coastguard')" title="Coast guard aircraft and vessels">COAST GUARD</button>
+      <button class="fbtn on-g" id="cPol" onclick="togC('police')" title="Police aircraft">POLICE</button>
+      <button class="fbtn on-g" id="cGov" onclick="togC('government')" title="Government and state aircraft">GOVERNMENT</button>
+      <button class="fbtn on-g" id="cSar" onclick="togC('sar')" title="Search-and-rescue aircraft and vessels">RESCUE</button>
+    </div>
+  </div>
+
+  <div class="lgrp shut" id="lgCivil">
+    <div class="lgrp-head" onclick="toggleLGroup('lgCivil')" title="Show or hide this group">
+      <span class="lgrp-caret">&#x25be;</span><span class="lgrp-name">Civilian ships</span>
+      <span class="lgrp-badge" id="bdgCivil">--</span>
+      <span class="lgrp-ctl" onclick="event.stopPropagation()"><button onclick="setGroup('grpCivil',true)" title="Turn every layer in this group on">ALL</button><button onclick="setGroup('grpCivil',false)" title="Turn every layer in this group off">NONE</button></span>
+    </div>
+    <div class="lgrp-body" id="grpCivil">
+      <button class="fbtn" id="cTanker" onclick="togC('tanker')" title="Oil, gas and chemical tankers">TANKERS</button>
+      <button class="fbtn" id="cCargo" onclick="togC('cargo')" title="Cargo and container ships">CARGO</button>
+      <button class="fbtn" id="cPassenger" onclick="togC('passenger')" title="Cruise ships and ferries">CRUISE</button>
+      <button class="fbtn" id="cFishing" onclick="togC('fishing')" title="Fishing vessels">FISHING</button>
+    </div>
+  </div>
+
+  <div class="lgrp shut" id="lgHaz">
+    <div class="lgrp-head" onclick="toggleLGroup('lgHaz')" title="Show or hide this group">
+      <span class="lgrp-caret">&#x25be;</span><span class="lgrp-name">Hazards</span>
+      <span class="lgrp-badge" id="bdgHaz">--</span>
+      <span class="lgrp-ctl" onclick="event.stopPropagation()"><button onclick="setGroup('grpHaz',true)" title="Turn every layer in this group on">ALL</button><button onclick="setGroup('grpHaz',false)" title="Turn every layer in this group off">NONE</button></span>
+    </div>
+    <div class="lgrp-body" id="grpHaz">
+      <button class="fbtn" id="fQuake" onclick="togLayer('quakes')" title="Earthquakes from the last 24 hours (USGS)">EARTHQUAKES</button>
+      <button class="fbtn" id="fFire" onclick="togLayer('fires')" title="NASA EONET named wildfire events. Coverage is overwhelmingly US-sourced.">FIRE EVENTS</button>
+      <button class="fbtn" id="fHotspot" onclick="toggleHotspots()" title="Every VIIRS satellite fire detection worldwide in the last 24h (Copernicus GWIS). Bright red = detected in the last 6 hours, fading to pink with age. Expect thousands over northern Australia and central Africa in the dry season — that is normal savanna burning, not an anomaly. Click one for details.">HOTSPOTS (GLOBAL)</button>
+      <button class="fbtn" id="fVolcano" onclick="togLayer('volcanoes')" title="Volcanoes with elevated activity">VOLCANOES</button>
+      <button class="fbtn" id="fTsunami" onclick="togLayer('tsunami')" title="Active tsunami warnings (NOAA)">TSUNAMI</button>
+      <button class="fbtn" id="fRadar" onclick="toggleRadar()" title="Live precipitation radar (RainViewer)">RAIN RADAR</button>
+      <button class="fbtn" id="fBOM" onclick="togLayer('bom')" title="Australian Bureau of Meteorology warnings">AU WARNINGS</button>
+      <button class="fbtn" id="fWx" onclick="togLayer('wx')" title="US National Weather Service severe weather alerts">US SEVERE WX</button>
+      <button class="fbtn" id="fAusEm" onclick="togLayer('ausEm')" title="Live incidents from NSW RFS, VicEmergency and Queensland Fire">AU INCIDENTS</button>
+    </div>
+  </div>
+
+  <div class="lgrp shut" id="lgIntel">
+    <div class="lgrp-head" onclick="toggleLGroup('lgIntel')" title="Show or hide this group">
+      <span class="lgrp-caret">&#x25be;</span><span class="lgrp-name">Security</span>
+      <span class="lgrp-badge" id="bdgIntel">--</span>
+      <span class="lgrp-ctl" onclick="event.stopPropagation()"><button onclick="setGroup('grpIntel',true)" title="Turn every layer in this group on">ALL</button><button onclick="setGroup('grpIntel',false)" title="Turn every layer in this group off">NONE</button></span>
+    </div>
+    <div class="lgrp-body" id="grpIntel">
+      <button class="fbtn on" id="fWire" onclick="togLayer('wire')" title="Corroborated significant events from a rolling 24h news ingest">NEWS EVENTS</button>
+      <button class="fbtn" id="fChoke" onclick="togLayer('chokes')" title="Strategic straits and canals — Hormuz, Suez, Malacca…">CHOKEPOINTS</button>
+      <button class="fbtn" id="fJam" onclick="togLayer('jamming')" title="Zones with known GPS signal jamming">GPS JAMMING</button>
+      <button class="fbtn" id="fNotam" onclick="togLayer('notams')" title="Airspace restrictions and flight notices (NOTAMs/TFRs)">AIRSPACE</button>
+      <button class="fbtn" id="fPiracy" onclick="togLayer('piracy')" title="Maritime piracy risk zones">PIRACY</button>
+      <button class="fbtn" id="fDark" onclick="togLayer('dark')" title="Vessels going dark: AIS gaps, at-sea encounters and loitering (Global Fishing Watch, ~5 day lag)">DARK VESSELS</button>
+      <button class="fbtn" id="fCyber" onclick="togLayer('cyber')" title="Regions with active cyber threat campaigns">CYBER</button>
+      <button class="fbtn" id="fConflict" onclick="togLayer('conflict')" title="Armed conflict and border incidents (ACLED)">CONFLICTS</button>
+      <button class="fbtn" id="fRF" onclick="togLayer('rf')" title="Radio-frequency interference and signals-intelligence zones">RF SIGNALS</button>
+      <button class="fbtn" id="fDrone" onclick="togLayer('drones')" title="Reported drone and UAS activity">DRONES</button>
+      <button class="fbtn" id="fRefugee" onclick="togLayer('refugees')" title="Refugee and displacement movements (UNHCR)">REFUGEES</button>
+    </div>
+  </div>
+
+  <div class="lgrp shut" id="lgInfra">
+    <div class="lgrp-head" onclick="toggleLGroup('lgInfra')" title="Show or hide this group">
+      <span class="lgrp-caret">&#x25be;</span><span class="lgrp-name">Infrastructure</span>
+      <span class="lgrp-badge" id="bdgInfra">--</span>
+      <span class="lgrp-ctl" onclick="event.stopPropagation()"><button onclick="setGroup('grpInfra',true)" title="Turn every layer in this group on">ALL</button><button onclick="setGroup('grpInfra',false)" title="Turn every layer in this group off">NONE</button></span>
+    </div>
+    <div class="lgrp-body" id="grpInfra">
+      <button class="fbtn" id="fCables" onclick="togLayer('cables')" title="Undersea internet cable routes">SEA CABLES</button>
+      <button class="fbtn" id="fNuke" onclick="togLayer('nukes')" title="Nuclear facilities and test sites">NUCLEAR</button>
+      <button class="fbtn" id="fBases" onclick="togLayer('bases')" title="Strategic sites with analytical detail — a curated list, not a survey">STRATEGIC SITES</button>
+      <button class="fbtn" id="fOsmMil" onclick="togLayer('osmMil')" title="Every military installation mapped in OpenStreetMap for the current view — airfields, bases, barracks and naval facilities. Loads what is on screen, so zoom in for detail.">INSTALLATIONS</button>
+      <button class="fbtn" id="fCams" onclick="togLayer('cams')" title="Public roadside cameras published by their operators (Transport for London, Caltrans). Click one for the current frame.">CAMERAS</button>
+    </div>
+  </div>
+  <div class="lgrp-legend" id="provLegend"></div>
+</div>
+</div>
+
+<!-- ==================== COUNTS ==================== -->
+<div class="lp-sec" id="secCounts">
 <div class="card" id="cardTracking">
-<div class="card-title">Live Tracking</div>
-<div class="stat-row" title="Military fixed-wing aircraft currently tracked"><span class="stat-label">MILITARY AIR</span><span class="stat-val cc" id="sMil">--</span></div>
-<div class="stat-row" title="Helicopters currently tracked"><span class="stat-label">HELICOPTERS</span><span class="stat-val cy" id="sHeli">--</span></div>
-<div class="stat-row" title="Coast guard aircraft and vessels"><span class="stat-label">COAST GUARD</span><span class="stat-val" style="color:#ff6600" id="sCG">--</span></div>
-<div class="stat-row" title="Police and government aircraft"><span class="stat-label">POLICE / GOV</span><span class="stat-val cr" id="sPol">--</span></div>
-<div class="stat-row" title="Oil, gas and chemical tankers"><span class="stat-label">TANKERS</span><span class="stat-val" style="color:#e855e8" id="sTanker">--</span></div>
-<div class="stat-row" title="Cargo and container ships"><span class="stat-label">CARGO SHIPS</span><span class="stat-val" style="color:#55aaff" id="sCargo">--</span></div>
-<div class="stat-row" title="Cruise ships, ferries and passenger vessels"><span class="stat-label">CRUISE / FERRY</span><span class="stat-val cy" id="sPax">--</span></div>
-<div class="stat-row" title="Fishing vessels"><span class="stat-label">FISHING</span><span class="stat-val cg" id="sFish">--</span></div>
-<div class="stat-row" title="All tracked vessels of every type"><span class="stat-label">ALL VESSELS</span><span class="stat-val co" id="sShip">--</span></div>
-<div class="stat-row" title="Satellites with live orbital positions"><span class="stat-label">SATELLITES</span><span class="stat-val cp" id="sSat">--</span></div>
-<div class="stat-row" style="border-top:1px solid var(--brd);margin-top:4px;padding-top:5px" title="Everything currently tracked, all types combined"><span class="stat-label">TOTAL ASSETS</span><span class="stat-val cc" id="sTotal">--</span></div>
-<div class="stat-row" title="Assets visible in the current map view"><span class="stat-label">ON SCREEN</span><span class="stat-val cg" style="font-size:12px" id="sVis">--</span></div>
-<div class="stat-row" title="Data feeds currently delivering data — click the status bar below for details"><span class="stat-label">DATA FEEDS</span><span class="stat-val cg" style="font-size:12px" id="sSrc">--</span></div>
+  <div class="card-title">Live Tracking</div>
+  <div class="stat-grid">
+    <div class="stat-row" title="Military fixed-wing aircraft currently tracked"><span class="stat-label">MIL AIR</span><span class="stat-val cc" id="sMil">--</span></div>
+    <div class="stat-row" title="Helicopters currently tracked"><span class="stat-label">HELI</span><span class="stat-val cy" id="sHeli">--</span></div>
+    <div class="stat-row" title="Coast guard aircraft and vessels"><span class="stat-label">COAST GD</span><span class="stat-val" style="color:#ff6600" id="sCG">--</span></div>
+    <div class="stat-row" title="Police and government aircraft"><span class="stat-label">POLICE/GOV</span><span class="stat-val cr" id="sPol">--</span></div>
+    <div class="stat-row" title="Oil, gas and chemical tankers"><span class="stat-label">TANKERS</span><span class="stat-val" style="color:#e855e8" id="sTanker">--</span></div>
+    <div class="stat-row" title="Cargo and container ships"><span class="stat-label">CARGO</span><span class="stat-val" style="color:#55aaff" id="sCargo">--</span></div>
+    <div class="stat-row" title="Cruise ships, ferries and passenger vessels"><span class="stat-label">CRUISE</span><span class="stat-val cy" id="sPax">--</span></div>
+    <div class="stat-row" title="Fishing vessels"><span class="stat-label">FISHING</span><span class="stat-val cg" id="sFish">--</span></div>
+    <div class="stat-row" title="All tracked vessels of every type"><span class="stat-label">VESSELS</span><span class="stat-val co" id="sShip">--</span></div>
+    <div class="stat-row" title="Satellites with live orbital positions"><span class="stat-label">SATS</span><span class="stat-val cp" id="sSat">--</span></div>
+  </div>
 </div>
 <div class="card" id="cardHazards">
-<div class="card-title">Hazards</div>
-<div class="stat-row" title="Earthquakes detected in the last 24 hours (USGS)"><span class="stat-label">EARTHQUAKES</span><span class="stat-val cr" style="font-size:12px" id="sQuake">--</span></div>
-<div class="stat-row" title="NASA EONET open wildfire events. EONET's wildfire reporting is overwhelmingly US-sourced — set a FIRMS key in the Worker for genuine global hotspots."><span class="stat-label">FIRES <span class="scope-tag">EONET</span></span><span class="stat-val co" style="font-size:12px" id="sFires">--</span></div>
-<div class="stat-row" title="US National Weather Service only. Most carry no geometry, so they cannot be mapped. Global weather comes from GDACS and Open-Meteo in the country brief."><span class="stat-label">SEVERE WX <span class="scope-tag us">US</span></span><span class="stat-val cy" style="font-size:12px" id="sWxAlerts">--</span></div>
-<div class="stat-row" title="Geomagnetic activity — storms can disrupt GPS and radio"><span class="stat-label">SOLAR ACTIVITY</span><span class="stat-val cp" style="font-size:12px" id="sKp">--</span></div>
-<div class="stat-row" title="Volcanoes showing elevated activity"><span class="stat-label">VOLCANOES</span><span class="stat-val co" style="font-size:12px" id="sVolcano">--</span></div>
-<div class="stat-row" title="Active tsunami warnings (NOAA)"><span class="stat-label">TSUNAMI ALERTS</span><span class="stat-val cr" style="font-size:12px" id="sTsunami">--</span></div>
+  <div class="card-title">Hazards</div>
+  <div class="stat-grid">
+    <div class="stat-row" title="Earthquakes detected in the last 24 hours (USGS)"><span class="stat-label">QUAKES</span><span class="stat-val cr" id="sQuake">--</span></div>
+    <div class="stat-row" title="NASA EONET open wildfire events. EONET's wildfire reporting is overwhelmingly US-sourced — set a FIRMS key in the Worker for genuine global hotspots."><span class="stat-label">FIRES <span class="scope-tag">EONET</span></span><span class="stat-val co" id="sFires">--</span></div>
+    <div class="stat-row" title="US National Weather Service only. Most carry no geometry, so they cannot be mapped. Global weather comes from GDACS and Open-Meteo in the country brief."><span class="stat-label">SEVERE WX <span class="scope-tag us">US</span></span><span class="stat-val cy" id="sWxAlerts">--</span></div>
+    <div class="stat-row full" title="Geomagnetic activity — storms can disrupt GPS and radio"><span class="stat-label">SOLAR</span><span class="stat-val cp" id="sKp">--</span></div>
+    <div class="stat-row" title="Volcanoes showing elevated activity"><span class="stat-label">VOLCANOES</span><span class="stat-val co" id="sVolcano">--</span></div>
+    <div class="stat-row full" title="Active tsunami warnings (NOAA)"><span class="stat-label">TSUNAMI</span><span class="stat-val cr" id="sTsunami">--</span></div>
+  </div>
 </div>
 <div class="card" id="cardSecurity">
-<div class="card-title">Security Watch</div>
-<div class="stat-row" title="Vessels that stopped transmitting their position (possible AIS switch-off)"><span class="stat-label">DARK VESSELS</span><span class="stat-val cr" style="font-size:12px" id="sDark">--</span></div>
-<div class="stat-row" title="Tracked vessels matching sanctions lists"><span class="stat-label">SANCTIONED</span><span class="stat-val" style="font-size:12px;color:#ff0044" id="sSanctioned">--</span></div>
-<div class="stat-row" title="Zones with known GPS signal jamming"><span class="stat-label">GPS JAMMING</span><span class="stat-val cp" style="font-size:12px" id="sJam">--</span></div>
-<div class="stat-row" title="Watch zones you've drawn on the map"><span class="stat-label">GEOFENCES</span><span class="stat-val cy" style="font-size:12px" id="sGeo">0</span></div>
-<div class="stat-row" title="FAA temporary flight restrictions — United States only."><span class="stat-label">AIRSPACE <span class="scope-tag us">US</span></span><span class="stat-val cy" style="font-size:12px" id="sNotam">--</span></div>
-<div class="stat-row" title="Maritime piracy risk zones"><span class="stat-label">PIRACY ZONES</span><span class="stat-val cr" style="font-size:12px" id="sPiracy">--</span></div>
-<div class="stat-row" title="Armed conflict and border incidents"><span class="stat-label">CONFLICTS</span><span class="stat-val cr" style="font-size:12px" id="sConflict">--</span></div>
-<div class="stat-row" title="Regions with active cyber threat campaigns"><span class="stat-label">CYBER THREATS</span><span class="stat-val cp" style="font-size:12px" id="sCyber">--</span></div>
-<div class="stat-row" title="Nuclear facilities and test sites"><span class="stat-label">NUCLEAR SITES</span><span class="stat-val co" style="font-size:12px" id="sNuke">--</span></div>
-<div class="stat-row" title="Major military installations"><span class="stat-label">MILITARY BASES</span><span class="stat-val cc" style="font-size:12px" id="sMilBase">--</span></div>
-</div>
-<div class="card" id="cardLayers">
-<div class="card-title">Map Layers<span class="grp-ctl" style="margin-left:auto"><button onclick="setAllGroups(true)" title="Turn every map layer on">ALL ON</button><button onclick="setAllGroups(false)" title="Turn every map layer off">ALL OFF</button></span></div>
-<div class="fgroup">Asset types<span class="grp-ctl"><button onclick="setGroup('grpAssets',true)" title="Turn every layer in this group on">ALL</button><button onclick="setGroup('grpAssets',false)" title="Turn every layer in this group off">NONE</button></span></div>
-<div id="grpAssets" style="display:flex;flex-wrap:wrap">
-<button class="fbtn on" id="fAir" onclick="togF('aircraft')" title="Show or hide fixed-wing aircraft">AIRCRAFT</button>
-<button class="fbtn on-y" id="fHeli" onclick="togF('heli')" title="Show or hide helicopters">HELICOPTERS</button>
-<button class="fbtn on-o" id="fShip" onclick="togF('ship')" title="Show or hide ships and vessels">SHIPS</button>
-<button class="fbtn on-p" id="fSat" onclick="togF('satellite')" title="Show or hide satellites">SATELLITES</button>
-<button class="fbtn on-p" id="fOrbit" onclick="toggleOrbits()" title="Draw the orbital path each satellite follows over the ground">ORBIT PATHS</button>
-</div>
-<div class="fgroup">Operators<span class="grp-ctl"><button onclick="setGroup('grpOps',true)" title="Turn every layer in this group on">ALL</button><button onclick="setGroup('grpOps',false)" title="Turn every layer in this group off">NONE</button></span></div>
-<div id="grpOps" style="display:flex;flex-wrap:wrap">
-<button class="fbtn on-g" id="cMil" onclick="togC('military')" title="Armed forces aircraft and vessels">MILITARY</button>
-<button class="fbtn on-g" id="cCG" onclick="togC('coastguard')" title="Coast guard aircraft and vessels">COAST GUARD</button>
-<button class="fbtn on-g" id="cPol" onclick="togC('police')" title="Police aircraft">POLICE</button>
-<button class="fbtn on-g" id="cGov" onclick="togC('government')" title="Government and state aircraft">GOVERNMENT</button>
-<button class="fbtn on-g" id="cSar" onclick="togC('sar')" title="Search-and-rescue aircraft and vessels">RESCUE</button>
-</div>
-<div class="fgroup">Civilian shipping<span class="grp-ctl"><button onclick="setGroup('grpCivil',true)" title="Turn every layer in this group on">ALL</button><button onclick="setGroup('grpCivil',false)" title="Turn every layer in this group off">NONE</button></span></div>
-<div id="grpCivil" style="display:flex;flex-wrap:wrap">
-<button class="fbtn" id="cTanker" onclick="togC('tanker')" title="Oil, gas and chemical tankers">TANKERS</button>
-<button class="fbtn" id="cCargo" onclick="togC('cargo')" title="Cargo and container ships">CARGO</button>
-<button class="fbtn" id="cPassenger" onclick="togC('passenger')" title="Cruise ships and ferries">CRUISE</button>
-<button class="fbtn" id="cFishing" onclick="togC('fishing')" title="Fishing vessels">FISHING</button>
-</div>
-<div class="fgroup">Hazards<span class="grp-ctl"><button onclick="setGroup('grpHaz',true)" title="Turn every layer in this group on">ALL</button><button onclick="setGroup('grpHaz',false)" title="Turn every layer in this group off">NONE</button></span></div>
-<div id="grpHaz" style="display:flex;flex-wrap:wrap">
-<button class="fbtn on-r" id="fQuake" onclick="togLayer('quakes')" title="Earthquakes from the last 24 hours (USGS)">EARTHQUAKES</button>
-<button class="fbtn on-o" id="fFire" onclick="togLayer('fires')" title="NASA EONET named wildfire events. Coverage is overwhelmingly US-sourced.">FIRE EVENTS</button>
-<button class="fbtn" id="fHotspot" onclick="toggleHotspots()" title="Every VIIRS satellite fire detection worldwide in the last 24h (Copernicus GWIS). Bright red = detected in the last 6 hours, fading to pink with age. Expect thousands over northern Australia and central Africa in the dry season — that is normal savanna burning, not an anomaly. Click one for details.">HOTSPOTS (GLOBAL)</button>
-<button class="fbtn on-o" id="fVolcano" onclick="togLayer('volcanoes')" title="Volcanoes with elevated activity">VOLCANOES</button>
-<button class="fbtn on-r" id="fTsunami" onclick="togLayer('tsunami')" title="Active tsunami warnings (NOAA)">TSUNAMI</button>
-<button class="fbtn on" id="fRadar" onclick="toggleRadar()" title="Live precipitation radar (RainViewer)">RAIN RADAR</button>
-<button class="fbtn on-y" id="fBOM" onclick="togLayer('bom')" title="Australian Bureau of Meteorology warnings">AU WARNINGS</button>
-<button class="fbtn" id="fWx" onclick="togLayer('wx')" title="US National Weather Service severe weather alerts">US SEVERE WX</button>
-<button class="fbtn on-r" id="fAusEm" onclick="togLayer('ausEm')" title="Live incidents from NSW RFS, VicEmergency and Queensland Fire">AU INCIDENTS</button>
-</div>
-<div class="fgroup">Security &amp; intel<span class="grp-ctl"><button onclick="setGroup('grpIntel',true)" title="Turn every layer in this group on">ALL</button><button onclick="setGroup('grpIntel',false)" title="Turn every layer in this group off">NONE</button></span></div>
-<div id="grpIntel" style="display:flex;flex-wrap:wrap">
-<button class="fbtn on" id="fWire" onclick="togLayer('wire')" title="Corroborated significant events from a rolling 24h news ingest">NEWS EVENTS</button>
-<button class="fbtn on-y" id="fChoke" onclick="togLayer('chokes')" title="Strategic straits and canals — Hormuz, Suez, Malacca…">CHOKEPOINTS</button>
-<button class="fbtn on-p" id="fJam" onclick="togLayer('jamming')" title="Zones with known GPS signal jamming">GPS JAMMING</button>
-<button class="fbtn on-y" id="fNotam" onclick="togLayer('notams')" title="Airspace restrictions and flight notices (NOTAMs/TFRs)">AIRSPACE</button>
-<button class="fbtn on-r" id="fPiracy" onclick="togLayer('piracy')" title="Maritime piracy risk zones">PIRACY</button>
-<button class="fbtn on-p" id="fDark" onclick="togLayer('dark')" title="Vessels going dark: AIS gaps, at-sea encounters and loitering (Global Fishing Watch, ~5 day lag)">DARK VESSELS</button>
-<button class="fbtn on-p" id="fCyber" onclick="togLayer('cyber')" title="Regions with active cyber threat campaigns">CYBER</button>
-<button class="fbtn on-r" id="fConflict" onclick="togLayer('conflict')" title="Armed conflict and border incidents (ACLED)">CONFLICTS</button>
-<button class="fbtn on-p" id="fRF" onclick="togLayer('rf')" title="Radio-frequency interference and signals-intelligence zones">RF SIGNALS</button>
-<button class="fbtn on-o" id="fDrone" onclick="togLayer('drones')" title="Reported drone and UAS activity">DRONES</button>
-<button class="fbtn on-y" id="fRefugee" onclick="togLayer('refugees')" title="Refugee and displacement movements (UNHCR)">REFUGEES</button>
-</div>
-<div class="fgroup">Infrastructure<span class="grp-ctl"><button onclick="setGroup('grpInfra',true)" title="Turn every layer in this group on">ALL</button><button onclick="setGroup('grpInfra',false)" title="Turn every layer in this group off">NONE</button></span></div>
-<div id="grpInfra" style="display:flex;flex-wrap:wrap">
-<button class="fbtn" id="fCables" onclick="togLayer('cables')" title="Undersea internet cable routes">SEA CABLES</button>
-<button class="fbtn" id="fNuke" onclick="togLayer('nukes')" title="Nuclear facilities and test sites">NUCLEAR</button>
-<button class="fbtn" id="fBases" onclick="togLayer('bases')" title="Major military installations">MIL BASES</button>
-</div>
-<div class="fgroup">Country</div>
-<select class="country-sel" id="countryFilter" onchange="applyFilters()" title="Scope the whole picture to one country — tracked assets and every overlay with a position. Raster layers (rain radar, thermal hotspots) cannot be clipped, so the view moves to the country instead."><option value="">ALL COUNTRIES</option></select>
-</div>
-<div class="card">
-<div class="card-title">Quick Nav</div>
-<div style="display:flex;flex-wrap:wrap;gap:2px">
-<button class="nav-btn" onclick="flyTo(38.5,-98,4)">USA</button>
-<button class="nav-btn" onclick="flyTo(50,10,4)">EU</button>
-<button class="nav-btn" onclick="flyTo(28,50,4)">MIDEAST</button>
-<button class="nav-btn" onclick="flyTo(15,125,4)">PACIFIC</button>
-<button class="nav-btn" onclick="flyTo(36,128,6)">KOREA</button>
-<button class="nav-btn" onclick="flyTo(60,25,5)">BALTIC</button>
-<button class="nav-btn" onclick="flyTo(70,0,3)">ARCTIC</button>
-<button class="nav-btn" onclick="flyTo(-25,135,4)">AUST</button>
-<button class="nav-btn" onclick="flyTo(54,-2,5)">UK</button>
-<button class="nav-btn" onclick="flyTo(48,37,6)">UKRAINE</button>
-<button class="nav-btn" onclick="flyTo(33,44,6)">IRAQ</button>
-<button class="nav-btn" onclick="flyTo(25,55,6)">GULF</button>
-<button class="nav-btn" onclick="flyTo(20,0,2)">GLOBAL</button>
-<button class="nav-btn" style="border-color:var(--p);color:var(--p)" onclick="spaceView()">SPACE</button>
-</div>
-<div style="margin-top:5px;display:flex;flex-wrap:wrap;gap:2px">
-<button class="nav-btn" style="flex:1;border-color:var(--c);color:var(--c)" onclick="generateSitrep()" title="Generate a written situation report summarizing everything currently tracked">SITREP [S]</button>
-</div>
+  <div class="card-title">Security Watch</div>
+  <div class="stat-grid">
+    <div class="stat-row" title="Vessels that stopped transmitting their position (possible AIS switch-off)"><span class="stat-label">DARK VESSELS</span><span class="stat-val cr" id="sDark">--</span></div>
+    <div class="stat-row" title="Tracked vessels matching sanctions lists"><span class="stat-label">SANCTIONED</span><span class="stat-val" style="color:#ff0044" id="sSanctioned">--</span></div>
+    <div class="stat-row" title="Zones with known GPS signal jamming"><span class="stat-label">GPS JAMMING</span><span class="stat-val cp" id="sJam">--</span></div>
+    <div class="stat-row" title="Watch zones you've drawn on the map"><span class="stat-label">GEOFENCES</span><span class="stat-val cy" id="sGeo">0</span></div>
+    <div class="stat-row" title="FAA temporary flight restrictions — United States only."><span class="stat-label">AIRSPACE <span class="scope-tag us">US</span></span><span class="stat-val cy" id="sNotam">--</span></div>
+    <div class="stat-row" title="Maritime piracy risk zones"><span class="stat-label">PIRACY</span><span class="stat-val cr" id="sPiracy">--</span></div>
+    <div class="stat-row" title="Armed conflict and border incidents"><span class="stat-label">CONFLICTS</span><span class="stat-val cr" id="sConflict">--</span></div>
+    <div class="stat-row" title="Regions with active cyber threat campaigns"><span class="stat-label">CYBER</span><span class="stat-val cp" id="sCyber">--</span></div>
+    <div class="stat-row" title="Nuclear facilities and test sites"><span class="stat-label">NUCLEAR</span><span class="stat-val co" id="sNuke">--</span></div>
+    <div class="stat-row" title="Major military installations"><span class="stat-label">MIL BASES</span><span class="stat-val cc" id="sMilBase">--</span></div>
+  </div>
 </div>
 <div class="card" id="cardNations">
-<div class="card-title">Top Nations</div>
-<div id="nationStats" style="font-size:11px"></div>
+  <div class="card-title">Top Nations</div>
+  <div id="nationStats" class="stat-grid"></div>
+</div>
+</div>
+
+<!-- ==================== NAV ==================== -->
+<div class="lp-sec" id="secNav">
+<div class="card">
+  <div class="card-title">Jump To</div>
+  <div class="fgroup">Theatres</div>
+  <div class="nav-grid">
+    <button class="nav-btn" onclick="flyTo(48,37,6)">UKRAINE</button>
+    <button class="nav-btn" onclick="flyTo(28,50,4)">MIDEAST</button>
+    <button class="nav-btn" onclick="flyTo(25,55,6)">GULF</button>
+    <button class="nav-btn" onclick="flyTo(33,44,6)">IRAQ</button>
+    <button class="nav-btn" onclick="flyTo(36,128,6)">KOREA</button>
+    <button class="nav-btn" onclick="flyTo(15,125,4)">PACIFIC</button>
+    <button class="nav-btn" onclick="flyTo(60,25,5)">BALTIC</button>
+    <button class="nav-btn" onclick="flyTo(70,0,3)">ARCTIC</button>
+  </div>
+  <div class="fgroup">Regions</div>
+  <div class="nav-grid">
+    <button class="nav-btn" onclick="flyTo(38.5,-98,4)">USA</button>
+    <button class="nav-btn" onclick="flyTo(50,10,4)">EU</button>
+    <button class="nav-btn" onclick="flyTo(54,-2,5)">UK</button>
+    <button class="nav-btn" onclick="flyTo(-25,135,4)">AUST</button>
+  </div>
+  <div class="fgroup">Views</div>
+  <div class="nav-grid">
+    <button class="nav-btn" onclick="flyTo(20,0,2)" title="Zoom back out to the whole world  (G)">GLOBAL [G]</button>
+    <button class="nav-btn" style="border-color:var(--p);color:var(--p)" onclick="spaceView()" title="Orbital surveillance — satellites only, every other layer off">SPACE</button>
+  </div>
+</div>
+<div class="card">
+  <div class="card-title">Briefings</div>
+  <div class="nav-grid one">
+    <button class="nav-btn" style="border-color:var(--c);color:var(--c)" onclick="generateSitrep()" title="Generate a written situation report summarizing everything currently tracked">SITREP [S]</button>
+    <button class="nav-btn" onclick="openCountryBrief(null,map.getCenter().lat,map.getCenter().lng)" title="Country brief for the centre of the map  (C)">COUNTRY BRIEF [C]</button>
+    <button class="nav-btn" onclick="toggleStatusPanel()" title="Health of every upstream data feed">SYSTEM STATUS</button>
+  </div>
+</div>
 </div>
 </div>
 
@@ -924,6 +1271,15 @@ html,body{width:100%;height:100%;overflow:hidden;background:#050a12;font-family:
 <button class="map-mode-btn" id="mmSat" onclick="setMapMode('satellite')" title="Satellite imagery">SAT</button>
 <button class="map-mode-btn" id="mmNVG" onclick="setMapMode('nvg')" title="Night-vision style map">NVG</button>
 <button class="map-mode-btn" id="mmTopo" onclick="setMapMode('topo')" title="Topographic terrain map">TOPO</button>
+</div>
+
+<!-- SENSOR MODES — a treatment of the imagery, over any basemap -->
+<div class="sensor-modes" id="sensorModes">
+<button class="sensor-btn active" id="snNone" onclick="setSensor('none')" title="No treatment — the basemap as published">NORMAL</button>
+<button class="sensor-btn" id="snFlir" onclick="setSensor('flir')" title="Thermal-style false colour. A look, not a temperature reading — these are ordinary map tiles.">FLIR</button>
+<button class="sensor-btn" id="snNvg" onclick="setSensor('nvg')" title="Night-vision green phosphor">NVG</button>
+<button class="sensor-btn" id="snNoir" onclick="setSensor('noir')" title="Monochrome, high contrast — good for reading symbology over busy imagery">NOIR</button>
+<button class="sensor-btn" id="snCrt" onclick="setSensor('crt')" title="Phosphor CRT with scanlines">CRT</button>
 </div>
 
 <!-- GEOFENCE CONTROLS -->
@@ -1062,7 +1418,13 @@ const _baseGroup=L.layerGroup([_baseTile,_baseLabels]).addTo(map);
 // browser cannot read them directly no matter what we do client-side.
 // Deploy worker/ (see worker/README.md) and paste its URL into the PROXY field
 // in SYSTEM STATUS. Feeds that can be fetched direct never touch the proxy.
-let PROXY_BASE=(localStorage.getItem('sentinel_proxy')||'').replace(/\/+$/,'');
+// The worker this build was deployed against. Baking it in is what makes the
+// board work on a phone, or in a second browser, without someone first finding
+// the settings panel — the alternative is a dead-looking map and a per-device
+// setup step. A saved value still wins, so the PROXY field overrides this, and
+// clearing that field falls back to here rather than to nothing.
+const DEFAULT_PROXY='https://sentinel-feeds.benjamin-a2d.workers.dev';
+let PROXY_BASE=(localStorage.getItem('sentinel_proxy')||DEFAULT_PROXY).replace(/\/+$/,'');
 function hasProxy(){return !!PROXY_BASE;}
 function setProxyBase(u){
   PROXY_BASE=(u||'').trim().replace(/\/+$/,'');
@@ -1097,6 +1459,7 @@ async function checkProxyHealth(){
 const state={
   assets:new Map(),markers:new Map(),routes:new Map(),
   quakeMarkers:[],wireMarkers:[],fireMarkers:[],chokeMarkers:[],
+  osmMilMarkers:[],launchMarkers:[],camMarkers:[],
   filters:{aircraft:true,heli:true,ship:true,satellite:true},
   categories:{military:true,coastguard:true,police:true,government:true,sar:true,tanker:false,cargo:false,passenger:false,fishing:false},
   // All overlays start off. Painting twenty layers at once on first run is the
@@ -1107,7 +1470,10 @@ const state={
     // the map when you open it, not behind a toggle you have to know about.
     wire:true,chokes:false,notams:false,piracy:false,volcanoes:false,tsunami:false,cyber:false,
     cables:false,nukes:false,bases:false,conflict:false,rf:false,drones:false,refugees:false,dark:false,
-    jamming:false,wx:false,hotspots:false},
+    jamming:false,wx:false,hotspots:false,
+    // Added with the worker-side sources: mapped installations, launches and
+    // public cameras. All opt-in like every other overlay.
+    osmMil:false,launches:false,cams:false},
   countryFilter:'',searchTerm:'',selectedId:null,
   alerts:[],news:[],earthquakes:[],fires:[],notamMarkers:[],cableLines:[],nukeMarkers:[],piracyMarkers:[],wildfireMarkers:[],cyberMarkers:[],refugeeMarkers:[],milbaseMarkers:[],rfMarkers:[],droneMarkers:[],ntestMarkers:[],conflictMarkers:[],volcanoMarkers:[],tsunamiMarkers:[],
   threats:{},defcon:4,threatScore:0,
@@ -1143,9 +1509,12 @@ const FEEDS=[
   {id:'f24',code:'WFIRE',name:'Wildfires',desc:'Large active wildfire perimeters'},
   {id:'f25',code:'CYBER',name:'Cyber Threats',desc:'Cyber threat activity by region'},
   {id:'f26',code:'REFUG',name:'Displacement',desc:'Refugee & displacement movements'},
-  {id:'f27',code:'MILBS',name:'Military Bases',desc:'Major military installations'},
+  {id:'f27',code:'MILBS',name:'Strategic Sites',desc:'Curated installations with analytical detail \u2014 reviewed by hand, not a survey'},
   {id:'f28',code:'RFMON',name:'RF Monitor',desc:'Radio-frequency / signals-intelligence zones'},
   {id:'f29',code:'DRONE',name:'Drone Activity',desc:'Reported drone & UAS activity'},
+  {id:'f30',code:'OSMIL',name:'Mapped Installations',desc:'Military sites from OpenStreetMap for the current view'},
+  {id:'f31',code:'LAUNCH',name:'Space Missions',desc:'Upcoming and recent orbital launches (Launch Library 2)'},
+  {id:'f32',code:'CAMS',name:'Public Cameras',desc:'Roadside cameras published by their operators (TfL, Caltrans)'},
   {id:'f30',code:'NTEST',name:'Nuclear Tests',desc:'Seismic screening for possible nuclear tests'},
   {id:'f31',code:'ACLED',name:'Conflicts',desc:'Armed conflict & border incidents'},
   {id:'f32',code:'VOLC',name:'Volcanoes',desc:'Volcanic activity monitoring'},
@@ -1198,7 +1567,7 @@ function renderStatusPanel(){
       :'<span class="status-state" style="color:var(--y)">WAITING</span>';
     return `<div class="status-row"><div class="fd ${st}"></div><span class="status-name">${f.name}</span><span class="status-desc">${f.desc}</span>${lbl}</div>`;
   }).join('');
-  document.getElementById('statusList').innerHTML=renderProxyRow()+rows;
+  document.getElementById('statusList').innerHTML=renderProxyRow()+renderSpineRow()+rows;
   document.getElementById('statusSummary').innerHTML=
     `<div class="status-sum-item"><div class="fd ok" style="animation:none"></div>${ok} ONLINE</div>`+
     `<div class="status-sum-item"><div class="fd err" style="animation:none"></div>${err} OFFLINE</div>`+
@@ -1206,6 +1575,21 @@ function renderStatusPanel(){
     (idle?`<div class="status-sum-item"><div class="fd idle"></div>${idle} NEEDS SETUP</div>`:'')+
     `<div class="status-sum-item" style="margin-left:auto;color:var(--td)">OFFLINE FEEDS RETRY AUTOMATICALLY</div>`;
 }
+// Continuity is a claim the board makes — "since you last looked", "normal is
+// 11" — so when the history is missing it has to say so rather than quietly
+// dropping the context and looking the same as before.
+function renderSpineRow(){
+  const h=state.spineHealth;
+  const dot=!PROXY_BASE?'idle':h&&h.ok?'ok':h&&h.reason==='not checked'?'wait':'err';
+  const txt=!PROXY_BASE?'NEEDS PROXY — no history, no baselines'
+    :h&&h.ok?('WATCHING — '+h.samples+' samples, last '+timeAgo(new Date(Date.now()-h.ageSec*1000).toISOString()))
+    :h&&h.reason==='not checked'?'CHECKING…'
+    :('NO HISTORY — '+((h&&h.reason)||'unreachable'));
+  return `<div class="status-row"><div class="fd ${dot}"></div><span class="status-name">SPINE</span>`
+    + `<span class="status-desc">Rolling history and baselines \u2014 what changed since you last looked</span>`
+    + `<span class="status-state" style="color:var(--${dot==='ok'?'g':dot==='err'?'r':'td'})">${txt}</span></div>`;
+}
+
 // The proxy is the single point of failure for ~half the feeds, so it gets its
 // own row at the top of the status panel rather than being invisible config.
 function renderProxyRow(){
@@ -2043,7 +2427,19 @@ function closeDetail(){
   state.selectedId=null;if(liveTrackInterval){clearInterval(liveTrackInterval);liveTrackInterval=null;}
 }
 function focusAsset(id){const a=state.assets.get(id);if(a){map.setView([a.lat,a.lon],Math.max(map.getZoom(),8),{animate:true});showDetail(id);}}
-function flyTo(lat,lon,z){map.setView([lat,lon],z,{animate:true,duration:1.5});}
+/* Leaflet drives its pan and zoom animation off requestAnimationFrame, which a
+   backgrounded tab never gets. The animated setView then returns having moved
+   nothing, and the view is left stranded — click a region, switch tab, come
+   back, and the map is still where it was. Keep the animation, but confirm the
+   destination and snap to it if the animation never ran. */
+function flyTo(lat,lon,z){
+  map.setView([lat,lon],z,{animate:true,duration:1.5});
+  setTimeout(()=>{
+    const c=map.getCenter();
+    if(Math.abs(c.lat-lat)>0.5||Math.abs(c.lng-lon)>0.5||map.getZoom()!==z)
+      map.setView([lat,lon],z,{animate:false});
+  },1700);
+}
 
 // --- ARTICLE VIEWER ---
 function openArticle(url,title){
@@ -3288,6 +3684,30 @@ async function fetchSats(){
     const allTLEs=[];
     const addTLE=(t)=>{if(!seen.has(t.norad)){seen.add(t.norad);allTLEs.push(t);}};
 
+    /* CelesTrak is the source the third-party mirrors below copy from, and the
+       worker serves it a group at a time already parsed. Five cached requests
+       replace eleven uncached ones against a mirror, and the catalogue is both
+       larger and fresher. The mirror path is kept as the no-proxy fallback so
+       the board still shows satellites with nothing configured. */
+    if(hasProxy()){
+      /* Sequential, not parallel. CelesTrak answers a burst of group requests
+         with 503s — measured — and the worker caches each group for twelve
+         hours anyway, so there is nothing to gain by asking all at once and a
+         throttle to earn by doing it. */
+      const groups=['stations','military','gps-ops','science','visual'];
+      for(const g of groups){
+        try{
+          const d=await spineFetch('/tle?group='+g+'&limit=120',20000);
+          if(d&&Array.isArray(d.items))d.items.forEach(t=>{if(t.line1&&t.line2)addTLE(t);});
+        }catch(e){/* one group short is not a failure; keep the rest */}
+      }
+    }
+    // Only fall back to the mirror when CelesTrak gave us nothing at all.
+    if(allTLEs.length){
+      state._satSource='CelesTrak';
+    }else{
+      state._satSource='mirror';
+
     // Step 1: Fetch priority sats by NORAD ID (parallel)
     const priorityResults=await Promise.allSettled(
       PRIORITY_SAT_IDS.map(id=>fetchTLEPage(TLE_API+id))
@@ -3315,6 +3735,8 @@ async function fetchSats(){
     );
     for(const r of searchResults){
       if(r.status==='fulfilled')r.value.forEach(addTLE);
+    }
+
     }
 
     // Step 4: Propagate each satellite position using satellite.js
@@ -3665,6 +4087,246 @@ function renderMilBases(){
   document.getElementById('sMilBase').textContent=MILITARY_BASES.length;
   feedDot('f27',true);
 }
+
+/* ==================== WORKER-BACKED SOURCES ====================
+   Three layers whose upstreams are either too large, too fragmented, or too
+   rate-limited to query from a browser. Each is reduced and cached by the
+   worker; see worker/src/sources.js. All three degrade to nothing when no
+   proxy is configured rather than half-drawing.
+*/
+function spineOrNull(path,t){
+  if(!hasProxy())return Promise.resolve(null);
+  return spineFetch(path,t||15000).catch(()=>null);
+}
+
+/* ---- direct-first sources ----
+   The usual reason a feed goes through the worker is that it sends no CORS
+   headers. These three send `Access-Control-Allow-Origin: *`, and measuring
+   them from the deployed edge showed the opposite problem: Overpass answers
+   Cloudflare with 521, Launch Library with nothing, and TfL with 429, while all
+   three answer this browser normally. Shared datacenter egress is the thing
+   being throttled, not us.
+
+   So for these the proxy is the liability. Go direct from the page, which is a
+   residential address, and keep the worker as the fallback for the case where
+   the browser is the one being blocked — a corporate network, say. Exactly
+   inverted from every other feed here, and worth the comment because it looks
+   like a mistake otherwise.
+*/
+async function directFirst(direct,workerPath,t){
+  try{
+    const v=await direct();
+    if(v)return v;
+  }catch(e){/* fall through to the proxy */}
+  return spineOrNull(workerPath,t);
+}
+function fetchJSON(url,opts,t){
+  const c=new AbortController();
+  const tm=setTimeout(()=>c.abort(),t||20000);
+  return fetch(url,{...(opts||{}),signal:c.signal})
+    .then(r=>{clearTimeout(tm);if(!r.ok)throw new Error('HTTP '+r.status);return r.json();})
+    .catch(e=>{clearTimeout(tm);throw e;});
+}
+
+/* ---- mapped installations (OpenStreetMap) ----
+   Viewport-scoped by necessity: there are tens of thousands worldwide and the
+   worker caps a query at 12 degrees. The curated STRATEGIC SITES layer is a
+   different thing and stays — eighteen sites with analytical detail is not
+   what this replaces, it is what this surrounds.
+*/
+/* A generation counter rather than a busy flag. A pan already in flight must
+   not swallow an explicit toggle — that silently produced an empty layer — but
+   two overlapping runs must not both append either. Each run claims a
+   generation and abandons its own results if a newer one has started. */
+let _osmMilGen=0,_osmMilKey='';
+async function renderOsmMil(force){
+  const gen=++_osmMilGen;
+  state.osmMilMarkers.forEach(m=>map.removeLayer(m));state.osmMilMarkers=[];
+  if(!state.layers.osmMil)return;
+  const b=map.getBounds();
+  const s=b.getSouth(),w=b.getWest(),n=b.getNorth(),e=b.getEast();
+  if((n-s)>12||(e-w)>12){
+    feedDot('f30',false);
+    addAlert('green','INSTALLATIONS: zoom in — the view is wider than one query covers');
+    return;
+  }
+  const key=[s,w,n,e].map(v=>v.toFixed(1)).join(',');
+  if(!force&&key===_osmMilKey&&state.osmMilMarkers.length)return;
+  try{
+    const d=await directFirst(async()=>{
+      // Same query and same reduction the worker applies, so both paths yield
+      // identical records; see worker/src/sources.js.
+      const bs=Math.floor(s),bw=Math.floor(w),bn=Math.ceil(n),be=Math.ceil(e);
+      const box='('+bs+','+bw+','+bn+','+be+')';
+      const tags=[['military','airfield'],['military','base'],['military','naval_base'],
+                  ['military','barracks'],['military','training_area']];
+      const q='[out:json][timeout:50];('+tags.map(([k,v])=>'nwr["'+k+'"="'+v+'"]'+box+';').join('')
+             +');out center tags 400;';
+      const j=await fetchJSON('https://overpass-api.de/api/interpreter',
+        {method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},
+         body:'data='+encodeURIComponent(q)},50000);
+      const rank={airfield:0,naval_base:1,base:2,barracks:3,training_area:4};
+      const items=(j.elements||[]).map(el=>{
+        const la=el.lat!=null?el.lat:(el.center&&el.center.lat);
+        const lo=el.lon!=null?el.lon:(el.center&&el.center.lon);
+        if(typeof la!=='number'||typeof lo!=='number')return null;
+        const tg=el.tags||{};
+        return {id:el.type[0]+el.id,name:tg.name||tg['name:en']||null,
+                kind:tg.military||'installation',operator:tg.operator||null,
+                lat:la,lon:lo};
+      }).filter(Boolean).sort((a,b)=>{
+        const r=(rank[a.kind]==null?9:rank[a.kind])-(rank[b.kind]==null?9:rank[b.kind]);
+        return r||((a.name?0:1)-(b.name?0:1));
+      }).slice(0,300);
+      return items.length?{count:items.length,items}:null;
+    },'/osm/military?bbox='+[s,w,n,e].join(','),30000);
+    if(gen!==_osmMilGen)return;                 // superseded while in flight
+    if(!d||!d.items){feedDot('f30',false);return;}
+    const col={airfield:'#00e8ff',naval_base:'#55aaff',base:'#00ff88',barracks:'#00ff88',training_area:'#7a8a9a'};
+    for(const it of d.items){
+      if(!state.layers.osmMil||gen!==_osmMilGen)break;
+      const c=col[it.kind]||'#00ff88';
+      const m=L.circleMarker([it.lat,it.lon],{radius:it.kind==='airfield'?6:4,color:c,weight:1.5,
+        fillColor:c,fillOpacity:0.25});
+      m.bindTooltip((it.name||'Unnamed '+it.kind).slice(0,60),{className:'quake-tooltip',direction:'top'});
+      m.bindPopup('<div style="background:#0a0e18;color:#d8dfe8;padding:8px;border:1px solid '+c
+        +';border-radius:4px;font-family:Share Tech Mono,monospace;font-size:11px">'
+        +'<div style="color:'+c+';font-weight:bold;margin-bottom:4px">'+esc(it.name||'Unnamed installation')+'</div>'
+        +'Type: '+esc(it.kind)+(it.operator?'<br>Operator: '+esc(it.operator):'')
+        +'<br><span style="opacity:.6">OpenStreetMap \u2014 community mapped</span></div>',{className:'dark-popup'});
+      m.addTo(map);state.osmMilMarkers.push(m);
+    }
+    state.sources.osmMil=d.count||0;
+    _osmMilKey=key;                            // only now is this view actually drawn
+    feedDot('f30',true);
+  }catch(e){feedDot('f30',false);}
+}
+
+/* ---- orbital launches ---- */
+async function renderLaunches(){
+  state.launchMarkers.forEach(m=>map.removeLayer(m));state.launchMarkers=[];
+  if(!state.layers.launches)return;
+  feedWait('f31');
+  const d=await directFirst(async()=>{
+    const base='https://ll.thespacedevs.com/2.2.0/launch/';
+    const [up,prev]=await Promise.allSettled([
+      fetchJSON(base+'upcoming/?limit=20',null,20000),
+      fetchJSON(base+'previous/?limit=10',null,20000),
+    ]);
+    const rows=[];
+    const take=(j,when)=>{
+      for(const r of (j&&j.results)||[]){
+        const pad=r.pad||{},loc=pad.location||{};
+        const la=parseFloat(pad.latitude),lo=parseFloat(pad.longitude);
+        rows.push({id:r.id,name:r.name,when,net:r.net||null,
+          status:(r.status&&(r.status.abbrev||r.status.name))||null,
+          provider:(r.launch_service_provider&&r.launch_service_provider.name)||null,
+          pad:pad.name||null,site:loc.name||null,
+          lat:isFinite(la)?la:null,lon:isFinite(lo)?lo:null});
+      }
+    };
+    if(up.status==='fulfilled')take(up.value,'upcoming');
+    if(prev.status==='fulfilled')take(prev.value,'previous');
+    return rows.length?{count:rows.length,items:rows}:null;
+  },'/launches',20000);
+  if(!d||!d.items){feedDot('f31',false);return;}
+  const now=Date.now();
+  for(const l of d.items){
+    if(l.lat==null||l.lon==null)continue;
+    const t=l.net?Date.parse(l.net):NaN;
+    const soon=isFinite(t)&&t>now&&(t-now)<864e5;      // inside 24h
+    const past=l.when==='previous';
+    const c=past?'#7a8a9a':soon?'#ff8800':'#aa66ff';
+    const m=L.circleMarker([l.lat,l.lon],{radius:soon?8:6,color:c,weight:2,fillColor:c,
+      fillOpacity:soon?0.35:0.15});
+    const when=isFinite(t)
+      ? (past?timeAgo(new Date(t).toISOString()):'T-'+humanGap(Math.max(0,(t-now)/1000)))
+      : 'schedule TBD';
+    m.bindTooltip(esc(l.name.slice(0,54))+' \u2014 '+when,{className:'quake-tooltip',direction:'top'});
+    m.bindPopup('<div style="background:#0a0e18;color:#d8dfe8;padding:8px;border:1px solid '+c
+      +';border-radius:4px;font-family:Share Tech Mono,monospace;font-size:11px;max-width:280px">'
+      +'<div style="color:'+c+';font-weight:bold;margin-bottom:4px">'+esc(l.name)+'</div>'
+      +(l.provider?esc(l.provider)+'<br>':'')
+      +(l.site?esc(l.site)+'<br>':'')+(l.pad?esc(l.pad)+'<br>':'')
+      +'<span style="color:'+c+'">'+when+'</span>'+(l.status?' \u00b7 '+esc(l.status):'')
+      +'<br><span style="opacity:.6">Launch Library 2</span></div>',{className:'dark-popup'});
+    m.addTo(map);state.launchMarkers.push(m);
+  }
+  state.sources.launches=state.launchMarkers.length;
+  feedDot('f31',true);
+}
+
+/* ---- public cameras ----
+   The frame itself is loaded straight from the operator when a camera is
+   opened, never proxied and never preloaded: eight hundred thumbnails is
+   somebody else's bandwidth bill and none of it is on screen.
+*/
+let _camIndex=null;
+async function renderCams(){
+  state.camMarkers.forEach(m=>map.removeLayer(m));state.camMarkers=[];
+  if(!state.layers.cams)return;
+  feedWait('f32');
+  if(!_camIndex){
+    // TfL 429s the edge but answers the browser; Caltrans is the reverse — it
+    // has no CORS headers, so it has to come through the worker. Take each by
+    // whichever route actually works and merge.
+    const [tfl,rest]=await Promise.all([
+      (async()=>{
+        try{
+          const j=await fetchJSON('https://api.tfl.gov.uk/Place/Type/JamCam',null,25000);
+          return (Array.isArray(j)?j:[]).map(c=>{
+            if(typeof c.lat!=='number'||typeof c.lon!=='number')return null;
+            const props={};(c.additionalProperties||[]).forEach(a=>{props[a.key]=a.value;});
+            if(!props.imageUrl)return null;
+            return {id:'tfl:'+c.id,name:c.commonName||'Camera',lat:c.lat,lon:c.lon,
+                    image:props.imageUrl,video:props.videoUrl||null,
+                    operator:'Transport for London'};
+          }).filter(Boolean);
+        }catch(e){return [];}
+      })(),
+      spineOrNull('/cams?src=caltrans',25000),
+    ]);
+    const merged=tfl.concat((rest&&rest.items)||[]);
+    if(!merged.length){feedDot('f32',false);return;}
+    _camIndex=merged;
+  }
+  // Four thousand markers is not a picture, it is a fog. Draw the ones in view.
+  const b=map.getBounds();
+  const vis=_camIndex.filter(c=>b.contains([c.lat,c.lon])).slice(0,600);
+  for(const c of vis){
+    const m=L.circleMarker([c.lat,c.lon],{radius:3,color:'#00e8ff',weight:1,
+      fillColor:'#00e8ff',fillOpacity:0.35});
+    m.bindTooltip(esc(c.name.slice(0,50)),{className:'quake-tooltip',direction:'top'});
+    // Bound lazily so the image is only requested when someone opens the popup.
+    m.on('popupopen',()=>{
+      m.setPopupContent('<div style="background:#0a0e18;color:#d8dfe8;padding:8px;border:1px solid var(--c);'
+        +'border-radius:4px;font-family:Share Tech Mono,monospace;font-size:11px;max-width:340px">'
+        +'<div style="color:var(--c);font-weight:bold;margin-bottom:4px">'+esc(c.name)+'</div>'
+        +'<img src="'+esc(c.image)+'" alt="" style="width:100%;border:1px solid var(--brd);display:block;margin:4px 0" '
+        +'onerror="this.style.display=\'none\';this.nextElementSibling.style.display=\'block\'">'
+        +'<div style="display:none;color:var(--td)">Frame unavailable.</div>'
+        +'<span style="opacity:.6">'+esc(c.operator)+' \u00b7 live frame</span></div>');
+    });
+    m.bindPopup('Loading frame…',{className:'dark-popup',maxWidth:360});
+    m.addTo(map);state.camMarkers.push(m);
+  }
+  state.sources.cams=_camIndex.length;
+  feedDot('f32',true);
+}
+
+// Installations follow the viewport, so a pan has to re-query — debounced, and
+// only while the layer is actually on.
+let _osmMilTimer=null,_camTimer=null;
+map.on('moveend',()=>{
+  if(state.layers.osmMil){
+    clearTimeout(_osmMilTimer);
+    _osmMilTimer=setTimeout(()=>renderOsmMil(false),900);
+  }
+  if(state.layers.cams){
+    clearTimeout(_camTimer);
+    _camTimer=setTimeout(()=>renderCams(),400);   // index is already in memory
+  }
+});
 
 // --- 9. RF / SIGINT SPECTRUM MONITOR ---
 state.sources.rfmon=0;
@@ -5927,22 +6589,106 @@ function expandThreat(cc){
 }
 
 // --- DEFCON / THREAT SCORE ---
+/* ---- DEFCON ----
+   This used to be a constant wearing a live number's clothes. Roughly nine
+   tenths of the old score came from RISK_DATA and CHOKEPOINTS, both of which
+   are hand-maintained tables that no code ever updates, so the headline
+   readiness level could not move unless an M6 earthquake happened. A board
+   whose most prominent figure never changes teaches you to ignore it.
+
+   Every term below is derived from something that actually arrived today —
+   corroborated wire events, seismic, tsunami, disaster alerts, space weather,
+   and the spine's own anomaly flags — except the last, which is the standing
+   regional picture. That one is still editorial, so it is capped low and
+   labelled REFERENCE wherever it is shown. Each term carries its own text, and
+   the popover prints them, so the number can always be taken apart.
+*/
+const DEFCON_BANDS=[[45,1],[32,2],[20,3],[9,4]];
+
+function defconTerms(){
+  const terms=[];
+  const add=(kind,pts,text)=>{if(pts>0)terms.push({kind,pts:Math.round(pts*10)/10,text});};
+  const cap=(v,m)=>Math.min(v,m);
+
+  // Corroborated significant events in the last 24h. These are the strongest
+  // live signal the board has: each one is cross-checked against two or more
+  // independent wires before it is promoted.
+  try{
+    const cutoff=Date.now()-864e5;
+    const ev=(WIRE.events||[]).filter(e=>e.promoted&&(e.last||e.first||0)>=cutoff);
+    const violent=ev.filter(e=>['WAR','NUCLEAR','ATTACK','STRIKE','BLAST'].includes(e.cat));
+    add('live',cap(violent.length*3,15),
+      violent.length?`${violent.length} corroborated armed/violent event${violent.length>1?'s':''} (24h)`:'');
+    const mass=ev.filter(e=>(e.toll&&e.toll.dead||0)>=200);
+    add('live',cap(mass.length*4,12),
+      mass.length?`${mass.length} mass-casualty event${mass.length>1?'s':''}, 200+ dead`:'');
+    const other=ev.length-violent.length-mass.length;
+    add('live',cap(Math.max(0,other)*1,8),
+      other>0?`${other} other corroborated significant event${other>1?'s':''} (24h)`:'');
+  }catch(e){}
+
+  // Seismic
+  try{
+    const m6=state.earthquakes.filter(q=>q.mag>=6).length;
+    const m5=state.earthquakes.filter(q=>q.mag>=5&&q.mag<6).length;
+    add('live',cap(m6*3,9),m6?`${m6} major earthquake${m6>1?'s':''} M6+ (24h)`:'');
+    add('live',cap(m5*0.5,4),m5?`${m5} earthquake${m5>1?'s':''} M5\u20136 (24h)`:'');
+  }catch(e){}
+
+  // Tsunami warnings in force
+  try{
+    const t=(state.tsunamiMarkers||[]).length;
+    add('live',cap(t*4,12),t?`${t} active tsunami warning${t>1?'s':''}`:'');
+  }catch(e){}
+
+  // Global disaster alerts, from the spine so they are the same numbers the
+  // history was built from.
+  try{
+    const m=SPINE.state&&SPINE.state.metrics;
+    if(m){
+      const red=m.gdacsRed&&m.gdacsRed.value||0;
+      const orange=m.gdacsOrange&&m.gdacsOrange.value||0;
+      add('live',cap(red*3,9),red?`${red} GDACS red alert${red>1?'s':''}`:'');
+      add('live',cap(orange*0.4,6),orange?`${orange} GDACS orange alerts`:'');
+      // Anything the spine says is outside its own 7-day normal.
+      const hot=Object.entries(m).filter(([,v])=>v.state==='high');
+      add('derived',cap(hot.length*1.5,6),
+        hot.length?`${hot.length} global metric${hot.length>1?'s':''} above 7-day normal: `
+          +hot.map(([k])=>k).join(', '):'');
+    }
+  }catch(e){}
+
+  // Space weather — a severe storm degrades GPS and HF, which is an operational
+  // fact rather than a headline.
+  try{
+    const kp=state.spaceWeather&&state.spaceWeather.kp||0;
+    if(kp>=7)add('live',4,`geomagnetic storm Kp ${kp.toFixed(1)} \u2014 GPS/HF degraded`);
+    else if(kp>=5)add('live',2,`geomagnetic activity Kp ${kp.toFixed(1)}`);
+  }catch(e){}
+
+  // Standing regional picture. Editorial, updated by hand, so it sets a floor
+  // rather than driving the number.
+  try{
+    const crit=Object.entries(RISK_DATA).filter(([,v])=>v.level==='CRITICAL');
+    add('reference',cap(crit.length*0.75,6),
+      crit.length?`${crit.length} region${crit.length>1?'s':''} at standing critical risk`:'');
+  }catch(e){}
+
+  return terms;
+}
+
 function calculateDefcon(){
-  const levels={CRITICAL:4,HIGH:2,ELEVATED:1,MODERATE:0,LOW:0};
-  let score=0;
-  for(const[,info]of Object.entries(RISK_DATA))score+=levels[info.level]||0;
-  // Add earthquake severity
-  score+=state.earthquakes.filter(q=>q.mag>=6).length*3;
-  score+=state.earthquakes.filter(q=>q.mag>=5&&q.mag<6).length;
-  // Chokepoint status
-  score+=CHOKEPOINTS.filter(c=>c.status==='CRITICAL').length*3;
-  score+=CHOKEPOINTS.filter(c=>c.status==='ELEVATED').length;
-  state.threatScore=score;
-  let defcon=score>=60?1:score>=45?2:score>=30?3:score>=15?4:5;
+  const terms=defconTerms();
+  const score=terms.reduce((s,t)=>s+t.pts,0);
+  state.threatScore=Math.round(score*10)/10;
+  state.defconTerms=terms;
+  let defcon=5;
+  for(const[min,lvl]of DEFCON_BANDS){if(score>=min){defcon=lvl;break;}}
   state.defcon=defcon;
   const badge=document.getElementById('defconBadge');
-  badge.className='defcon-badge defcon-'+defcon;
-  document.getElementById('defconLevel').textContent=defcon;
+  if(badge)badge.className='defcon-badge defcon-'+defcon;
+  const el=document.getElementById('defconLevel');
+  if(el)el.textContent=defcon;
 }
 
 // --- DEFCON EXPLAINER POPOVER ---
@@ -5952,22 +6698,28 @@ function toggleDefconPop(){
   const d=state.defcon;
   const meaning={1:'Maximum alert — multiple severe crises unfolding at once',2:'High alert — major active threats worldwide',3:'Elevated — several significant situations developing',4:'Guarded — normal global background activity',5:'Calm — minimal significant activity'};
   const colors={1:'#ff0000',2:'var(--r)',3:'var(--y)',4:'var(--c)',5:'var(--g)'};
-  let factors='';
-  try{
-    const crit=Object.entries(RISK_DATA).filter(([,v])=>v.level==='CRITICAL').map(([cc])=>CN[cc]||cc);
-    if(crit.length)factors+=`<div>&#x26a0; ${crit.length} region${crit.length>1?'s':''} at critical risk: ${crit.slice(0,5).join(', ')}${crit.length>5?'…':''}</div>`;
-    const bigQ=state.earthquakes.filter(q=>q.mag>=6).length;
-    if(bigQ)factors+=`<div>&#x25cf; ${bigQ} major earthquake${bigQ>1?'s':''} (M6+) in the last 24h</div>`;
-    const critC=CHOKEPOINTS.filter(c=>c.status==='CRITICAL').map(c=>c.name);
-    if(critC.length)factors+=`<div>&#x2693; Critical chokepoint${critC.length>1?'s':''}: ${critC.join(', ')}</div>`;
-    const elevC=CHOKEPOINTS.filter(c=>c.status==='ELEVATED').length;
-    if(elevC)factors+=`<div>&#x2693; ${elevC} chokepoint${elevC>1?'s':''} at elevated status</div>`;
-  }catch(e){}
-  if(!factors)factors='<div>No major contributing factors right now.</div>';
+  const terms=state.defconTerms||[];
+  // Show the arithmetic. A readiness level you cannot take apart is a mood,
+  // not an assessment — and the provenance tag on each line is what separates
+  // "three corroborated strikes today" from "a table someone typed in June".
+  const tag={live:'<span class="prov live">LIVE</span>',
+             derived:'<span class="prov derived">DERIVED</span>',
+             reference:'<span class="prov ref">REFERENCE</span>'};
+  let factors=terms.map(t=>
+    `<div class="defcon-term">${tag[t.kind]||''}<span>${t.text}</span><b>+${t.pts}</b></div>`).join('');
+  if(!factors)factors='<div>Nothing is contributing right now — the world is quiet on every signal this board watches.</div>';
+  const livePts=terms.filter(t=>t.kind!=='reference').reduce((s,t)=>s+t.pts,0);
+  const refPts=terms.filter(t=>t.kind==='reference').reduce((s,t)=>s+t.pts,0);
+  const bands=DEFCON_BANDS.map(([m,l])=>`${l} at ${m}`).join(' · ');
   p.innerHTML=
     `<div class="defcon-pop-title" style="color:${colors[d]}">DEFCON ${d} — ${{1:'COCKED PISTOL',2:'FAST PACE',3:'ROUND HOUSE',4:'DOUBLE TAKE',5:'FADE OUT'}[d]}</div>`+
-    `<div class="defcon-pop-meaning">${meaning[d]}. This is SENTINEL's overall readiness estimate, recalculated every 2 minutes from regional risk levels, major earthquakes and chokepoint status.</div>`+
-    `<div class="defcon-pop-factors"><div style="color:var(--td);letter-spacing:1px;margin-bottom:4px">WHAT'S DRIVING IT (THREAT SCORE: ${state.threatScore})</div>${factors}</div>`;
+    `<div class="defcon-pop-meaning">${meaning[d]}. Recalculated every couple of minutes from what has actually arrived — corroborated events, seismic, tsunami, disaster alerts and space weather — plus a capped allowance for the standing regional picture.</div>`+
+    `<div class="defcon-pop-factors">`+
+      `<div style="color:var(--td);letter-spacing:1px;margin-bottom:4px">`+
+        `SCORE ${state.threatScore} = ${Math.round(livePts*10)/10} observed + ${Math.round(refPts*10)/10} standing`+
+      `</div>${factors}`+
+      `<div style="color:var(--td);margin-top:7px;font-size:9px;letter-spacing:1px">THRESHOLDS — ${bands} · otherwise 5</div>`+
+    `</div>`;
   p.classList.add('show');
 }
 
@@ -5983,6 +6735,7 @@ function togglePanel(which,force){
   if(!panel)return;
   const shut=force!==undefined?force:!panel.classList.contains('collapsed');
   panel.classList.toggle('collapsed',shut);
+  if(which==='L')document.body.classList.toggle('lpanel-shut',shut);
   if(rail){rail.classList.toggle('shut',shut);rail.textContent=which==='L'?(shut?'›':'‹'):(shut?'‹':'›');}
   localStorage.setItem('sentinel_panel'+which,shut?'shut':'open');
   setTimeout(()=>{ensureMapSized();renderMarkers();},240);
@@ -6007,9 +6760,279 @@ function setGroup(wrapId,on){
   const w=document.getElementById(wrapId);
   if(!w)return;
   w.querySelectorAll('.fbtn').forEach(btn=>{if(btnIsOn(btn)!==on)btn.click();});
+  if(typeof updateGroupBadges==='function')updateGroupBadges();
 }
 function setAllGroups(on){
   ['grpAssets','grpOps','grpCivil','grpHaz','grpIntel','grpInfra'].forEach(g=>setGroup(g,on));
+}
+
+/* ---- left panel sections ----
+   Counts, controls and navigation are three different jobs and they were all
+   on screen at once. One section at a time, with the scope selector and the
+   headline numbers pinned above the switcher so they are never hidden.
+*/
+const LP_SECTIONS=['layers','counts','nav'];
+const _cap=s=>s.charAt(0).toUpperCase()+s.slice(1);
+function setPanelSection(name){
+  if(LP_SECTIONS.indexOf(name)<0)name='layers';
+  LP_SECTIONS.forEach(s=>{
+    const sec=document.getElementById('sec'+_cap(s));
+    const btn=document.getElementById('seg'+_cap(s));
+    if(sec)sec.classList.toggle('active',s===name);
+    if(btn)btn.classList.toggle('active',s===name);
+  });
+  try{localStorage.setItem('sentinel_lpsec',name);}catch(e){}
+  const p=document.getElementById('panelL');
+  if(p)p.scrollTop=0;
+}
+
+/* ---- layer groups ----
+   Six groups, thirty-seven toggles. Folding a group has to leave behind enough
+   to know whether anything inside it is on, hence the n/m badge on the header.
+*/
+const LGROUPS=[['lgAssets','grpAssets','bdgAssets'],['lgOps','grpOps','bdgOps'],
+  ['lgCivil','grpCivil','bdgCivil'],['lgHaz','grpHaz','bdgHaz'],
+  ['lgIntel','grpIntel','bdgIntel'],['lgInfra','grpInfra','bdgInfra']];
+function _lgroupPrefs(){
+  try{return JSON.parse(localStorage.getItem('sentinel_lgroups')||'{}')||{};}catch(e){return{};}
+}
+function toggleLGroup(id){
+  const g=document.getElementById(id);
+  if(!g)return;
+  const shut=g.classList.toggle('shut');
+  const prefs=_lgroupPrefs();
+  prefs[id]=shut?'shut':'open';
+  try{localStorage.setItem('sentinel_lgroups',JSON.stringify(prefs));}catch(e){}
+}
+function restoreLGroups(){
+  const prefs=_lgroupPrefs();
+  LGROUPS.forEach(function(g){
+    const el=document.getElementById(g[0]);
+    if(el&&prefs[g[0]])el.classList.toggle('shut',prefs[g[0]]==='shut');
+  });
+}
+/* ---- spine: continuity between sessions ----
+   Everything else on this page is a snapshot of the moment it loaded. The
+   worker samples the same handful of global metrics every fifteen minutes
+   whether or not anyone has the page open, which is what makes two things
+   possible here: telling you what moved while you were away, and putting a
+   number next to what normal looks like for that number. Both degrade to
+   nothing when no proxy is configured — the board still works, it just cannot
+   remember.
+*/
+const SPINE={state:null,since:null};
+const SPINE_SEEN_KEY='sentinel_lastseen';
+// Surfaced in the system status panel: a board that claims continuity has to
+// be able to say when it has lost it.
+state.spineHealth={ok:false,reason:'not checked'};
+
+function spineLastSeen(){
+  try{const v=parseInt(localStorage.getItem(SPINE_SEEN_KEY)||'',10);return isFinite(v)?v:null;}
+  catch(e){return null;}
+}
+function spineMarkSeen(t){
+  try{localStorage.setItem(SPINE_SEEN_KEY,String(t||Date.now()));}catch(e){}
+}
+function ackSince(){
+  spineMarkSeen(Date.now());
+  const c=document.getElementById('spineSince');
+  if(c)c.style.display='none';
+}
+
+/* Deliberately not fetchJ. These are the worker's own routes, not proxied
+   upstreams, so they should not share a circuit breaker with feeds that fail
+   for reasons of their own — and they must not inherit a short timeout, because
+   at boot they are queued behind a burst of feed requests to the same origin.
+*/
+function spineFetch(path,t=15000){
+  const c=new AbortController();
+  const tm=setTimeout(()=>c.abort(),t);
+  return fetch(PROXY_BASE+path,{signal:c.signal})
+    .then(r=>{clearTimeout(tm);if(!r.ok)throw new Error('HTTP '+r.status);return r.json();})
+    .catch(e=>{clearTimeout(tm);throw e;});
+}
+
+async function loadSpine(){
+  if(!hasProxy())return;
+  const seen=spineLastSeen();
+  // First ever visit has no cursor. Six hours is a reasonable "what did I
+  // miss" window rather than replaying the entire retained history.
+  const cursor=seen||(Date.now()-6*3600000);
+  const [st,sn]=await Promise.allSettled([
+    spineFetch('/spine/state'),
+    spineFetch('/spine/since?t='+cursor),
+  ]);
+  if(st.status==='fulfilled'&&st.value&&st.value.ready)SPINE.state=st.value;
+  if(sn.status==='fulfilled'&&sn.value&&sn.value.ready)SPINE.since=sn.value;
+  state.spineHealth=SPINE.state
+    ? {ok:true,ageSec:SPINE.state.ageSec,samples:(SPINE.state.metrics&&SPINE.state.metrics.quakes||{}).n||0}
+    : {ok:false,reason:
+        st.status==='rejected'?('state: '+(st.reason&&st.reason.message||st.reason))
+        :(st.value&&st.value.reason)||'no samples yet'};
+  renderSince(seen);
+  applyBaselines();
+  return Boolean(SPINE.state||SPINE.since);
+}
+
+/* At boot these compete with a burst of feed requests to the same origin, and
+   the browser will only open so many connections at once. One retry costs
+   nothing and is the difference between the board remembering and not. */
+async function loadSpineWithRetry(){
+  try{ if(await loadSpine())return; }catch(e){}
+  await new Promise(r=>setTimeout(r,5000));
+  try{ await loadSpine(); }catch(e){}
+}
+
+function renderSince(hadCursor){
+  const card=document.getElementById('spineSince');
+  const body=document.getElementById('spineSinceBody');
+  if(!card||!body)return;
+  const s=SPINE.since;
+  // Nothing to say is a reason to be silent, not a reason to show an empty box.
+  if(!s||!s.ready||!hadCursor){card.style.display='none';return;}
+  const events=s.events||[];
+  const deltas=Object.values(s.deltas||{});
+  if(!events.length&&!deltas.length){card.style.display='none';return;}
+
+  const gap=document.getElementById('spineGap');
+  if(gap)gap.textContent=humanGap(s.gapSec)+' ago';
+
+  let html='';
+  for(const e of events.slice(0,6)){
+    html+='<div class="spine-row"><span class="spine-dot '+(e.sev||'low')+'"></span>'
+        +'<span class="spine-txt">'+esc(e.text||'')+'</span>'
+        +'<span class="spine-when">'+timeAgo(new Date(e.t).toISOString())+'</span></div>';
+  }
+  for(const d of deltas.slice(0,6)){
+    const up=d.change>0;
+    html+='<div class="spine-row"><span class="spine-dot"></span>'
+        +'<span class="spine-txt spine-delta">'+esc(d.label)+' '
+        +'<b>'+fmtNum(d.then)+'</b> \u2192 <b class="'+(up?'spine-up':'spine-down')+'">'+fmtNum(d.now)+'</b>'
+        +(d.median!==null&&d.median!==undefined?' <span style="opacity:.7">(normal '+fmtNum(d.median)+')</span>':'')
+        +'</span></div>';
+  }
+  body.innerHTML=html;
+  card.style.display='';
+}
+
+function humanGap(sec){
+  if(!isFinite(sec)||sec<60)return 'moments';
+  const m=Math.round(sec/60);
+  if(m<60)return m+'m';
+  const h=Math.floor(m/60);
+  if(h<24)return h+'h '+(m%60)+'m';
+  return Math.floor(h/24)+'d '+(h%24)+'h';
+}
+function fmtNum(v){
+  if(typeof v!=='number')return '\u2014';
+  return Number.isInteger(v)?String(v):v.toFixed(1);
+}
+function esc(s){return String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
+
+/* Only two counters on this board measure exactly what the spine samples —
+   the USGS 2.5_day feature count and the NOAA planetary Kp — so only those two
+   get a baseline. Attaching "normal is 3" to a number derived differently
+   would be a worse lie than showing no context at all. */
+const BASELINE_TARGETS=[['sQuake','quakes'],['sKp','kp']];
+
+function applyBaselines(){
+  const st=SPINE.state;
+  for(const [elId,metric] of BASELINE_TARGETS){
+    const el=document.getElementById(elId);
+    if(!el)continue;
+    let chip=el.parentElement&&el.parentElement.querySelector('.base-chip');
+    const m=st&&st.metrics?st.metrics[metric]:null;
+    if(!m||m.median===null||m.state==='learning'||m.state==='unknown'){
+      if(chip)chip.remove();
+      continue;
+    }
+    if(!chip){
+      chip=document.createElement('span');
+      chip.className='base-chip';
+      el.parentElement.appendChild(chip);
+    }
+    const arrow=m.state==='high'?'\u25b2':m.state==='low'?'\u25bc':'';
+    chip.className='base-chip'+(m.state==='high'?' high':m.state==='low'?' low':'');
+    chip.textContent=arrow+' med '+fmtNum(m.median);
+    chip.title=m.label+' \u2014 7-day median '+fmtNum(m.median)
+      +', 90th percentile '+fmtNum(m.p90)+', from '+m.n+' samples';
+  }
+}
+
+/* ---- provenance ----
+   Half of what this board draws is fed and half is typed. Presenting both with
+   identical weight is the thing that makes the whole display read as a prop:
+   if the viewer cannot tell which is which, the hand-typed half quietly spends
+   the credibility the live half earned. Reference data is perfectly legitimate
+   on an intelligence picture — bases and cables do not move week to week — but
+   it has to say so.
+
+   REFERENCE below means a constant in this file that no code updates. Where a
+   date is given it is when that table was last reviewed by hand.
+*/
+const PROV={
+  // live feeds
+  aircraft:['live','ADS-B aggregators'],heli:['live','ADS-B aggregators'],
+  ship:['live','AIS'],satellite:['live','TLE + SGP4 propagation'],
+  quakes:['live','USGS'],fires:['live','NASA EONET'],hotspots:['live','VIIRS via Copernicus'],
+  radar:['live','RainViewer'],bom:['live','BOM'],wx:['live','US NWS'],ausEm:['live','NSW RFS / VicEmergency / QFD'],
+  wire:['live','corroborated 24h news ingest'],tsunami:['live','NOAA'],volcanoes:['live','Smithsonian GVP'],
+  dark:['live','Global Fishing Watch (~5 day lag)'],conflict:['live','ACLED'],refugees:['live','UNHCR'],
+  notams:['live','FAA TFR'],
+  // hand-maintained tables
+  chokes:['ref','editorial status table'],jamming:['ref','known jamming zones'],
+  piracy:['ref','piracy risk zones'],cyber:['ref','threat-origin table'],
+  rf:['ref','RF/SIGINT zone table'],drones:['ref','reported UAS zones'],
+  nukes:['ref','facility list'],cables:['ref','cable route list'],
+  bases:['ref','curated strategic sites, reviewed by hand'],
+  osmMil:['live','OpenStreetMap via Overpass, current viewport'],
+  launches:['live','Launch Library 2'],
+  cams:['live','operator open data — TfL, Caltrans'],
+};
+const PROV_BTN={aircraft:'fAir',heli:'fHeli',ship:'fShip',satellite:'fSat',quakes:'fQuake',
+  fires:'fFire',hotspots:'fHotspot',volcanoes:'fVolcano',tsunami:'fTsunami',radar:'fRadar',
+  bom:'fBOM',wx:'fWx',ausEm:'fAusEm',wire:'fWire',chokes:'fChoke',jamming:'fJam',notams:'fNotam',
+  piracy:'fPiracy',dark:'fDark',cyber:'fCyber',conflict:'fConflict',rf:'fRF',drones:'fDrone',
+  refugees:'fRefugee',cables:'fCables',nukes:'fNuke',bases:'fBases',
+  osmMil:'fOsmMil',launches:'fLaunch',cams:'fCams'};
+
+// Marks every reference layer and appends its source to the existing tooltip,
+// so hovering any toggle says where the layer comes from.
+function applyProvenance(){
+  for(const [key,btnId] of Object.entries(PROV_BTN)){
+    const b=document.getElementById(btnId);
+    const p=PROV[key];
+    if(!b||!p)continue;
+    const [kind,srcTxt]=p;
+    b.classList.toggle('is-ref',kind==='ref');
+    const base=b.getAttribute('data-tip')||b.title||'';
+    if(!b.getAttribute('data-tip'))b.setAttribute('data-tip',base);
+    b.title=base+(base?'\n\n':'')
+      +(kind==='ref'
+        ? 'REFERENCE \u2014 '+srcTxt+'. A fixed table in this build, not a live feed: it changes when the file is edited, not when the world does.'
+        : 'LIVE \u2014 '+srcTxt+'.');
+  }
+  const legend=document.getElementById('provLegend');
+  if(legend){
+    const refs=Object.values(PROV).filter(([k])=>k==='ref').length;
+    legend.innerHTML='<span class="prov live">LIVE</span><span>fed continuously</span>'
+      +'<span class="prov ref">REF</span><span>fixed table \u00b7 '+refs+' layers</span>';
+  }
+}
+
+function updateGroupBadges(){
+  let onTotal=0,allTotal=0;
+  LGROUPS.forEach(function(g){
+    const w=document.getElementById(g[1]);
+    if(!w)return;
+    const btns=Array.prototype.slice.call(w.querySelectorAll('.fbtn'));
+    const on=btns.filter(btnIsOn).length;
+    onTotal+=on;allTotal+=btns.length;
+    const b=document.getElementById(g[2]);
+    if(b){b.textContent=on+'/'+btns.length;b.classList.toggle('lit',on>0);}
+  });
+  const t=document.getElementById('layersOnCount');
+  if(t)t.textContent=onTotal+'/'+allTotal;
 }
 
 /* ---- desktop notifications ----
@@ -6085,6 +7108,36 @@ function focusAlertIdx(i){
   if(a&&a.meta)focusAlert(a.meta);
 }
 
+/* ---- acknowledgement ----
+   Alerts previously stacked up and stayed lit forever, so the list conveyed
+   "things that happened" rather than "things that still need me". Acknowledging
+   one drops it to the bottom and mutes it — including for desktop notification —
+   without deleting it, because the record still matters. The set is persisted so
+   a refresh does not resurrect a morning's worth of already-handled alerts.
+*/
+function _ackLoad(){
+  try{return new Set(JSON.parse(localStorage.getItem('sentinel_acked')||'[]'));}
+  catch(e){return new Set();}
+}
+let ACKED=_ackLoad();
+function _ackSave(){
+  try{localStorage.setItem('sentinel_acked',JSON.stringify([...ACKED].slice(-300)));}catch(e){}
+}
+function ackAlert(i,ev){
+  if(ev)ev.stopPropagation();
+  const a=state.alerts[i];
+  if(!a)return;
+  if(ACKED.has(a.text))ACKED.delete(a.text); else ACKED.add(a.text);
+  _ackSave();
+  renderAlerts();
+}
+function ackAllAlerts(){
+  state.alerts.forEach(a=>ACKED.add(a.text));
+  _ackSave();
+  renderAlerts();
+}
+function isAcked(a){return ACKED.has(a.text);}
+
 function addAlert(level,text,meta){
   const now=Date.now();
   state._alertSeen=state._alertSeen||new Map();
@@ -6104,7 +7157,7 @@ function addAlert(level,text,meta){
   // meta carries where the alert happened, which is what makes it clickable.
   state.alerts.unshift({time:ts(),text,level,meta:meta||null});
   if(state.alerts.length>50)state.alerts.length=50;
-  desktopNotify(level,text,meta);
+  if(!ACKED.has(text))desktopNotify(level,text,meta);
   renderAlerts();
 }
 function generateAlerts(){
@@ -6145,7 +7198,7 @@ function renderAlerts(){
       const m=a.meta;
       if(!m||m.lat==null||m.lon==null)return true;
       return inScope(m.lat,m.lon,2);
-    }).slice(0,40).filter(a=>a.level==='red'||a.level==='orange').length;
+    }).slice(0,40).filter(a=>(a.level==='red'||a.level==='orange')&&!isAcked(a)).length;
     badge.textContent=hot>99?'99+':hot;
     badge.style.display=hot>0?'inline-block':'none';
   }
@@ -6163,14 +7216,28 @@ function renderAlerts(){
     return inScope(m.lat,m.lon,2);
   }).slice(0,40);
   if(!rows.length){el.innerHTML='<div style="padding:12px;color:var(--td);font-size:11px;text-align:center">No alerts in '+_scope.name+'</div>';return;}
-  rows.forEach(({a,i})=>{
+  // Outstanding first. Acknowledged ones keep their place in the record but
+  // stop competing for attention.
+  const open=rows.filter(({a})=>!isAcked(a));
+  const done=rows.filter(({a})=>isAcked(a));
+  if(open.length){
+    html+=`<div class="alert-sec">${open.length} outstanding`
+       +`<button class="alert-ackall" onclick="ackAllAlerts()" title="Acknowledge every alert in this list">ACK ALL</button></div>`;
+  }
+  const row=({a,i})=>{
     // Alerts with a location fly the map there and open the contact; ones
     // without stay inert rather than pretending to be clickable.
     const go=a.meta&&(a.meta.assetId||a.meta.lat!=null);
-    html+=`<div class="alert-item ${a.level||''}${go?' clickable':''}"${go?` onclick="focusAlertIdx(${i})" title="Show on map"`:''}>`
-       +`<div class="alert-time">${a.time}${go?' <span class="alert-go">→ LOCATE</span>':''}</div>`
-       +`<div class="alert-text">${a.text}</div></div>`;
-  });
+    const acked=isAcked(a);
+    return `<div class="alert-item ${a.level||''}${go?' clickable':''}${acked?' acked':''}"${go?` onclick="focusAlertIdx(${i})" title="Show on map"`:''}>`
+       +`<div class="alert-time">${a.time}${go?' <span class="alert-go">→ LOCATE</span>':''}`
+       +`<button class="alert-ack" onclick="ackAlert(${i},event)" title="${acked?'Move back to outstanding':'Acknowledge — stops it notifying and drops it below'}">${acked?'UNDO':'ACK'}</button>`
+       +`</div><div class="alert-text">${a.text}</div></div>`;
+  };
+  html+=open.map(row).join('');
+  if(done.length){
+    html+=`<div class="alert-sec muted">${done.length} acknowledged</div>`+done.map(row).join('');
+  }
   el.innerHTML=html;
 }
 
@@ -6184,9 +7251,23 @@ async function fetchSpaceWeather(){
   try{
     // Kp index (planetary magnetic activity)
     const kpData=await fetchR('https://services.swpc.noaa.gov/products/noaa-planetary-k-index-forecast.json',1,8000);
-    if(Array.isArray(kpData)&&kpData.length>1){
-      const latest=kpData[kpData.length-1];
-      state.spaceWeather.kp=parseFloat(latest[1])||0;
+    // This product is an array of objects — {time_tag, kp, observed} — not the
+    // array-of-arrays SWPC uses for its other products. Reading it positionally
+    // gave undefined, and `||0` turned that into a confident "0 QUIET" in every
+    // condition, storms included. The last row is also the furthest-out
+    // forecast, so take the most recent row that is actually observed.
+    if(Array.isArray(kpData)&&kpData.length){
+      const now=Date.now();
+      let best=null;
+      for(const row of kpData){
+        if(!row||typeof row!=='object')continue;
+        if(String(row.observed||'').toLowerCase()==='predicted')continue;
+        const t=Date.parse(String(row.time_tag||'')+'Z');
+        const v=typeof row.kp==='number'?row.kp:parseFloat(row.kp);
+        if(!isFinite(t)||!isFinite(v)||t>now+60000)continue;
+        if(!best||t>best.t)best={t,v};
+      }
+      if(best)state.spaceWeather.kp=best.v;
     }
     // Solar wind speed
     try{
@@ -6213,7 +7294,7 @@ async function fetchSpaceWeather(){
     // Update sidebar
     const kp=state.spaceWeather.kp;
     const kpEl=document.getElementById('sKp');
-    kpEl.textContent=kp.toFixed(0)+' '+(kp>=7?'EXTREME':kp>=5?'STORM':kp>=4?'ACTIVE':'QUIET');
+    kpEl.textContent=kp.toFixed(1)+' '+(kp>=7?'EXTREME':kp>=5?'STORM':kp>=4?'ACTIVE':'QUIET');
     kpEl.style.color=kp>=7?'var(--r)':kp>=5?'var(--o)':kp>=4?'var(--y)':'var(--g)';
     // Alert for major events
     if(kp>=5)addAlert('orange','SPACE WX: Geomagnetic storm Kp='+kp.toFixed(0)+' \u2014 GPS/comms may be affected');
@@ -6297,23 +7378,56 @@ function restoreTicker(){
   if(h)h.textContent=off?'PAUSED':'';
 }
 function updateThreatBanner(){
-  const critical=Object.entries(RISK_DATA).filter(([,v])=>v.level==='CRITICAL');
+  const live=[],ref=[];
+  // Live first, because that is what might actually be new.
   const quakes=state.earthquakes.filter(q=>q.mag>=5);
-  const critChokes=CHOKEPOINTS.filter(c=>c.status==='CRITICAL');
-  let items=[];
-  items.push('\u25c6 DEFCON '+state.defcon+' \u2014 THREAT SCORE: '+state.threatScore);
-  critical.forEach(([cc,v])=>items.push('\u26a0 '+(CN[cc]||cc).toUpperCase()+': '+v.desc.toUpperCase()));
-  critChokes.forEach(c=>items.push('\u2693 '+c.name.toUpperCase()+': '+c.status));
-  quakes.forEach(q=>items.push('\ud83d\udfe2 M'+q.mag.toFixed(1)+' '+q.place.toUpperCase()));
-  if(state.assets.size>0)items.push('\ud83d\udce1 TRACKING '+state.assets.size+' ASSETS / '+Object.values(state.sources).filter(v=>v>0).length+' SOURCES');
-  if(state.fires.length>0)items.push('\ud83d\udd25 '+state.fires.length+' ACTIVE WILDFIRES DETECTED');
-  if(state.spaceWeather.kp>=5)items.push('\u2604 GEOMAGNETIC STORM Kp='+state.spaceWeather.kp.toFixed(0));
-  if(state.spaceWeather.radioBlackout&&state.spaceWeather.radioBlackout!=='R0')items.push('\u26a1 RADIO BLACKOUT '+state.spaceWeather.radioBlackout);
-  if(state.wxAlerts.filter(w=>w.severity==='Extreme').length>0)items.push('\u26a1 '+state.wxAlerts.filter(w=>w.severity==='Extreme').length+' EXTREME WEATHER ALERTS');
-  const text=items.join('   \u2502   ')||'ALL SYSTEMS NOMINAL';
-  // Duplicate for seamless loop
-  document.getElementById('threatMarquee').textContent=text;
-  document.getElementById('threatMarquee2').textContent=text;
+  quakes.forEach(q=>live.push('\u25cf M'+q.mag.toFixed(1)+' '+q.place.toUpperCase()));
+  try{
+    const cutoff=Date.now()-864e5;
+    (WIRE.events||[]).filter(e=>e.promoted&&(e.last||e.first||0)>=cutoff)
+      .sort((a,b)=>((b.toll&&b.toll.dead)||0)-((a.toll&&a.toll.dead)||0))
+      .slice(0,6)
+      .forEach(e=>{
+        const toll=(e.toll&&e.toll.dead)?' \u2014 '+e.toll.dead+' DEAD':'';
+        const line='\u25b8 '+String(e.name||e.cat||'EVENT').toUpperCase().slice(0,80)+toll;
+        // The clusterer sometimes keeps two records for one incident; the
+        // ticker is the one place that shows up as literal repetition.
+        if(!live.includes(line))live.push(line);
+      });
+  }catch(e){}
+  if(state.spaceWeather.kp>=5)live.push('\u25c6 GEOMAGNETIC STORM Kp='+state.spaceWeather.kp.toFixed(1));
+  const rbLevel=parseInt(state.spaceWeather.radioBlackout,10)||0;
+  if(rbLevel>0)live.push('\u25c6 RADIO BLACKOUT R'+rbLevel);
+  const extreme=state.wxAlerts.filter(w=>w.severity==='Extreme').length;
+  if(extreme)live.push('\u25c6 '+extreme+' EXTREME WEATHER ALERTS');
+  if(state.fires.length)live.push('\u25cb '+state.fires.length+' ACTIVE WILDFIRE EVENTS');
+
+  // Standing picture last and dimmed — it is the same every day, so it should
+  // not be the first thing the eye catches.
+  Object.entries(RISK_DATA).filter(([,v])=>v.level==='CRITICAL')
+    .forEach(([cc,v])=>ref.push('\u26a0 '+(CN[cc]||cc).toUpperCase()+': '+v.desc.toUpperCase()));
+  CHOKEPOINTS.filter(c=>c.status==='CRITICAL')
+    .forEach(c=>ref.push('\u2693 '+c.name.toUpperCase()+': '+c.status));
+
+  const head='\u25c6 DEFCON '+state.defcon+' \u2014 SCORE '+state.threatScore;
+  const sep='   \u2502   ';
+  const liveTxt=[head].concat(live).join(sep);
+  const refTxt=ref.length?sep+'[STANDING] '+ref.join(sep):'';
+  const el=document.getElementById('threatMarquee');
+  const el2=document.getElementById('threatMarquee2');
+  const html=esc(liveTxt)+(refTxt?'<span class="marquee-ref">'+esc(refTxt)+'</span>':'');
+  if(el)el.innerHTML=html;
+  if(el2)el2.innerHTML=html;
+
+  // Severity drives colour and motion. Nothing live to report and a low DEFCON
+  // means the banner sits still.
+  const banner=document.getElementById('threatBanner');
+  if(banner){
+    const sev=(state.defcon<=2||quakes.some(q=>q.mag>=6.5))?'critical'
+             :(state.defcon===3||live.length>=3)?'elevated':'calm';
+    banner.classList.remove('sev-calm','sev-elevated','sev-critical');
+    banner.classList.add('sev-'+sev);
+  }
 }
 
 // --- STATS ---
@@ -6363,8 +7477,8 @@ function togC(c){state.categories[c]=!state.categories[c];const on=state.categor
 // Single source of truth for which button belongs to which layer and what
 // colour it lights up. The markup used to hard-code "on" classes, which drifted
 // the moment a default changed.
-const LAYER_BTN={hotspots:'fHotspot',wx:'fWx',ausEm:'fAusEm',bom:'fBOM',radar:'fRadar',quakes:'fQuake',fires:'fFire',wire:'fWire',chokes:'fChoke',jamming:'fJam',notams:'fNotam',piracy:'fPiracy',volcanoes:'fVolcano',tsunami:'fTsunami',cyber:'fCyber',cables:'fCables',nukes:'fNuke',bases:'fBases',conflict:'fConflict',rf:'fRF',drones:'fDrone',refugees:'fRefugee',dark:'fDark'};
-const LAYER_COL={hotspots:'on-o',wx:'on-y',ausEm:'on-r',bom:'on-y',radar:'on',quakes:'on-r',fires:'on-o',wire:'on',chokes:'on-y',jamming:'on-p',notams:'on-y',piracy:'on-r',volcanoes:'on-o',tsunami:'on-r',cyber:'on-p',cables:'on',nukes:'on-o',bases:'on',conflict:'on-r',rf:'on-p',drones:'on-o',refugees:'on-y',dark:'on-p'};
+const LAYER_BTN={osmMil:'fOsmMil',launches:'fLaunch',cams:'fCams',hotspots:'fHotspot',wx:'fWx',ausEm:'fAusEm',bom:'fBOM',radar:'fRadar',quakes:'fQuake',fires:'fFire',wire:'fWire',chokes:'fChoke',jamming:'fJam',notams:'fNotam',piracy:'fPiracy',volcanoes:'fVolcano',tsunami:'fTsunami',cyber:'fCyber',cables:'fCables',nukes:'fNuke',bases:'fBases',conflict:'fConflict',rf:'fRF',drones:'fDrone',refugees:'fRefugee',dark:'fDark'};
+const LAYER_COL={osmMil:'on-g',launches:'on-p',cams:'on',hotspots:'on-o',wx:'on-y',ausEm:'on-r',bom:'on-y',radar:'on',quakes:'on-r',fires:'on-o',wire:'on',chokes:'on-y',jamming:'on-p',notams:'on-y',piracy:'on-r',volcanoes:'on-o',tsunami:'on-r',cyber:'on-p',cables:'on',nukes:'on-o',bases:'on',conflict:'on-r',rf:'on-p',drones:'on-o',refugees:'on-y',dark:'on-p'};
 const ALL_ON_CLASSES=['on','on-r','on-o','on-y','on-p','on-g'];
 function syncLayerButtons(){
   for(const[l,id]of Object.entries(LAYER_BTN)){
@@ -6375,6 +7489,7 @@ function syncLayerButtons(){
   }
   const ob=document.getElementById('fOrbit');
   if(ob){ALL_ON_CLASSES.forEach(c=>ob.classList.remove(c));if(state.showOrbits)ob.classList.add('on-p');}
+  if(typeof updateGroupBadges==='function')updateGroupBadges();
 }
 function togLayer(l){
   state.layers[l]=!state.layers[l];
@@ -6399,6 +7514,9 @@ function togLayer(l){
       rf:{markers:'rfMarkers',render:on?renderRF:null},
       drones:{markers:'droneMarkers',render:on?renderDrones:null},
       refugees:{markers:'refugeeMarkers',render:on?function(){try{fetchRefugees();}catch(e){}}:null},
+      osmMil:{markers:'osmMilMarkers',render:on?function(){_osmMilKey='';renderOsmMil(true);}:null},
+      launches:{markers:'launchMarkers',render:on?renderLaunches:null},
+      cams:{markers:'camMarkers',render:on?renderCams:null},
   };
   if(overlayMap[l]){
     const key=overlayMap[l].markers;
@@ -6409,6 +7527,13 @@ function togLayer(l){
   if(l==='quakes')state.quakeMarkers.forEach(m=>{on?m.addTo(map):map.removeLayer(m);});
   if(l==='fires')state.fireMarkers.forEach(m=>{on?m.addTo(map):map.removeLayer(m);});
   if(l==='chokes')state.chokeMarkers.forEach(m=>{on?m.addTo(map):map.removeLayer(m);});
+  // Wire markers are rebuilt from the rolling event store rather than toggled
+  // in place: the store keeps moving while the layer is off, so re-showing it
+  // should show what is there now, not what was there when you switched it off.
+  if(l==='wire'){
+    if(on)renderWireMarkers();
+    else state.wireMarkers.forEach(m=>{try{map.removeLayer(m);}catch(e){}});
+  }
   if(l==='jamming'&&state.jamMarkers)state.jamMarkers.forEach(m=>{on?m.addTo(map):map.removeLayer(m);});
   if(_scope)setTimeout(()=>{try{applyCountryScope();}catch(e){}},0);
   if(l==='dark'&&state.darkMarkers){
@@ -6545,14 +7670,43 @@ const MAP_TILES={
   topo:L.tileLayer('https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png',{maxNativeZoom:17,maxZoom:20,subdomains:'abc'})
 };
 let currentMapMode='dark';
+/* ---- sensor modes ----
+   Deliberately honest in the tooltips: this is false colour over map tiles, not
+   a thermal sensor. It is a legibility tool as much as a look — NOIR over
+   satellite imagery makes contacts far easier to read than the raw photo. */
+const SENSORS=['none','flir','nvg','noir','crt'];
+function setSensor(s){
+  if(SENSORS.indexOf(s)<0)s='none';
+  const m=document.getElementById('map');
+  if(s==='none')m.removeAttribute('data-sensor'); else m.setAttribute('data-sensor',s);
+  SENSORS.forEach(k=>{
+    const b=document.getElementById('sn'+k.charAt(0).toUpperCase()+k.slice(1));
+    if(b)b.classList.toggle('active',k===s);
+  });
+  try{localStorage.setItem('sentinel_sensor',s);}catch(e){}
+}
+function restoreSensor(){
+  let s='none';
+  try{s=localStorage.getItem('sentinel_sensor')||'none';}catch(e){}
+  setSensor(s);
+}
+
 function setMapMode(mode){
   if(MAP_TILES[currentMapMode]&&map.hasLayer(MAP_TILES[currentMapMode]))map.removeLayer(MAP_TILES[currentMapMode]);
   currentMapMode=mode;
   MAP_TILES[mode].addTo(map);
-  if(mode==='nvg'){document.getElementById('map').style.filter='hue-rotate(80deg) saturate(2) brightness(0.7)';}
-  else{document.getElementById('map').style.filter='';}
+  document.getElementById('map').style.filter='';
+  // Picking the NVG basemap implies the NVG treatment, but as a sensor mode it
+  // can now be lifted independently of the tiles underneath.
+  if(mode==='nvg'&&!document.getElementById('map').getAttribute('data-sensor'))setSensor('nvg');
   document.querySelectorAll('.map-mode-btn').forEach(b=>b.classList.remove('active'));
-  document.getElementById('mm'+mode.charAt(0).toUpperCase()+mode.slice(1)).classList.add('active');
+  /* The button ids are abbreviations and do not derive from the mode name:
+     'satellite' is mmSat and 'nvg' is mmNVG, so building the id from the mode
+     returned null and threw. SAT and NVG both changed the tiles and then died
+     before highlighting, which is why neither button ever looked selected. */
+  const MODE_BTN={dark:'mmDark',satellite:'mmSat',nvg:'mmNVG',topo:'mmTopo'};
+  const btn=document.getElementById(MODE_BTN[mode]||'');
+  if(btn)btn.classList.add('active');
 }
 
 // --- GPS JAMMING ZONES ---
@@ -6691,6 +7845,7 @@ map.on('click',function(e){
       state.geofences.push({points:[...geofencePoints],layer:poly});
       state.geofenceLayers.push(poly);
       document.getElementById('sGeo').textContent=state.geofences.length;
+      saveGeofences();
       addAlert('green',`GEOFENCE #${state.geofences.length} created with ${geofencePoints.length} vertices`);
       geofencePoints=[];geofenceDrawing=false;
       document.getElementById('geoDrawBtn').classList.remove('drawing');
@@ -6704,7 +7859,36 @@ function clearGeofences(){
   state.geofenceLayers.forEach(l=>map.removeLayer(l));
   state.geofences=[];state.geofenceLayers=[];
   document.getElementById('sGeo').textContent='0';
+  saveGeofences();
   addAlert('green','All geofences cleared');
+}
+
+/* ---- watch zones survive a reload ----
+   Drawing a zone is deliberate work and it encodes an intent — "tell me when
+   something military enters here". Throwing that away on refresh is the
+   difference between a tool and a demo.
+*/
+function saveGeofences(){
+  try{
+    localStorage.setItem('sentinel_geofences',
+      JSON.stringify(state.geofences.map(g=>g.points.map(p=>[p.lat,p.lng]))));
+  }catch(e){}
+}
+function restoreGeofences(){
+  let saved=[];
+  try{saved=JSON.parse(localStorage.getItem('sentinel_geofences')||'[]')||[];}catch(e){return;}
+  if(!Array.isArray(saved)||!saved.length)return;
+  for(const pts of saved){
+    if(!Array.isArray(pts)||pts.length<3)continue;
+    const latlngs=pts.map(([lat,lng])=>L.latLng(lat,lng));
+    const poly=L.polygon(latlngs,{color:'#ff3355',fillColor:'#ff3355',fillOpacity:0.08,weight:2,dashArray:'8 4'});
+    poly.bindTooltip('GEOFENCE ZONE '+(state.geofences.length+1),{className:'quake-tooltip'});
+    poly.addTo(map);
+    state.geofences.push({points:latlngs,layer:poly});
+    state.geofenceLayers.push(poly);
+  }
+  const el=document.getElementById('sGeo');
+  if(el)el.textContent=state.geofences.length;
 }
 function checkGeofences(){
   if(!state.geofences.length)return;
@@ -6756,7 +7940,7 @@ function spaceView(){
     if(sc)sc.textContent=state.sources.sats+' ASSETS TRACKED';
 
     // Zoom to global
-    map.setView([20,0],3,{animate:true,duration:1});
+    flyTo(20,0,3);
 
     // Save current state (deep copy)
     state._preSpaceFilters=JSON.parse(JSON.stringify(state.filters));
@@ -6828,6 +8012,7 @@ function spaceView(){
       if(state.layers.fires)state.fireMarkers.forEach(m=>m.addTo(map));
       if(state.layers.chokes)state.chokeMarkers.forEach(m=>m.addTo(map));
       if(state.layers.jamming&&state.jamMarkers)state.jamMarkers.forEach(m=>m.addTo(map));
+      if(state.layers.wire)renderWireMarkers();
     }catch(e){}
 
     // Reset SPACE button
@@ -6836,6 +8021,7 @@ function spaceView(){
 
     addAlert('green','ORBITAL VIEW DEACTIVATED — all layers restored');
   }
+  try{updateGroupBadges();}catch(e){}
 }
 
 function renderOrbits(){
@@ -8040,8 +9226,8 @@ function generateSitrep(){
   sitrep+='5. SPACE WEATHER\n';
   sitrep+='─────────────────\n';
   sitrep+='  Kp Index: '+state.spaceWeather.kp.toFixed(0)+' ('+(state.spaceWeather.kp>=5?'STORM':'NOMINAL')+')\n';
-  sitrep+='  Geo Storm: '+(state.spaceWeather.geoStorm||'G0')+'\n';
-  sitrep+='  Radio Blackout: '+(state.spaceWeather.radioBlackout||'R0')+'\n';
+  sitrep+='  Geo Storm: G'+(parseInt(state.spaceWeather.geoStorm,10)||0)+'\n';
+  sitrep+='  Radio Blackout: R'+(parseInt(state.spaceWeather.radioBlackout,10)||0)+'\n';
   sitrep+='  Solar Wind: '+(state.spaceWeather.solarWind||'--')+' km/s\n\n';
   // GPS JAMMING
   sitrep+='6. GPS INTERFERENCE\n';
@@ -8246,10 +9432,20 @@ async function boot(){
   if(localStorage.getItem('sentinel_wxpanel')!=='shut')document.getElementById('wxPanel').classList.add('open');
   syncWxButtons();updateWxBar();buildWxScrubber();
   if(loadWatch().length){loadCountries().then(renderWatchlist).catch(()=>{});}
+  // The spine answers "what did I miss", so it has to read the cursor before
+  // anything moves it forward.
+  loadSpineWithRetry();
 }
 boot();
 
 // Periodic refreshes
+// Baselines only move every 15 minutes, so polling them faster buys nothing.
+setInterval(()=>{loadSpine().catch(()=>{});},15*60000);
+// While the tab is open you are watching, so the cursor tracks the present.
+// Without this, leaving the board up all day and glancing at it would report
+// eight hours of "changes" you had already seen happen.
+setInterval(()=>{if(document.visibilityState==='visible')spineMarkSeen(Date.now());},60000);
+window.addEventListener('beforeunload',()=>spineMarkSeen(Date.now()));
 setInterval(fetchEarthquakes,120000);
 // The ingester keeps its own cadence so it stays awake regardless of what the
 // map refresh is doing, and sweeps the 24h store on every pass.
@@ -8362,17 +9558,65 @@ document.querySelectorAll('.mtab,.mob-panel-x,.fbtn,.nav-btn,.tab-btn,.map-mode-
 });
 
 // ===== COLLAPSIBLE SIDEBAR CARDS =====
+/* Folding a card is a preference, not a per-visit accident, so it is
+   remembered. Anything interactive inside a header (the ALL/NONE controls)
+   stops the click before it reaches the header and folds the card shut. */
+function _cardPrefs(){
+  try{return JSON.parse(localStorage.getItem('sentinel_cards')||'{}')||{};}catch(e){return{};}
+}
 document.querySelectorAll('.left-panel .card-title').forEach(t=>{
-  t.addEventListener('click',()=>t.parentElement.classList.toggle('collapsed'));
+  t.addEventListener('click',e=>{
+    if(e.target.closest('button,select,input,a'))return;
+    const card=t.parentElement;
+    const shut=card.classList.toggle('collapsed');
+    if(!card.id)return;
+    const prefs=_cardPrefs();prefs[card.id]=shut?'shut':'open';
+    try{localStorage.setItem('sentinel_cards',JSON.stringify(prefs));}catch(e){}
+  });
 });
-// Start with secondary cards folded on small screens so Layers is easy to reach
-if(window.innerWidth<=768){
-  ['cardHazards','cardSecurity','cardNations'].forEach(id=>{
-    const el=document.getElementById(id);if(el)el.classList.add('collapsed');
+(function restoreCards(){
+  const prefs=_cardPrefs();
+  Object.keys(prefs).forEach(id=>{
+    const el=document.getElementById(id);
+    if(el&&el.classList.contains('card'))el.classList.toggle('collapsed',prefs[id]==='shut');
+  });
+})();
+
+restoreSensor();
+
+// ===== LEFT PANEL SECTIONS =====
+restoreLGroups();
+updateGroupBadges();
+applyProvenance();
+restoreGeofences();
+(function(){
+  let saved=null;
+  try{saved=localStorage.getItem('sentinel_lpsec');}catch(e){}
+  setPanelSection(saved||'layers');
+})();
+/* Layer state is changed from a dozen different handlers — individual toggles,
+   group ALL/NONE, the master switch, SPACE view. Rather than thread a badge
+   refresh through each one, recount after any click that lands in the panel. */
+(function(){
+  const panel=document.getElementById('panelL');
+  if(!panel)return;
+  panel.addEventListener('click',e=>{
+    if(e.target.closest('button'))updateGroupBadges();
+  });
+})();
+
+// ===== FIRST-RUN HINT (mobile) =====
+/* ---- installable ----
+   Registered last so it never competes with boot. The worker caches the shell
+   only — see sw.js for why nothing else may be cached — which makes the board
+   openable offline while keeping it impossible for it to show stale data and
+   pass it off as live. */
+if('serviceWorker'in navigator&&location.protocol.startsWith('http')){
+  window.addEventListener('load',()=>{
+    navigator.serviceWorker.register('sw.js').catch(e=>console.warn('sw registration failed:',e&&e.message));
   });
 }
 
-// ===== FIRST-RUN HINT (mobile) =====
 function dismissHint(){
   document.getElementById('mobHint').classList.remove('show');
   try{localStorage.setItem('sentinelHintSeen','1');}catch(e){}

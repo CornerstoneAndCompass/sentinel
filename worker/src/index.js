@@ -12,7 +12,21 @@
  *   GET /gfw/events?..       Global Fishing Watch events (dark vessels)
  *   GET /acled?..            ACLED armed-conflict events
  *   GET /health              which upstreams and secrets are live
+ *   GET /spine/state         current metrics with their 7-day baselines
+ *   GET /spine/since?t=..    what changed since a timestamp
+ *   GET /spine/series?..     one metric's history, downsampled
+ *   GET /spine/tick          run one sampling pass by hand (throttled)
+ *   GET /osm/military?bbox=  mapped military installations (OpenStreetMap)
+ *   GET /launches            upcoming and recent orbital launches
+ *   GET /tle?group=          satellite elements from CelesTrak
+ *   GET /cams?src=           public traffic cameras, normalised
+ *
+ * The /spine routes are served from a rolling history the scheduled handler
+ * builds; see spine.js for why the dashboard needs one at all.
  */
+
+import { tick as spineTick, state as spineState, since as spineSince, series as spineSeries } from './spine.js';
+import { osmMilitary, launches as llLaunches, tle as celesTle, cameras as openCams } from './sources.js';
 
 const ALLOWED_HOSTS = new Set([
   // aircraft
@@ -45,7 +59,13 @@ const ALLOWED_HOSTS = new Set([
   'tfr.faa.gov',
   'services3.arcgis.com',
   'data.unhcr.org',
+  // open infrastructure and camera operators; served via /osm/military and /cams
+  'overpass-api.de',
+  'api.tfl.gov.uk',
+  'cwwp2.dot.ca.gov',
   // space
+  'celestrak.org',                 // canonical TLE source; served via /tle
+  'll.thespacedevs.com',           // launch schedule; served via /launches
   'tle.ivanstanojevic.me',
   'api.wheretheiss.at',
   // news
@@ -642,6 +662,46 @@ export default {
       if (path === '/acled') return await acled(request, env);
       if (path === '/firms') return await firms(request, env);
 
+      if (path === '/spine/state') {
+        return json(await spineState(env), 200, { 'Cache-Control': 'public, max-age=60' });
+      }
+      if (path === '/spine/since') {
+        const raw = url.searchParams.get('t');
+        const t = raw ? (/^\d+$/.test(raw) ? Number(raw) : Date.parse(raw)) : NaN;
+        return json(await spineSince(env, t), 200, { 'Cache-Control': 'no-store' });
+      }
+      if (path === '/spine/series') {
+        return json(
+          await spineSeries(
+            env,
+            url.searchParams.get('metric') || 'milair',
+            parseInt(url.searchParams.get('days') || '7', 10),
+            parseInt(url.searchParams.get('points') || '60', 10),
+          ),
+          200,
+          { 'Cache-Control': 'public, max-age=300' },
+        );
+      }
+      // Manual pass, for a first run or for verifying a deploy without waiting
+      // out the cron. spine.js throttles it, so it cannot be used to hammer
+      // upstreams from outside.
+      if (path === '/spine/tick') return json(await spineTick(env), 200, { 'Cache-Control': 'no-store' });
+
+      // Supplementary sources. Each is reduced and cached in the worker, so
+      // these stay small however large the upstream is.
+      if (path === '/osm/military') {
+        return json(await osmMilitary(request, env), 200, { 'Cache-Control': 'public, max-age=3600' });
+      }
+      if (path === '/launches') {
+        return json(await llLaunches(env), 200, { 'Cache-Control': 'public, max-age=900' });
+      }
+      if (path === '/tle') {
+        return json(await celesTle(request, env), 200, { 'Cache-Control': 'public, max-age=10800' });
+      }
+      if (path === '/cams') {
+        return json(await openCams(request, env), 200, { 'Cache-Control': 'public, max-age=1800' });
+      }
+
       if (path === '/health') {
         return json({
           ok: true,
@@ -659,7 +719,9 @@ export default {
       if (path === '/') {
         return json({
           service: 'sentinel-feed-proxy',
-          routes: ['/p?url=', '/osky', '/gfw/events', '/acled', '/firms', '/health'],
+          routes: ['/p?url=', '/osky', '/gfw/events', '/acled', '/firms', '/health',
+                   '/spine/state', '/spine/since?t=', '/spine/series?metric=', '/spine/tick',
+                   '/osm/military?bbox=', '/launches', '/tle?group=', '/cams?src='],
         });
       }
 
@@ -667,5 +729,14 @@ export default {
     } catch (e) {
       return err(`worker error: ${e.message}`, 500);
     }
+  },
+
+  // The whole point of the spine: this runs whether or not anyone has the page
+  // open, so the history is continuous rather than a record of when somebody
+  // happened to be watching.
+  async scheduled(event, env, ctx) {
+    ctx.waitUntil(
+      spineTick(env, { force: true }).catch((e) => console.error('spine tick failed:', e && e.message)),
+    );
   },
 };

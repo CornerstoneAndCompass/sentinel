@@ -1,0 +1,8 @@
+# Crawling is permitted so that the noindex directive is actually seen.
+# Every response carries X-Robots-Tag: noindex, and the page carries a matching
+# meta robots tag. Blocking here instead would hide that directive and could
+# leave a bare URL listed.
+User-agent: *
+Allow: /
+
+# No sitemap is published; nothing here is intended for discovery.
