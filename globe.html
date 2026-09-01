@@ -1,0 +1,305 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>SENTINEL // GLOBE (prototype)</title>
+<meta name="robots" content="noindex, nofollow, noarchive, nosnippet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/cesium/1.124.0/Widgets/widgets.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/cesium/1.124.0/Cesium.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;500;700;900&family=Share+Tech+Mono&display=swap" rel="stylesheet">
+<style>
+/* Prototype only. This exists to answer one question — does a 3D globe close
+   the gap with the reference build — before committing to porting thirty
+   layers off Leaflet. It deliberately shares no code with index.html so the
+   working board cannot be broken by anything in here.
+
+   No Cesium ion account and no Google Photorealistic 3D Tiles: imagery is Esri
+   World Imagery, which the 2D board already uses. Those metered tiles are the
+   expensive part of the reference build and the least intelligence-relevant. */
+:root{
+--c:#00e8ff;--cd:rgba(0,232,255,0.15);--cg:rgba(0,232,255,0.4);
+--g:#00ff88;--r:#ff3355;--y:#ffcc00;--o:#ff8800;--p:#aa66ff;
+--pnl:rgba(5,10,20,0.92);--brd:rgba(0,232,255,0.14);
+--td:#7a8a9a;--tm:#b0c0d0;
+}
+*{margin:0;padding:0;box-sizing:border-box}
+html,body{height:100%;overflow:hidden;background:#03060c;
+  font-family:'Share Tech Mono',monospace;color:var(--tm)}
+#globe{position:absolute;inset:0}
+.cesium-viewer-bottom,.cesium-widget-credits{display:none!important}
+.cesium-viewer{background:#03060c}
+
+/* Sensor treatments, applied to the render canvas only so the HUD stays crisp.
+   Same approach as the 2D board, and the reason it works there too. */
+#globe[data-sensor="flir"] canvas{filter:grayscale(1) contrast(1.45) sepia(1) hue-rotate(212deg) saturate(5) brightness(1.05)}
+#globe[data-sensor="nvg"]  canvas{filter:grayscale(1) sepia(1) hue-rotate(58deg) saturate(4.5) brightness(0.9) contrast(1.2)}
+#globe[data-sensor="noir"] canvas{filter:grayscale(1) contrast(1.4) brightness(0.85)}
+
+/* HUD */
+.hud{position:fixed;inset:0;pointer-events:none;z-index:10}
+.hud>*{pointer-events:auto}
+.bar{position:fixed;left:0;right:0;height:38px;background:linear-gradient(180deg,rgba(3,6,12,.95),rgba(3,6,12,.65));
+  border-bottom:1px solid var(--brd);display:flex;align-items:center;gap:14px;padding:0 14px;top:0}
+.brand{font-family:'Orbitron',sans-serif;font-size:12px;letter-spacing:5px;color:var(--c)}
+.cls{font-family:'Orbitron',sans-serif;font-size:8px;letter-spacing:3px;color:var(--g);
+  border:1px solid rgba(0,255,136,.35);padding:2px 7px;border-radius:2px}
+.clock{margin-left:auto;font-size:11px;letter-spacing:2px;color:var(--tm)}
+.panel{position:fixed;top:52px;left:12px;width:212px;background:var(--pnl);border:1px solid var(--brd);
+  border-radius:4px;backdrop-filter:blur(12px);padding:9px 11px}
+.ptitle{font-family:'Orbitron',sans-serif;font-size:9px;letter-spacing:3px;color:var(--tm);
+  padding-bottom:7px;border-bottom:1px solid var(--brd);margin-bottom:7px}
+.row{display:flex;justify-content:space-between;align-items:center;padding:3px 0;font-size:11px}
+.row b{font-family:'Orbitron',sans-serif;font-weight:400;font-size:13px}
+.hint{font-size:9px;color:var(--td);letter-spacing:1px;margin-top:7px;line-height:1.5;
+  border-top:1px solid var(--brd);padding-top:7px}
+.ctl{position:fixed;bottom:14px;left:12px;display:flex;gap:3px;background:var(--pnl);
+  border:1px solid var(--brd);border-radius:4px;padding:3px;backdrop-filter:blur(12px)}
+.ctl button{background:transparent;border:1px solid transparent;color:var(--td);
+  font-family:inherit;font-size:9px;letter-spacing:1px;padding:5px 9px;border-radius:3px;cursor:pointer}
+.ctl button:hover{color:var(--tm)}
+.ctl button.on{background:var(--cd);border-color:var(--cg);color:var(--c)}
+.read{position:fixed;bottom:14px;right:12px;background:var(--pnl);border:1px solid var(--brd);
+  border-radius:4px;padding:8px 11px;backdrop-filter:blur(12px);font-size:10px;letter-spacing:1px;
+  text-align:right;min-width:150px}
+.read .v{font-family:'Orbitron',sans-serif;font-size:15px;color:var(--c)}
+.corner{position:fixed;width:24px;height:24px;border-color:var(--cg);pointer-events:none;z-index:11}
+.tl{top:44px;left:6px;border-top:1px solid;border-left:1px solid}
+.tr{top:44px;right:6px;border-top:1px solid;border-right:1px solid}
+.bl{bottom:6px;left:6px;border-bottom:1px solid;border-left:1px solid}
+.br{bottom:6px;right:6px;border-bottom:1px solid;border-right:1px solid}
+.load{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;
+  background:#03060c;z-index:50;font-family:'Orbitron',sans-serif;letter-spacing:6px;
+  color:var(--c);font-size:13px;transition:opacity .6s}
+.load.gone{opacity:0;pointer-events:none}
+</style>
+</head>
+<body>
+<div id="globe"></div>
+
+<div class="hud">
+  <div class="bar">
+    <span class="brand">SENTINEL // GLOBE</span>
+    <span class="cls">OSINT · UNCLASSIFIED · OPEN SOURCES</span>
+    <span class="clock" id="clock">--:--:-- UTC</span>
+  </div>
+
+  <div class="panel">
+    <div class="ptitle">Live Contacts</div>
+    <div class="row"><span>MILITARY AIR</span><b class="v" id="nAir" style="color:var(--c)">--</b></div>
+    <div class="row"><span>INSTALLATIONS</span><b class="v" id="nInst" style="color:var(--g)">--</b></div>
+    <div class="row"><span>IN VIEW</span><b class="v" id="nView" style="color:var(--y)">--</b></div>
+    <div class="hint">Drag to orbit · right-drag or two fingers to tilt · scroll to zoom.
+      Click a contact to lock the camera to it.</div>
+  </div>
+
+  <div class="ctl">
+    <button class="on" data-s="none">NORMAL</button>
+    <button data-s="flir">FLIR</button>
+    <button data-s="nvg">NVG</button>
+    <button data-s="noir">NOIR</button>
+    <button id="btnTilt">TILT</button>
+    <button id="btnFollow">UNLOCK</button>
+  </div>
+
+  <div class="read">
+    <div id="rdName" style="color:var(--tm)">NO CONTACT SELECTED</div>
+    <div class="v" id="rdAlt">—</div>
+    <div id="rdMeta" style="color:var(--td)">—</div>
+  </div>
+</div>
+<div class="corner tl"></div><div class="corner tr"></div>
+<div class="corner bl"></div><div class="corner br"></div>
+<div class="load" id="load">INITIALISING GLOBE…</div>
+
+<script>
+/* ---------------------------------------------------------------- config */
+const PROXY = 'https://sentinel-feeds.benjamin-a2d.workers.dev';
+
+/* Esri World Imagery rather than Google Photorealistic 3D Tiles. The reference
+   build treats those as required; they are metered, and for an intelligence
+   picture the photorealistic buildings are decoration. Terrain is the
+   ellipsoid, so no Cesium ion account is needed at all — a free ion token
+   would upgrade this to real elevation, which is the one thing worth paying
+   attention to later. */
+const viewer = new Cesium.Viewer('globe', {
+  baseLayer: new Cesium.ImageryLayer(new Cesium.UrlTemplateImageryProvider({
+    url: 'https://services.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+    credit: 'Esri, Maxar, Earthstar Geographics', maximumLevel: 18,
+  })),
+  baseLayerPicker: false, geocoder: false, homeButton: false, sceneModePicker: false,
+  navigationHelpButton: false, animation: false, timeline: false, fullscreenButton: false,
+  infoBox: false, selectionIndicator: false, requestRenderMode: false,
+});
+const scene = viewer.scene;
+scene.globe.enableLighting = true;
+scene.globe.baseColor = Cesium.Color.fromCssColorString('#03060c');
+scene.skyAtmosphere.show = true;
+scene.fog.enabled = true;
+viewer.camera.setView({
+  destination: Cesium.Cartesian3.fromDegrees(10, 45, 9_000_000),
+});
+
+/* ------------------------------------------------------------------ hud */
+setInterval(() => {
+  document.getElementById('clock').textContent =
+    new Date().toISOString().slice(11, 19) + ' UTC';
+}, 1000);
+
+document.querySelectorAll('.ctl [data-s]').forEach((b) => {
+  b.onclick = () => {
+    document.querySelectorAll('.ctl [data-s]').forEach((x) => x.classList.remove('on'));
+    b.classList.add('on');
+    const s = b.dataset.s;
+    if (s === 'none') document.getElementById('globe').removeAttribute('data-sensor');
+    else document.getElementById('globe').setAttribute('data-sensor', s);
+  };
+});
+
+let tilted = false;
+document.getElementById('btnTilt').onclick = function () {
+  tilted = !tilted;
+  this.classList.toggle('on', tilted);
+  const c = viewer.camera;
+  const carto = Cesium.Cartographic.fromCartesian(c.position);
+  viewer.camera.flyTo({
+    destination: Cesium.Cartesian3.fromRadians(carto.longitude, carto.latitude,
+      tilted ? 180000 : 9_000_000),
+    orientation: { heading: 0, pitch: Cesium.Math.toRadians(tilted ? -35 : -90), roll: 0 },
+    duration: 2,
+  });
+};
+
+/* ------------------------------------------------------------- contacts */
+const air = new Cesium.CustomDataSource('air');
+const inst = new Cesium.CustomDataSource('inst');
+viewer.dataSources.add(air);
+viewer.dataSources.add(inst);
+
+const CYAN = Cesium.Color.fromCssColorString('#00e8ff');
+const GREEN = Cesium.Color.fromCssColorString('#00ff88');
+
+async function loadAircraft() {
+  try {
+    const u = PROXY + '/p?url=' + encodeURIComponent('https://api.adsb.lol/v2/mil');
+    const r = await fetch(u);
+    const j = await r.json();
+    const list = Array.isArray(j.ac) ? j.ac : [];
+    air.entities.removeAll();
+    for (const a of list) {
+      const lat = a.lat, lon = a.lon;
+      if (typeof lat !== 'number' || typeof lon !== 'number') continue;
+      const altFt = typeof a.alt_baro === 'number' ? a.alt_baro : 0;
+      const alt = Math.max(0, altFt * 0.3048);
+      const e = air.entities.add({
+        position: Cesium.Cartesian3.fromDegrees(lon, lat, alt),
+        point: { pixelSize: 7, color: CYAN, outlineColor: Cesium.Color.BLACK, outlineWidth: 1,
+                 disableDepthTestDistance: Number.POSITIVE_INFINITY },
+        // A vertical drop line is what makes altitude legible on a globe —
+        // without it every contact reads as sitting on the ground.
+        polyline: {
+          positions: Cesium.Cartesian3.fromDegreesArrayHeights([lon, lat, 0, lon, lat, alt]),
+          width: 1, material: CYAN.withAlpha(0.28),
+        },
+        label: {
+          text: a.flight ? a.flight.trim() : (a.hex || ''),
+          font: '10px "Share Tech Mono", monospace', fillColor: CYAN,
+          showBackground: true, backgroundColor: Cesium.Color.fromCssColorString('#03060c').withAlpha(0.7),
+          pixelOffset: new Cesium.Cartesian2(0, -16),
+          distanceDisplayCondition: new Cesium.DistanceDisplayCondition(0, 900000),
+          disableDepthTestDistance: Number.POSITIVE_INFINITY,
+        },
+      });
+      e._meta = { name: a.flight ? a.flight.trim() : a.hex, altFt, gs: a.gs, type: a.t, kind: 'AIR' };
+    }
+    document.getElementById('nAir').textContent = air.entities.values.length;
+  } catch (err) { console.warn('aircraft:', err.message); }
+}
+
+async function loadInstallations() {
+  try {
+    // Direct to Overpass — measured, it refuses Cloudflare egress with 521 but
+    // answers a browser normally, same as in the 2D board.
+    const q = '[out:json][timeout:40];(nwr["military"="airfield"](44,-2,56,18);'
+            + 'nwr["military"="naval_base"](44,-2,56,18););out center tags 200;';
+    const r = await fetch('https://overpass-api.de/api/interpreter', {
+      method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: 'data=' + encodeURIComponent(q),
+    });
+    const j = await r.json();
+    inst.entities.removeAll();
+    for (const el of j.elements || []) {
+      const lat = el.lat ?? (el.center && el.center.lat);
+      const lon = el.lon ?? (el.center && el.center.lon);
+      if (typeof lat !== 'number' || typeof lon !== 'number') continue;
+      const nm = (el.tags && (el.tags.name || el.tags['name:en'])) || 'Unnamed';
+      const e = inst.entities.add({
+        position: Cesium.Cartesian3.fromDegrees(lon, lat, 0),
+        // A ground cylinder reads as a site footprint at altitude, where a
+        // point would vanish into the imagery.
+        cylinder: { length: 2000, topRadius: 900, bottomRadius: 900,
+                    material: GREEN.withAlpha(0.22), outline: true, outlineColor: GREEN.withAlpha(0.7) },
+        label: {
+          text: nm, font: '10px "Share Tech Mono", monospace', fillColor: GREEN,
+          showBackground: true, backgroundColor: Cesium.Color.fromCssColorString('#03060c').withAlpha(0.7),
+          pixelOffset: new Cesium.Cartesian2(0, -14),
+          distanceDisplayCondition: new Cesium.DistanceDisplayCondition(0, 400000),
+        },
+      });
+      e._meta = { name: nm, kind: (el.tags && el.tags.military) || 'installation' };
+    }
+    document.getElementById('nInst').textContent = inst.entities.values.length;
+  } catch (err) { console.warn('installations:', err.message); }
+}
+
+/* ------------------------------------------------------ select + follow */
+let followed = null;
+const handler = new Cesium.ScreenSpaceEventHandler(scene.canvas);
+handler.setInputAction((click) => {
+  const picked = scene.pick(click.position);
+  const ent = picked && picked.id;
+  if (!ent || !ent._meta) return;
+  followed = ent;
+  const m = ent._meta;
+  document.getElementById('rdName').textContent = m.name || 'CONTACT';
+  document.getElementById('rdAlt').textContent =
+    m.kind === 'AIR' ? (m.altFt ? m.altFt.toLocaleString() + ' ft' : '—') : m.kind.toUpperCase();
+  document.getElementById('rdMeta').textContent =
+    m.kind === 'AIR' ? [m.type, m.gs ? Math.round(m.gs) + ' kt' : null].filter(Boolean).join(' · ') : 'GROUND SITE';
+  document.getElementById('btnFollow').classList.add('on');
+  document.getElementById('btnFollow').textContent = 'FOLLOWING';
+  viewer.trackedEntity = ent;
+}, Cesium.ScreenSpaceEventType.LEFT_CLICK);
+
+document.getElementById('btnFollow').onclick = function () {
+  viewer.trackedEntity = undefined; followed = null;
+  this.classList.remove('on'); this.textContent = 'UNLOCK';
+  document.getElementById('rdName').textContent = 'NO CONTACT SELECTED';
+  document.getElementById('rdAlt').textContent = '—';
+  document.getElementById('rdMeta').textContent = '—';
+};
+
+/* count what is actually on screen, which is the number that means something */
+setInterval(() => {
+  let n = 0;
+  const rect = scene.camera.computeViewRectangle();
+  if (rect) {
+    for (const e of air.entities.values) {
+      const p = e.position && e.position.getValue(Cesium.JulianDate.now());
+      if (!p) continue;
+      const c = Cesium.Cartographic.fromCartesian(p);
+      if (Cesium.Rectangle.contains(rect, c)) n++;
+    }
+  }
+  document.getElementById('nView').textContent = n;
+}, 2000);
+
+/* ------------------------------------------------------------------ go */
+(async () => {
+  await Promise.allSettled([loadAircraft(), loadInstallations()]);
+  document.getElementById('load').classList.add('gone');
+  setInterval(loadAircraft, 30000);
+})();
+</script>
+</body>
+</html>

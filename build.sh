@@ -7,5 +7,5 @@
 set -e
 cd "$(dirname "$0")"
 rm -rf dist && mkdir -p dist
-cp index.html sw.js manifest.webmanifest icon.svg icon-maskable.svg robots.txt _headers dist/
+cp index.html globe.html sw.js manifest.webmanifest icon.svg icon-maskable.svg robots.txt _headers dist/
 echo "dist/ ready — $(ls dist | wc -l | tr -d ' ') files, $(du -sh dist | cut -f1)"
