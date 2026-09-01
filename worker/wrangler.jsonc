@@ -7,9 +7,16 @@
   "observability": {
     "enabled": true
   },
+  // The spine samples every 15 minutes. That is fine-grained enough for the
+  // 7-day medians to mean something and coarse enough that a day of history is
+  // 96 rows, which KV holds comfortably as one value per day.
+  "triggers": {
+    "crons": ["*/15 * * * *"]
+  },
   // caches.default is per-datacenter, so a cache warmed in one colo does
   // nothing for a client hitting another. KV is globally replicated, which is
-  // what a heavily-throttled upstream like GDELT actually needs.
+  // what a heavily-throttled upstream like GDELT actually needs. The spine
+  // shares this namespace under a `spine:` prefix so it needs no new binding.
   "kv_namespaces": [
     {
       "binding": "FEED_CACHE",
