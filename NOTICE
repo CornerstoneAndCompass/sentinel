@@ -1,0 +1,91 @@
+SENTINEL — third-party notices
+==============================
+
+This file records code and data in this project that originates elsewhere, and
+the terms it arrives under. It exists because the MIT licence requires the
+copyright notice to travel with the code, and because a board that labels its
+own data sources should be able to say where its code came from too.
+
+
+God's Eye View
+--------------
+https://github.com/bilawalsidhu/gods-eye-view
+
+Portions of the 3D globe view (globe.html) are derived from God's Eye View,
+used under the MIT licence reproduced below.
+
+What is derived, specifically:
+
+  * The aircraft classification scheme — the mapping from ICAO type codes to
+    airframe categories (fastjet, quadjet, widebody, turboprop, helicopter,
+    glider, bizjet, light, UAV, airliner), and the fallback to ADS-B emitter
+    category when the type code is unknown. This is domain knowledge, not
+    something worth re-deriving.
+
+  * The approach to contact symbology: per-category SVG silhouettes rasterised
+    to fixed-size bitmaps rather than scaled by the GPU, with colour applied as
+    a billboard tint rather than baked into the artwork.
+
+The silhouette artwork itself is our own, and the surrounding rendering,
+dead-reckoning, HUD and data plumbing are original to this project.
+
+Explicitly NOT taken: the datasets that project bundles. Its author notes that
+third-party data — TeleGeography submarine cables, OpenStreetMap extracts, NASA
+fire data and 3D models — is excluded from its MIT grant and carries its own
+terms. None of it is used here.
+
+--- begin MIT licence ---
+
+MIT License
+
+Copyright (c) 2026 Bilawal Sidhu
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+--- end MIT licence ---
+
+
+Libraries
+---------
+CesiumJS                Apache-2.0    https://cesium.com
+Leaflet                 BSD-2-Clause  https://leafletjs.com
+satellite.js            MIT           https://github.com/shashwatak/satellite-js
+
+
+Data
+----
+Every source below is queried live against its own public API. Attribution
+required by each is carried in the interface at the point the data is shown.
+
+  ADS-B                 adsb.lol, airplanes.live
+  AIS                   Digitraffic (Finnish Transport Infrastructure Agency)
+  Satellites            CelesTrak
+  Seismic               USGS
+  Disasters             GDACS (European Commission JRC / UN OCHA)
+  Wildfire              NASA FIRMS, NASA EONET, Copernicus GWIS
+  Space weather         NOAA SWPC
+  Weather               RainViewer, Bureau of Meteorology, US NWS, JMA Himawari
+  Installations         OpenStreetMap contributors, via Overpass (ODbL)
+  Launches              Launch Library 2 / The Space Devs
+  Cameras               Transport for London, Caltrans
+  Conflict              ACLED
+  Fishing / dark vessels Global Fishing Watch
+  Displacement          UNHCR
+  Imagery               Esri, Maxar, Earthstar Geographics
+  Terrain and buildings Cesium ion, OpenStreetMap contributors

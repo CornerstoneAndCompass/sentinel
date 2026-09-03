@@ -144,8 +144,8 @@ html,body{width:100%;height:100%;overflow:hidden;background:#050a12;font-family:
 
 /* RIGHT PANEL */
 .right-panel{position:fixed;top:92px;right:10px;width:340px;z-index:5000;max-height:calc(100vh - 134px);overflow:hidden;display:flex;flex-direction:column;gap:5px}
-.tab-btns{display:flex;gap:0;margin-bottom:0;flex-shrink:0}
-.tab-btn{flex:1;background:transparent;border:1px solid var(--brd);border-bottom:none;color:var(--tm);font-family:'Orbitron',sans-serif;font-size:9px;letter-spacing:1px;padding:7px 0;cursor:pointer;transition:all 0.2s;text-align:center}
+.tab-btns{display:flex;gap:0;margin-bottom:0;flex-shrink:0;flex-wrap:wrap}
+.tab-btn{flex:1 1 auto;min-width:76px;background:transparent;border:1px solid var(--brd);border-bottom:none;color:var(--tm);font-family:'Orbitron',sans-serif;font-size:9px;letter-spacing:0.5px;padding:7px 4px;cursor:pointer;transition:all 0.2s;text-align:center;white-space:nowrap}
 .tab-btn:first-child{border-radius:4px 0 0 0}
 .tab-btn:last-child{border-radius:0 4px 0 0}
 .tab-btn.active{background:var(--cd);color:var(--c);border-color:var(--brdh)}
@@ -378,7 +378,10 @@ html,body{width:100%;height:100%;overflow:hidden;background:#050a12;font-family:
   font-family:'Share Tech Mono',monospace;font-size:11px;padding:3px 7px;white-space:nowrap}
 
 /* SEARCH */
-.search-wrap{position:fixed;top:46px;left:50%;transform:translateX(-50%);z-index:5000}
+/* Stacked, not overlapping: header ends at 40, the banner runs 40-68, and the
+   search sits clear beneath it. It previously started at 46, i.e. inside the
+   banner's band, so the ticker ran behind the input. */
+.search-wrap{position:fixed;top:76px;left:50%;transform:translateX(-50%);z-index:5000}
 .search-input{background:var(--pnl);border:1px solid var(--brd);color:var(--c);font-family:'Share Tech Mono',monospace;font-size:13px;padding:9px 18px;width:380px;border-radius:4px;outline:none;backdrop-filter:blur(12px)}
 .search-input::placeholder{color:var(--td)}
 .search-input:focus{border-color:var(--c);box-shadow:0 0 20px var(--cd)}
@@ -941,7 +944,7 @@ body.lpanel-shut .sensor-modes{left:14px}
 <!-- AIS STATUS BANNER -->
 
 <!-- THREAT BANNER -->
-<div class="threat-banner" id="threatBanner" style="top:64px" onclick="toggleTicker()" title="Click to pause or resume the threat ticker"><span class="tick-hint" id="tickHint"></span><div class="marquee-track" id="marqueeTrack"><span class="marquee-text" id="threatMarquee">LOADING GLOBAL THREAT ASSESSMENT...</span><span class="marquee-text" id="threatMarquee2">LOADING GLOBAL THREAT ASSESSMENT...</span></div></div>
+<div class="threat-banner" id="threatBanner" onclick="toggleTicker()" title="Click to pause or resume the threat ticker"><span class="tick-hint" id="tickHint"></span><div class="marquee-track" id="marqueeTrack"><span class="marquee-text" id="threatMarquee">LOADING GLOBAL THREAT ASSESSMENT...</span><span class="marquee-text" id="threatMarquee2">LOADING GLOBAL THREAT ASSESSMENT...</span></div></div>
 
 <!-- HEADER -->
 <div class="header">

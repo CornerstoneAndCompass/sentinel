@@ -103,6 +103,7 @@ html,body{height:100%;overflow:hidden;background:#03060c;
     <span class="brand">SENTINEL // GLOBE</span>
     <span class="cls">OSINT · UNCLASSIFIED · OPEN SOURCES</span>
     <span class="cls" id="terrainState" style="color:var(--td);border-color:var(--brd)">ELLIPSOID</span>
+    <a href="credits.html" class="cls" style="color:var(--td);border-color:var(--brd);text-decoration:none" title="Sources, licences and attribution">CREDITS</a>
     <span class="clock" id="clock">--:--:-- UTC</span>
   </div>
 
@@ -319,50 +320,181 @@ viewer.dataSources.add(inst);
 const CYAN = Cesium.Color.fromCssColorString('#00e8ff');
 const GREEN = Cesium.Color.fromCssColorString('#00ff88');
 
+/* ---- contacts ----
+   Two things were wrong here and they are the reason the display felt dead.
+
+   Aircraft were points. A 7px dot at 33,000ft is not a contact you can read —
+   you cannot see its heading, you cannot tell a C-17 from a Typhoon, and at
+   any useful camera angle it disappears into the imagery. They are now
+   oriented airframe symbols that rotate to track and scale with range.
+
+   And nothing moved. The old loop cleared every entity and rebuilt it on each
+   30-second poll, so contacts teleported and then froze. ADS-B gives ground
+   speed and track, which is enough to dead-reckon between polls: position is
+   now evaluated every frame from the last fix plus elapsed time, so aircraft
+   fly continuously and each poll corrects the estimate rather than replacing
+   it. That is also how the trails become possible. */
+
+/* ---- airframe classification ----
+   The type-code groupings are adapted from God's Eye View (MIT, (c) 2026
+   Bilawal Sidhu) — see NOTICE. Knowing that a C17 is a widebody, a EUFI is a
+   fastjet and an A400 is a turboprop is accumulated domain knowledge, and
+   re-deriving it from scratch would have been slower and worse.
+
+   Order matters: the first set that matches wins, so the narrow military
+   categories are tested before the broad civil ones. */
+const TYPE_SETS = [
+  ['fastjet', 'F16 F15 F18 FA18 F14 F22 F35 F4 F5 A10 AV8B TYPH EUFI RFAL RAFL GRIP JAS39 TOR MIR2 M2000 SU27 SU30 SU33 SU34 SU35 SU57 MG29 MIG29 MG31 J20 T38 HAWK L39 M346 T7A'],
+  ['uav',     'Q1 Q4 Q9 MQ1 MQ4 MQ9 RQ4 TB2 SHDW HERN'],
+  ['heli',    'EC20 EC30 EC35 EC45 EC55 EC75 AS32 AS50 AS55 AS65 A109 A119 A139 A149 A169 A189 B06 B06T B407 B412 B429 B430 B505 S76 S92 S61 S64 H60 UH60 S70 H500 MD52 MD60 R22 R44 R66 NH90 PUMA UH1 H47 CH47 H64 AH64 EH10 MERL LYNX WASP G2CA'],
+  ['quadjet', 'B741 B742 B743 B744 B748 A388 A342 A343 A345 A346 A124 C5M A225 IL96 B52 A140'],
+  ['widebody','A306 A310 A30B A332 A333 A338 A339 A359 A35K A337 B762 B763 B764 B772 B773 B77L B77W B778 B779 B788 B789 B78X MD11 IL86 DC10 L101 B767 B777 B787 C17 K35R KC10 A332MRTT'],
+  ['turbo',   'DH8A DH8B DH8C DH8D AT43 AT45 AT72 AT75 AT76 SF34 E110 E120 C208 C441 F50 F27 C130 C30J LM100 AN12 AN26 AN32 A400 P8 P3 CN35 C295 SB20'],
+  ['glider',  'DISC DUOD VENT NIMB DG40 DG50 DG80 LS3 LS4 LS6 LS8 PIK PEGA KEST GLID MOSQ DIMO'],
+  ['bizjet',  'C500 C510 C525 C550 C560 C56X C650 C680 C68A C700 C750 CL30 CL35 CL60 GL5T GL7T GLEX GLF4 GLF5 GLF6 LJ23 LJ35 LJ45 LJ60 LJ75 FA10 FA20 FA50 FA7X F2TH H25A H25B H25C E50P E55P E545 E550 PC24 SF50 BE20 B350'],
+  ['light',   'C150 C152 C172 C177 C182 C206 C210 C310 C337 SR20 SR22 PA18 PA24 PA28 PA31 PA34 PA44 PA46 DA20 DA40 DA42 DA62 BE19 BE23 BE33 BE35 BE36 BE55 BE58 BE76 RV6 RV7 RV8 RV10'],
+].map(([kind, codes]) => [kind, new Set(codes.split(' '))]);
+
+// ADS-B emitter category, used when the type code is unknown or absent — a
+// coarse answer beats defaulting everything to an airliner silhouette.
+const CAT_KIND = { A1: 'light', A2: 'light', A3: 'airliner', A4: 'widebody',
+                   A5: 'widebody', A6: 'fastjet', A7: 'heli', B1: 'glider',
+                   B2: 'glider', B6: 'uav', B7: 'uav' };
+
+function classify(type, cat) {
+  const t = String(type || '').toUpperCase().trim();
+  if (t) for (const [kind, set] of TYPE_SETS) if (set.has(t)) return kind;
+  const c = String(cat || '').toUpperCase().trim();
+  if (CAT_KIND[c]) return CAT_KIND[c];
+  return t ? 'airliner' : 'light';
+}
+
+/* One silhouette per airframe class. Drawn here rather than taken, and kept
+   monochrome white so the billboard tint carries the colour — that separation
+   is theirs and it is the right call: one bitmap serves every colour state
+   instead of one bitmap per colour per class. */
+const SIL = {
+  fastjet:  'M32 2 L35 26 L58 44 L58 49 L35 41 L35 52 L42 59 L42 62 L32 58 L22 62 L22 59 L29 52 L29 41 L6 49 L6 44 L29 26 Z',
+  airliner: 'M32 3 L36 24 L60 40 L60 45 L36 37 L36 52 L45 58 L45 61 L32 57 L19 61 L19 58 L28 52 L28 37 L4 45 L4 40 L28 24 Z',
+  widebody: 'M32 3 L37 22 L62 41 L62 47 L37 38 L37 52 L47 59 L47 62 L32 57 L17 62 L17 59 L27 52 L27 38 L2 47 L2 41 L27 22 Z',
+  quadjet:  'M32 3 L37 22 L62 41 L62 47 L37 38 L37 52 L47 59 L47 62 L32 57 L17 62 L17 59 L27 52 L27 38 L2 47 L2 41 L27 22 Z M14 40 L14 50 M20 38 L20 48 M44 38 L44 48 M50 40 L50 50',
+  turbo:    'M32 4 L36 24 L58 40 L58 45 L36 37 L36 51 L44 58 L44 61 L32 57 L20 61 L20 58 L28 51 L28 37 L6 45 L6 40 L28 24 Z M18 34 L18 46 M46 34 L46 46',
+  bizjet:   'M32 4 L35 26 L54 42 L54 46 L35 39 L35 52 L41 58 L41 61 L32 57 L23 61 L23 58 L29 52 L29 39 L10 46 L10 42 L29 26 Z',
+  light:    'M32 6 L34 26 L56 38 L56 42 L34 36 L34 52 L40 58 L40 60 L32 56 L24 60 L24 58 L30 52 L30 36 L8 42 L8 38 L30 26 Z',
+  glider:   'M32 8 L33 28 L62 36 L62 39 L33 35 L33 54 L38 59 L38 61 L32 58 L26 61 L26 59 L31 54 L31 35 L2 39 L2 36 L31 28 Z',
+  uav:      'M32 8 L34 28 L60 36 L60 40 L34 35 L34 50 L40 57 L40 60 L32 56 L24 60 L24 57 L30 50 L30 35 L4 40 L4 36 L30 28 Z',
+  heli:     'M32 20 m-9 0 a9 9 0 1 0 18 0 a9 9 0 1 0 -18 0 M32 29 L32 52 M26 56 L38 56 M6 10 L58 30 M58 10 L6 30',
+};
+
+/* Rasterised once per class at a fixed size rather than handing Cesium an SVG
+   and letting the GPU downsample it, which is what made the previous single
+   icon look soft. Their observation, and it is visibly correct. */
+const ICONS = {};
+function buildIcons() {
+  for (const [kind, d] of Object.entries(SIL)) {
+    const stroke = kind === 'heli' ? 'stroke="#fff" stroke-width="4" fill="none"' : 'fill="#fff"';
+    const svg = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">'
+      + '<path d="' + d + '" ' + stroke
+      + ' stroke-linejoin="round" stroke-linecap="round"/></svg>';
+    ICONS[kind] = 'data:image/svg+xml;charset=UTF-8,' + encodeURIComponent(svg);
+  }
+}
+buildIcons();
+
+const R_EARTH = 6371000;
+// Dead reckoning. Great-circle advance from the last fix along its own track,
+// which is accurate enough over a 30-second gap and is what turns a slideshow
+// into flight.
+function reckon(m) {
+  const dt = (Date.now() - m.t0) / 1000;
+  const metres = (m.gs || 0) * 0.514444 * dt;
+  if (!metres) return Cesium.Cartesian3.fromDegrees(m.lon, m.lat, m.altM);
+  const d = metres / R_EARTH, brg = Cesium.Math.toRadians(m.track || 0);
+  const la1 = Cesium.Math.toRadians(m.lat), lo1 = Cesium.Math.toRadians(m.lon);
+  const la2 = Math.asin(Math.sin(la1) * Math.cos(d) + Math.cos(la1) * Math.sin(d) * Math.cos(brg));
+  const lo2 = lo1 + Math.atan2(Math.sin(brg) * Math.sin(d) * Math.cos(la1),
+                               Math.cos(d) - Math.sin(la1) * Math.sin(la2));
+  // Climb and descent are in the feed too, so altitude is advanced as well.
+  const alt = m.altM + ((m.rate || 0) * 0.00508) * dt;
+  return Cesium.Cartesian3.fromRadians(lo2, la2, Math.max(30, alt));
+}
+
 async function loadAircraft() {
   try {
     const u = PROXY + '/p?url=' + encodeURIComponent('https://api.adsb.lol/v2/mil');
     const r = await fetch(u);
     const j = await r.json();
     const list = Array.isArray(j.ac) ? j.ac : [];
-    air.entities.removeAll();
+    const seen = new Set();
+
     for (const a of list) {
       const lat = a.lat, lon = a.lon;
       if (typeof lat !== 'number' || typeof lon !== 'number') continue;
-      const altFt = typeof a.alt_baro === 'number' ? a.alt_baro : 0;
-      // A contact at exactly zero co-planar with the ellipsoid flickers once
-      // depth testing is on, so ground traffic is floated just clear of it.
-      const alt = Math.max(60, altFt * 0.3048);
-      const e = air.entities.add({
-        position: Cesium.Cartesian3.fromDegrees(lon, lat, alt),
-        // No disableDepthTestDistance here: that flag forces a primitive to draw
-        // regardless of what is in front of it, which is precisely how far-side
-        // traffic bled through the globe.
-        point: { pixelSize: 7, color: CYAN, outlineColor: Cesium.Color.BLACK, outlineWidth: 1 },
-        // A vertical drop line is what makes altitude legible on a globe —
-        // without it every contact reads as sitting on the ground.
-        polyline: {
-          positions: Cesium.Cartesian3.fromDegreesArrayHeights([lon, lat, 0, lon, lat, alt]),
-          width: 1, material: CYAN.withAlpha(0.28),
-        },
-        label: {
-          text: a.flight ? a.flight.trim() : (a.hex || ''),
-          font: '10px "Share Tech Mono", monospace', fillColor: CYAN,
-          showBackground: true, backgroundColor: Cesium.Color.fromCssColorString('#03060c').withAlpha(0.7),
-          pixelOffset: new Cesium.Cartesian2(0, -16),
-          distanceDisplayCondition: new Cesium.DistanceDisplayCondition(0, 900000),
-        },
-      });
-      // Keep the whole record. The readout was showing four fields because
-      // those were the four I happened to pick, not because the feed is thin —
-      // registration, type description, squawk and vertical rate were all
-      // sitting in the response unread.
-      e._meta = {
-        kind: 'AIR', name: a.flight ? a.flight.trim() : (a.hex || '').toUpperCase(),
-        hex: a.hex, reg: a.r, type: a.t, desc: a.desc, altFt,
+      const hex = a.hex || (lat + ',' + lon);
+      seen.add(hex);
+      const altM = Math.max(30, (typeof a.alt_baro === 'number' ? a.alt_baro : 0) * 0.3048);
+      const name = a.flight ? a.flight.trim() : (a.hex || '').toUpperCase();
+
+      let e = air.entities.getById(hex);
+      if (!e) {
+        // Created once and thereafter updated in place, so the trail survives
+        // and the motion is continuous across polls.
+        const meta = { kind: 'AIR', hex };
+        e = air.entities.add({
+          id: hex,
+          position: new Cesium.CallbackProperty(() => reckon(meta), false),
+          billboard: {
+            image: ICONS.airliner, width: 24, height: 24, color: CYAN,
+            rotation: 0, alignedAxis: Cesium.Cartesian3.ZERO,
+            scaleByDistance: new Cesium.NearFarScalar(5.0e4, 1.5, 6.0e6, 0.5),
+            translucencyByDistance: new Cesium.NearFarScalar(1.0e6, 1.0, 2.0e7, 0.35),
+          },
+          path: {
+            resolution: 2, width: 1.5, leadTime: 0, trailTime: 240,
+            material: new Cesium.PolylineGlowMaterialProperty({
+              glowPower: 0.25, color: CYAN.withAlpha(0.55),
+            }),
+          },
+          label: {
+            text: name, font: '10px "Share Tech Mono", monospace', fillColor: CYAN,
+            showBackground: true,
+            backgroundColor: Cesium.Color.fromCssColorString('#03060c').withAlpha(0.72),
+            pixelOffset: new Cesium.Cartesian2(0, -20),
+            distanceDisplayCondition: new Cesium.DistanceDisplayCondition(0, 1200000),
+          },
+        });
+        e._meta = meta;
+      }
+
+      // One record, refreshed. t0 is the moment of this fix, which is what the
+      // per-frame reckoning measures from.
+      Object.assign(e._meta, {
+        name, hex: a.hex, reg: a.r, type: a.t, desc: a.desc,
+        lat, lon, altM, altFt: typeof a.alt_baro === 'number' ? a.alt_baro : null,
         gs: a.gs, track: a.track, rate: a.baro_rate, squawk: a.squawk,
-        emergency: a.emergency, cat: a.category, lat, lon,
-      };
+        emergency: a.emergency, cat: a.category, t0: Date.now(),
+      });
+      e.label.text = name;
+      const kind = classify(a.t, a.category);
+      e._meta.airframe = kind;
+      e.billboard.image = ICONS[kind] || ICONS.airliner;
+      // Emergency squawks outrank everything else on the display.
+      const hot = ['7500', '7600', '7700'].includes(String(a.squawk));
+      e.billboard.color = hot ? Cesium.Color.fromCssColorString('#ff3355')
+        : kind === 'fastjet' ? Cesium.Color.fromCssColorString('#ffcc00')
+        : kind === 'heli' ? Cesium.Color.fromCssColorString('#00ff88')
+        : CYAN;
+      e.billboard.width = kind === 'widebody' || kind === 'quadjet' ? 28 : 24;
+      e.billboard.height = e.billboard.width;
+      // Screen-space rotation, so the symbol points where the aircraft is going
+      // regardless of how the camera is oriented.
+      e.billboard.rotation = Cesium.Math.toRadians(-(a.track || 0));
+    }
+
+    // Contacts that have dropped off the feed stop existing rather than
+    // drifting forever on a stale velocity.
+    for (const e of air.entities.values.slice()) {
+      if (!seen.has(e.id)) air.entities.remove(e);
     }
     document.getElementById('nAir').textContent = air.entities.values.length;
   } catch (err) { console.warn('aircraft:', err.message); }
@@ -447,7 +579,7 @@ function showContact(m) {
     ['SPEED', fmt(m.gs, ' kt')],
     ['HEADING', bearingName(m.track)],
     ['CLIMB', typeof m.rate === 'number' ? (m.rate > 0 ? '+' : '') + fmt(m.rate, ' fpm') : '—'],
-    ['TYPE', m.type || '—'],
+    ['TYPE', (m.type || '—') + (m.airframe ? '  \u00b7  ' + m.airframe.toUpperCase() : '')],
     ['REG', m.reg || '—'],
     ['MODE-S', (m.hex || '—').toUpperCase()],
   ] : [
