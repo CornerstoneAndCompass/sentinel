@@ -193,6 +193,9 @@ const viewer = new Cesium.Viewer('globe', {
 const scene = viewer.scene;
 let osmBuildings = null;
 let buildingsOn = true;
+// Positions are now time-based, so the clock must actually tick.
+viewer.clock.shouldAnimate = true;
+viewer.clock.multiplier = 1;
 
 if (ION_TOKEN) {
   Cesium.Ion.defaultAccessToken = ION_TOKEN;
@@ -402,21 +405,48 @@ function buildIcons() {
 buildIcons();
 
 const R_EARTH = 6371000;
-// Dead reckoning. Great-circle advance from the last fix along its own track,
-// which is accurate enough over a 30-second gap and is what turns a slideshow
-// into flight.
-function reckon(m) {
-  const dt = (Date.now() - m.t0) / 1000;
-  const metres = (m.gs || 0) * 0.514444 * dt;
-  if (!metres) return Cesium.Cartesian3.fromDegrees(m.lon, m.lat, m.altM);
-  const d = metres / R_EARTH, brg = Cesium.Math.toRadians(m.track || 0);
-  const la1 = Cesium.Math.toRadians(m.lat), lo1 = Cesium.Math.toRadians(m.lon);
+
+/* Great-circle advance from a fix along its own track. Used to synthesise a
+   second sample so the position property has a velocity from the first frame
+   rather than sitting still until the second poll arrives. */
+function project(lat, lon, altM, gs, track, rate, dtSec) {
+  const metres = (gs || 0) * 0.514444 * dtSec;
+  const alt = Math.max(30, altM + ((rate || 0) * 0.00508) * dtSec);
+  if (!metres) return Cesium.Cartesian3.fromDegrees(lon, lat, alt);
+  const d = metres / R_EARTH, brg = Cesium.Math.toRadians(track || 0);
+  const la1 = Cesium.Math.toRadians(lat), lo1 = Cesium.Math.toRadians(lon);
   const la2 = Math.asin(Math.sin(la1) * Math.cos(d) + Math.cos(la1) * Math.sin(d) * Math.cos(brg));
   const lo2 = lo1 + Math.atan2(Math.sin(brg) * Math.sin(d) * Math.cos(la1),
                                Math.cos(d) - Math.sin(la1) * Math.sin(la2));
-  // Climb and descent are in the feed too, so altitude is advanced as well.
-  const alt = m.altM + ((m.rate || 0) * 0.00508) * dt;
-  return Cesium.Cartesian3.fromRadians(lo2, la2, Math.max(30, alt));
+  return Cesium.Cartesian3.fromRadians(lo2, la2, alt);
+}
+
+/* A CallbackProperty is not a PositionProperty — it has no
+   getValueInReferenceFrame — so attaching a path to one crashes the renderer
+   outright. That was the error panel.
+
+   SampledPositionProperty is the right tool anyway, and not merely a
+   workaround: it interpolates between fixes, extrapolates forward past the
+   latest one, and keeps the history that makes a trail possible. Each poll adds
+   a sample and corrects the estimate instead of replacing the object. */
+function newTrack(m) {
+  const p = new Cesium.SampledPositionProperty();
+  p.forwardExtrapolationType = Cesium.ExtrapolationType.EXTRAPOLATE;
+  p.forwardExtrapolationDuration = 180;   // stop guessing after three minutes
+  p.backwardExtrapolationType = Cesium.ExtrapolationType.HOLD;
+  p.setInterpolationOptions({
+    interpolationDegree: 1,
+    interpolationAlgorithm: Cesium.LinearApproximation,
+  });
+  return p;
+}
+
+// Two samples are the minimum for a velocity, so a contact seen once is given a
+// back-projected fix as well and moves immediately rather than after 30s.
+function seedTrack(p, m, now) {
+  const back = Cesium.JulianDate.addSeconds(now, -20, new Cesium.JulianDate());
+  p.addSample(back, project(m.lat, m.lon, m.altM, m.gs, m.track, m.rate, -20));
+  p.addSample(now, Cesium.Cartesian3.fromDegrees(m.lon, m.lat, m.altM));
 }
 
 async function loadAircraft() {
@@ -440,9 +470,10 @@ async function loadAircraft() {
         // Created once and thereafter updated in place, so the trail survives
         // and the motion is continuous across polls.
         const meta = { kind: 'AIR', hex };
+        const track = newTrack();
         e = air.entities.add({
           id: hex,
-          position: new Cesium.CallbackProperty(() => reckon(meta), false),
+          position: track,
           billboard: {
             image: ICONS.airliner, width: 24, height: 24, color: CYAN,
             rotation: 0, alignedAxis: Cesium.Cartesian3.ZERO,
@@ -450,7 +481,7 @@ async function loadAircraft() {
             translucencyByDistance: new Cesium.NearFarScalar(1.0e6, 1.0, 2.0e7, 0.35),
           },
           path: {
-            resolution: 2, width: 1.5, leadTime: 0, trailTime: 240,
+            resolution: 5, width: 1.5, leadTime: 0, trailTime: 240,
             material: new Cesium.PolylineGlowMaterialProperty({
               glowPower: 0.25, color: CYAN.withAlpha(0.55),
             }),
@@ -464,6 +495,13 @@ async function loadAircraft() {
           },
         });
         e._meta = meta;
+        e._track = track;
+        seedTrack(track, { lat, lon, altM, gs: a.gs, track: a.track, rate: a.baro_rate },
+                  Cesium.JulianDate.now());
+      } else {
+        // Correct the running estimate with the new fix.
+        e._track.addSample(Cesium.JulianDate.now(),
+          Cesium.Cartesian3.fromDegrees(lon, lat, altM));
       }
 
       // One record, refreshed. t0 is the moment of this fix, which is what the
@@ -500,48 +538,95 @@ async function loadAircraft() {
   } catch (err) { console.warn('aircraft:', err.message); }
 }
 
-async function loadInstallations() {
-  try {
-    // Direct to Overpass — measured, it refuses Cloudflare egress with 521 but
-    // answers a browser normally, same as in the 2D board.
-    const q = '[out:json][timeout:40];(nwr["military"="airfield"](44,-2,56,18);'
-            + 'nwr["military"="naval_base"](44,-2,56,18););out center tags 200;';
-    const r = await fetch('https://overpass-api.de/api/interpreter', {
-      method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: 'data=' + encodeURIComponent(q),
-    });
-    const j = await r.json();
+/* ---- installations ----
+   Viewport-driven, and capped. The first version asked for a fixed 12x20 degree
+   box across western Europe, which is far past what Overpass will answer — it
+   gateway-timed-out and the browser reported that as "Failed to fetch", which
+   sent me looking at CORS headers rather than at the size of my own query. The
+   2D board learned the same lesson and caps at 12 degrees; this is the globe
+   forgetting it.
+
+   So: query what the camera is actually looking at, clamp it, and skip
+   entirely when the view is wider than a query can serve rather than firing a
+   request that is certain to fail. */
+let instBusy = false, instKey = '';
+async function loadInstallations(force) {
+  const rect = viewer.camera.computeViewRectangle();
+  const el = document.getElementById('nInst');
+  if (!rect) { el.textContent = '—'; return; }
+
+  const deg = Cesium.Math.toDegrees;
+  let s = deg(rect.south), w = deg(rect.west), n = deg(rect.north), e = deg(rect.east);
+  const spanN = n - s, spanE = e - w;
+  if (spanN > 8 || spanE > 8 || spanE <= 0) {
+    // Too wide to ask for. Say so rather than showing a stale or empty count.
+    el.textContent = 'zoom in';
     inst.entities.removeAll();
-    for (const el of j.elements || []) {
-      const lat = el.lat ?? (el.center && el.center.lat);
-      const lon = el.lon ?? (el.center && el.center.lon);
+    instKey = '';
+    return;
+  }
+
+  const key = [s, w, n, e].map((v) => v.toFixed(1)).join(',');
+  if (instBusy || (!force && key === instKey && inst.entities.values.length)) return;
+  instBusy = true;
+  try {
+    /* GET, not POST: measured, this endpoint answers GET with 200 and POST with
+       504 — and both carry CORS headers, so the browser's "CORS error" for the
+       POST was really a gateway timeout wearing a disguise. */
+    const box = '(' + s.toFixed(3) + ',' + w.toFixed(3) + ','
+                    + n.toFixed(3) + ',' + e.toFixed(3) + ')';
+    const q = '[out:json][timeout:30];('
+      + 'nwr["military"="airfield"]' + box + ';'
+      + 'nwr["military"="naval_base"]' + box + ';'
+      + 'nwr["military"="base"]' + box + ';'
+      + ');out center tags 150;';
+    const r = await fetch('https://overpass-api.de/api/interpreter?data=' + encodeURIComponent(q));
+    if (!r.ok) throw new Error('overpass ' + r.status);
+    const j = await r.json();
+
+    inst.entities.removeAll();
+    for (const elm of j.elements || []) {
+      const lat = elm.lat ?? (elm.center && elm.center.lat);
+      const lon = elm.lon ?? (elm.center && elm.center.lon);
       if (typeof lat !== 'number' || typeof lon !== 'number') continue;
-      const nm = (el.tags && (el.tags.name || el.tags['name:en'])) || 'Unnamed';
-      const e = inst.entities.add({
+      const t = elm.tags || {};
+      const nm = t.name || t['name:en'] || 'Unnamed';
+      const kind = t.military || 'installation';
+      const ent = inst.entities.add({
         position: Cesium.Cartesian3.fromDegrees(lon, lat, 0),
-        // A footprint disc rather than a floating point, and clamped to the
-        // ground so it stays correct once terrain is enabled — a cylinder
-        // anchored at ellipsoid height would sink into a valley and hover over
-        // a plateau.
+        // Ground-clamped so it stays correct under terrain, where a fixed-height
+        // marker would sink into a valley or hover over a ridge.
         ellipse: {
-          semiMinorAxis: 900, semiMajorAxis: 900,
-          material: GREEN.withAlpha(0.25),
-          outline: true, outlineColor: GREEN.withAlpha(0.8), outlineWidth: 2,
+          semiMinorAxis: 800, semiMajorAxis: 800,
+          material: GREEN.withAlpha(0.22),
+          outline: true, outlineColor: GREEN.withAlpha(0.85), outlineWidth: 2,
           heightReference: Cesium.HeightReference.CLAMP_TO_GROUND,
         },
         label: {
           text: nm, font: '10px "Share Tech Mono", monospace', fillColor: GREEN,
-          showBackground: true, backgroundColor: Cesium.Color.fromCssColorString('#03060c').withAlpha(0.7),
+          showBackground: true,
+          backgroundColor: Cesium.Color.fromCssColorString('#03060c').withAlpha(0.72),
           pixelOffset: new Cesium.Cartesian2(0, -14),
           heightReference: Cesium.HeightReference.CLAMP_TO_GROUND,
-          distanceDisplayCondition: new Cesium.DistanceDisplayCondition(0, 400000),
+          distanceDisplayCondition: new Cesium.DistanceDisplayCondition(0, 300000),
         },
       });
-      e._meta = { name: nm, kind: (el.tags && el.tags.military) || 'installation' };
+      ent._meta = { kind, name: nm, lat, lon, operator: t.operator || null };
     }
-    document.getElementById('nInst').textContent = inst.entities.values.length;
-  } catch (err) { console.warn('installations:', err.message); }
+    instKey = key;
+    el.textContent = inst.entities.values.length;
+  } catch (err) {
+    el.textContent = 'error';
+    console.warn('installations:', err.message);
+  } finally { instBusy = false; }
 }
+
+// Re-query when the camera settles, not while it is moving.
+let instTimer = null;
+viewer.camera.moveEnd.addEventListener(() => {
+  clearTimeout(instTimer);
+  instTimer = setTimeout(() => loadInstallations(false), 700);
+});
 
 /* ------------------------------------------------------ select + follow */
 // Squawk 7500/7600/7700 are the three codes that mean something is wrong, and
