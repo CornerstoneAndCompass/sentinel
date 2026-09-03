@@ -14,9 +14,10 @@
    layers off Leaflet. It deliberately shares no code with index.html so the
    working board cannot be broken by anything in here.
 
-   No Cesium ion account and no Google Photorealistic 3D Tiles: imagery is Esri
-   World Imagery, which the 2D board already uses. Those metered tiles are the
-   expensive part of the reference build and the least intelligence-relevant. */
+   Imagery is Esri World Imagery, which the 2D board already uses and which
+   costs no ion quota. Elevation and 3D buildings come from Cesium ion's free
+   tier. Google Photorealistic 3D Tiles are deliberately not used: they are the
+   reference build's largest cost and its least intelligence-relevant part. */
 :root{
 --c:#00e8ff;--cd:rgba(0,232,255,0.15);--cg:rgba(0,232,255,0.4);
 --g:#00ff88;--r:#ff3355;--y:#ffcc00;--o:#ff8800;--p:#aa66ff;
@@ -54,15 +55,35 @@ html,body{height:100%;overflow:hidden;background:#03060c;
 .hint{font-size:9px;color:var(--td);letter-spacing:1px;margin-top:7px;line-height:1.5;
   border-top:1px solid var(--brd);padding-top:7px}
 .ctl{position:fixed;bottom:14px;left:12px;display:flex;gap:3px;background:var(--pnl);
-  border:1px solid var(--brd);border-radius:4px;padding:3px;backdrop-filter:blur(12px)}
+  border:1px solid var(--brd);border-radius:4px;padding:3px;backdrop-filter:blur(12px);align-items:center}
+.ctl.cam{bottom:52px}
+.ctlLbl{font-size:8px;letter-spacing:2px;color:var(--td);padding:0 6px 0 3px}
 .ctl button{background:transparent;border:1px solid transparent;color:var(--td);
   font-family:inherit;font-size:9px;letter-spacing:1px;padding:5px 9px;border-radius:3px;cursor:pointer}
 .ctl button:hover{color:var(--tm)}
 .ctl button.on{background:var(--cd);border-color:var(--cg);color:var(--c)}
+.ctl button:disabled{opacity:.35;cursor:default}
 .read{position:fixed;bottom:14px;right:12px;background:var(--pnl);border:1px solid var(--brd);
   border-radius:4px;padding:8px 11px;backdrop-filter:blur(12px);font-size:10px;letter-spacing:1px;
   text-align:right;min-width:150px}
-.read .v{font-family:'Orbitron',sans-serif;font-size:15px;color:var(--c)}
+.read{min-width:250px;text-align:left}
+.rdHead{display:flex;align-items:center;gap:8px;font-family:'Orbitron',sans-serif;font-size:12px;
+  color:var(--c);letter-spacing:2px;padding-bottom:6px;margin-bottom:6px;border-bottom:1px solid var(--brd)}
+#rdSq{margin-left:auto;font-size:8px;letter-spacing:1px;color:var(--td)}
+#rdSq.hot{color:var(--r);border:1px solid var(--r);padding:1px 4px;border-radius:2px}
+.rdGrid{display:grid;grid-template-columns:auto 1fr;gap:2px 10px;font-size:10px}
+.rdGrid .k{color:var(--td);letter-spacing:1px}
+.rdGrid .v{font-family:'Orbitron',sans-serif;font-size:11px;color:var(--tm)}
+.rdSub{font-size:9px;color:var(--td);margin-top:6px;letter-spacing:1px;line-height:1.5}
+.panel.near{top:auto;bottom:96px;left:12px;max-height:260px;overflow-y:auto}
+.panel.ctx{top:auto;bottom:14px;left:238px;width:230px}
+.nearRow{display:flex;gap:8px;align-items:baseline;font-size:10px;padding:3px 0;cursor:pointer;
+  border-bottom:1px solid rgba(255,255,255,.04)}
+.nearRow:hover{color:var(--c)}
+.nearRow .d{margin-left:auto;color:var(--td);font-size:9px}
+.ctxRow{display:flex;justify-content:space-between;padding:2px 0}
+.ctxRow b{font-family:'Orbitron',sans-serif;font-weight:400;color:var(--tm)}
+.ctxRow.hot b{color:var(--o)}
 .corner{position:fixed;width:24px;height:24px;border-color:var(--cg);pointer-events:none;z-index:11}
 .tl{top:44px;left:6px;border-top:1px solid;border-left:1px solid}
 .tr{top:44px;right:6px;border-top:1px solid;border-right:1px solid}
@@ -81,6 +102,7 @@ html,body{height:100%;overflow:hidden;background:#03060c;
   <div class="bar">
     <span class="brand">SENTINEL // GLOBE</span>
     <span class="cls">OSINT · UNCLASSIFIED · OPEN SOURCES</span>
+    <span class="cls" id="terrainState" style="color:var(--td);border-color:var(--brd)">ELLIPSOID</span>
     <span class="clock" id="clock">--:--:-- UTC</span>
   </div>
 
@@ -102,10 +124,30 @@ html,body{height:100%;overflow:hidden;background:#03060c;
     <button id="btnFollow">UNLOCK</button>
   </div>
 
-  <div class="read">
-    <div id="rdName" style="color:var(--tm)">NO CONTACT SELECTED</div>
-    <div class="v" id="rdAlt">—</div>
-    <div id="rdMeta" style="color:var(--td)">—</div>
+  <div class="ctl cam">
+    <span class="ctlLbl">VIEW</span>
+    <button onclick="setPitchPreset(-90)" title="Look straight down">TOP</button>
+    <button onclick="setPitchPreset(-45)" title="Oblique">45&deg;</button>
+    <button onclick="setPitchPreset(-12)" title="Near level with the horizon">LEVEL</button>
+    <button onclick="nudgePitch(6)" title="Pitch up">&#9650;</button>
+    <button onclick="nudgePitch(-6)" title="Pitch down">&#9660;</button>
+    <button id="btnBuildings" disabled title="Global 3D buildings from OpenStreetMap, extruded to their mapped heights">BUILDINGS</button>
+  </div>
+
+  <div class="read" id="read">
+    <div class="rdHead"><span id="rdName">NO CONTACT SELECTED</span><span id="rdSq"></span></div>
+    <div class="rdGrid" id="rdGrid"></div>
+    <div class="rdSub" id="rdSub">Click a contact to inspect it.</div>
+  </div>
+
+  <div class="panel near" id="nearPanel" style="display:none">
+    <div class="ptitle">Nearby <span id="nearRange" style="float:right;color:var(--td)">250 km</span></div>
+    <div id="nearList"></div>
+  </div>
+
+  <div class="panel ctx" id="ctxPanel">
+    <div class="ptitle">Global Context</div>
+    <div id="ctxBody" style="font-size:10px;color:var(--td)">loading…</div>
   </div>
 </div>
 <div class="corner tl"></div><div class="corner tr"></div>
@@ -115,6 +157,22 @@ html,body{height:100%;overflow:hidden;background:#03060c;
 <script>
 /* ---------------------------------------------------------------- config */
 const PROXY = 'https://sentinel-feeds.benjamin-a2d.workers.dev';
+
+/* ---- terrain ----
+   Paste a Cesium ion token between the quotes and real elevation switches on.
+   Empty is a supported state, not a broken one: the globe falls back to the
+   ellipsoid, which is what has been running so far, so nothing breaks if the
+   token is missing, revoked or out of quota.
+
+   Free Community tier: 15 GB/month streaming, 1,000 imagery sessions, personal
+   and non-commercial use. Terrain is the single largest visual difference from
+   the flat sphere and costs nothing.
+
+   Note this token is public by design — it ships in client-side JavaScript and
+   anyone loading the page can read it. That is how ion tokens work. Scope it to
+   the terrain asset only when you create it, so a leaked token cannot touch
+   anything else in the account. */
+const ION_TOKEN = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJub25jZSI6ImJQRU1yNEZlaG5sSEpPMnIiLCJqdGkiOiJjZTcxN2U4Zi0xMWU2LTQ5ZjItYTcyOC1kMWJiMTRmNWRkNDgiLCJpZCI6NDc4MzQ3LCJpc3MiOiJodHRwczovL2FwaS5jZXNpdW0uY29tIiwiYXVkIjoidW5kZWZpbmVkX2RlZmF1bHQiLCJpYXQiOjE3ODgyOTgxMDl9.54cwjP-WZ9lzfPaUTbMub2ZVgxdhHskjZFUPcmGv-_Y';
 
 /* Esri World Imagery rather than Google Photorealistic 3D Tiles. The reference
    build treats those as required; they are metered, and for an intelligence
@@ -132,7 +190,89 @@ const viewer = new Cesium.Viewer('globe', {
   infoBox: false, selectionIndicator: false, requestRenderMode: false,
 });
 const scene = viewer.scene;
+let osmBuildings = null;
+let buildingsOn = true;
+
+if (ION_TOKEN) {
+  Cesium.Ion.defaultAccessToken = ION_TOKEN;
+  // setTerrain takes the promise directly and swaps it in when it resolves, so
+  // a slow or failed terrain load never blocks the globe from drawing.
+  try {
+    scene.setTerrain(Cesium.Terrain.fromWorldTerrain({ requestVertexNormals: true }));
+    document.getElementById('terrainState').textContent = 'WORLD TERRAIN';
+  } catch (e) {
+    document.getElementById('terrainState').textContent = 'ELLIPSOID (terrain failed)';
+  }
+
+  /* Cesium OSM Buildings: global building footprints extruded to their mapped
+     heights. Free on the same tier as terrain, and the single biggest step
+     toward the reference build's look without touching Google's metered tiles.
+     Loaded after the globe is already interactive so a slow tileset never
+     delays first paint. */
+  Cesium.createOsmBuildingsAsync().then((tileset) => {
+    osmBuildings = scene.primitives.add(tileset);
+    osmBuildings.show = buildingsOn;
+    const b = document.getElementById('btnBuildings');
+    if (b) { b.disabled = false; b.classList.toggle('on', buildingsOn); }
+  }).catch(() => {
+    const b = document.getElementById('btnBuildings');
+    if (b) { b.textContent = 'NO BUILDINGS'; b.disabled = true; }
+  });
+}
 scene.globe.enableLighting = true;
+/* Without this the globe is not treated as an occluder and every contact draws
+   on top of it, so aircraft over the Pacific appear through the Earth while you
+   are looking at Africa. It is off by default in Cesium because it costs a
+   depth pass; on a board where position is the whole point, a contact you can
+   see through the planet is worse than no contact. */
+scene.globe.depthTestAgainstTerrain = true;
+
+/* ---- camera ----
+   Tilt stopped dead once the view got low, which is Cesium's collision
+   detection refusing to let the camera pass near the surface. That default
+   suits a mapping app and ruins a tracking one: following a helicopter at
+   300ft is precisely the case where you want to drop to eye level and look
+   along the ground. Off, with the pitch range opened up to match.
+
+   Cesium also binds tilt to middle-drag by default, which most people never
+   find and a trackpad does not have. Right-drag and ctrl-drag now do it too. */
+const ssc = scene.screenSpaceCameraController;
+ssc.enableCollisionDetection = false;
+ssc.minimumZoomDistance = 25;
+ssc.maximumZoomDistance = 45000000;
+ssc.tiltEventTypes = [
+  Cesium.CameraEventType.RIGHT_DRAG,
+  Cesium.CameraEventType.PINCH,
+  Cesium.CameraEventType.MIDDLE_DRAG,
+  { eventType: Cesium.CameraEventType.LEFT_DRAG, modifier: Cesium.KeyboardEventModifier.CTRL },
+];
+ssc.zoomEventTypes = [
+  Cesium.CameraEventType.WHEEL,
+  Cesium.CameraEventType.PINCH,
+  { eventType: Cesium.CameraEventType.LEFT_DRAG, modifier: Cesium.KeyboardEventModifier.SHIFT },
+];
+
+// Explicit pitch control, because a drag gesture is a poor way to ask for a
+// specific angle and there is no way to discover the modifier keys.
+function nudgePitch(deg) {
+  const t = viewer.trackedEntity;
+  if (t) {
+    // While tracking, Cesium keeps its own offset frame; adjust that instead
+    // or the camera fights the tracker every frame.
+    const off = viewer.camera.position.clone();
+    viewer.camera.lookUp(Cesium.Math.toRadians(deg));
+    return;
+  }
+  viewer.camera.lookUp(Cesium.Math.toRadians(deg));
+}
+function setPitchPreset(p) {
+  const c = Cesium.Cartographic.fromCartesian(viewer.camera.position);
+  viewer.camera.flyTo({
+    destination: Cesium.Cartesian3.fromRadians(c.longitude, c.latitude, c.height),
+    orientation: { heading: viewer.camera.heading, pitch: Cesium.Math.toRadians(p), roll: 0 },
+    duration: 0.8,
+  });
+}
 scene.globe.baseColor = Cesium.Color.fromCssColorString('#03060c');
 scene.skyAtmosphere.show = true;
 scene.fog.enabled = true;
@@ -190,11 +330,15 @@ async function loadAircraft() {
       const lat = a.lat, lon = a.lon;
       if (typeof lat !== 'number' || typeof lon !== 'number') continue;
       const altFt = typeof a.alt_baro === 'number' ? a.alt_baro : 0;
-      const alt = Math.max(0, altFt * 0.3048);
+      // A contact at exactly zero co-planar with the ellipsoid flickers once
+      // depth testing is on, so ground traffic is floated just clear of it.
+      const alt = Math.max(60, altFt * 0.3048);
       const e = air.entities.add({
         position: Cesium.Cartesian3.fromDegrees(lon, lat, alt),
-        point: { pixelSize: 7, color: CYAN, outlineColor: Cesium.Color.BLACK, outlineWidth: 1,
-                 disableDepthTestDistance: Number.POSITIVE_INFINITY },
+        // No disableDepthTestDistance here: that flag forces a primitive to draw
+        // regardless of what is in front of it, which is precisely how far-side
+        // traffic bled through the globe.
+        point: { pixelSize: 7, color: CYAN, outlineColor: Cesium.Color.BLACK, outlineWidth: 1 },
         // A vertical drop line is what makes altitude legible on a globe —
         // without it every contact reads as sitting on the ground.
         polyline: {
@@ -207,10 +351,18 @@ async function loadAircraft() {
           showBackground: true, backgroundColor: Cesium.Color.fromCssColorString('#03060c').withAlpha(0.7),
           pixelOffset: new Cesium.Cartesian2(0, -16),
           distanceDisplayCondition: new Cesium.DistanceDisplayCondition(0, 900000),
-          disableDepthTestDistance: Number.POSITIVE_INFINITY,
         },
       });
-      e._meta = { name: a.flight ? a.flight.trim() : a.hex, altFt, gs: a.gs, type: a.t, kind: 'AIR' };
+      // Keep the whole record. The readout was showing four fields because
+      // those were the four I happened to pick, not because the feed is thin —
+      // registration, type description, squawk and vertical rate were all
+      // sitting in the response unread.
+      e._meta = {
+        kind: 'AIR', name: a.flight ? a.flight.trim() : (a.hex || '').toUpperCase(),
+        hex: a.hex, reg: a.r, type: a.t, desc: a.desc, altFt,
+        gs: a.gs, track: a.track, rate: a.baro_rate, squawk: a.squawk,
+        emergency: a.emergency, cat: a.category, lat, lon,
+      };
     }
     document.getElementById('nAir').textContent = air.entities.values.length;
   } catch (err) { console.warn('aircraft:', err.message); }
@@ -235,14 +387,21 @@ async function loadInstallations() {
       const nm = (el.tags && (el.tags.name || el.tags['name:en'])) || 'Unnamed';
       const e = inst.entities.add({
         position: Cesium.Cartesian3.fromDegrees(lon, lat, 0),
-        // A ground cylinder reads as a site footprint at altitude, where a
-        // point would vanish into the imagery.
-        cylinder: { length: 2000, topRadius: 900, bottomRadius: 900,
-                    material: GREEN.withAlpha(0.22), outline: true, outlineColor: GREEN.withAlpha(0.7) },
+        // A footprint disc rather than a floating point, and clamped to the
+        // ground so it stays correct once terrain is enabled — a cylinder
+        // anchored at ellipsoid height would sink into a valley and hover over
+        // a plateau.
+        ellipse: {
+          semiMinorAxis: 900, semiMajorAxis: 900,
+          material: GREEN.withAlpha(0.25),
+          outline: true, outlineColor: GREEN.withAlpha(0.8), outlineWidth: 2,
+          heightReference: Cesium.HeightReference.CLAMP_TO_GROUND,
+        },
         label: {
           text: nm, font: '10px "Share Tech Mono", monospace', fillColor: GREEN,
           showBackground: true, backgroundColor: Cesium.Color.fromCssColorString('#03060c').withAlpha(0.7),
           pixelOffset: new Cesium.Cartesian2(0, -14),
+          heightReference: Cesium.HeightReference.CLAMP_TO_GROUND,
           distanceDisplayCondition: new Cesium.DistanceDisplayCondition(0, 400000),
         },
       });
@@ -253,30 +412,126 @@ async function loadInstallations() {
 }
 
 /* ------------------------------------------------------ select + follow */
-let followed = null;
+// Squawk 7500/7600/7700 are the three codes that mean something is wrong, and
+// they are in the feed already. A tracking display that does not surface them
+// is withholding the most important thing it knows.
+const SQUAWK = { '7500': 'HIJACK', '7600': 'RADIO FAILURE', '7700': 'EMERGENCY' };
+
+function fmt(v, suffix, dp) {
+  if (v === null || v === undefined || v === '' || Number.isNaN(v)) return '—';
+  const n = typeof v === 'number' ? (dp ? v.toFixed(dp) : Math.round(v).toLocaleString()) : v;
+  return n + (suffix || '');
+}
+function bearingName(deg) {
+  if (typeof deg !== 'number') return '—';
+  const pts = ['N','NNE','NE','ENE','E','ESE','SE','SSE','S','SSW','SW','WSW','W','WNW','NW','NNW'];
+  return Math.round(deg) + '\u00b0 ' + pts[Math.round(deg / 22.5) % 16];
+}
+function kmBetween(aLat, aLon, bLat, bLon) {
+  const R = 6371, r = Math.PI / 180;
+  const dLat = (bLat - aLat) * r, dLon = (bLon - aLon) * r;
+  const h = Math.sin(dLat / 2) ** 2
+    + Math.cos(aLat * r) * Math.cos(bLat * r) * Math.sin(dLon / 2) ** 2;
+  return 2 * R * Math.asin(Math.sqrt(h));
+}
+
+function showContact(m) {
+  document.getElementById('rdName').textContent = m.name || 'CONTACT';
+  const sq = document.getElementById('rdSq');
+  const alert = SQUAWK[String(m.squawk)];
+  sq.textContent = alert ? alert : (m.squawk ? 'SQ ' + m.squawk : '');
+  sq.className = alert ? 'hot' : '';
+
+  const rows = m.kind === 'AIR' ? [
+    ['ALT', fmt(m.altFt, ' ft')],
+    ['SPEED', fmt(m.gs, ' kt')],
+    ['HEADING', bearingName(m.track)],
+    ['CLIMB', typeof m.rate === 'number' ? (m.rate > 0 ? '+' : '') + fmt(m.rate, ' fpm') : '—'],
+    ['TYPE', m.type || '—'],
+    ['REG', m.reg || '—'],
+    ['MODE-S', (m.hex || '—').toUpperCase()],
+  ] : [
+    ['KIND', (m.kind || '').toUpperCase()],
+    ['POSITION', fmt(m.lat, '', 3) + ', ' + fmt(m.lon, '', 3)],
+  ];
+  document.getElementById('rdGrid').innerHTML = rows
+    .map(([k, v]) => '<span class="k">' + k + '</span><span class="v">' + v + '</span>').join('');
+  document.getElementById('rdSub').textContent =
+    m.desc || (m.kind === 'AIR' ? 'Type not in the aircraft register' : 'Ground site');
+  renderNearby(m);
+}
+
+// The reference build keeps a roster of what else is within reach of whatever
+// you are looking at. That is the part of it that is actually intelligence
+// rather than presentation, so it is the part worth having first.
+const NEAR_KM = 250;
+function renderNearby(m) {
+  const panel = document.getElementById('nearPanel');
+  if (!m || typeof m.lat !== 'number') { panel.style.display = 'none'; return; }
+  const others = [];
+  for (const e of air.entities.values) {
+    const o = e._meta;
+    if (!o || o.hex === m.hex || typeof o.lat !== 'number') continue;
+    const d = kmBetween(m.lat, m.lon, o.lat, o.lon);
+    if (d <= NEAR_KM) others.push({ e, o, d });
+  }
+  others.sort((a, b) => a.d - b.d);
+  panel.style.display = others.length ? '' : 'none';
+  document.getElementById('nearRange').textContent = others.length + ' within ' + NEAR_KM + ' km';
+  document.getElementById('nearList').innerHTML = others.slice(0, 14).map((x, i) =>
+    '<div class="nearRow" data-i="' + i + '"><span>' + (x.o.name || x.o.hex) + '</span>'
+    + '<span style="color:var(--td)">' + (x.o.type || '') + '</span>'
+    + '<span class="d">' + Math.round(x.d) + ' km</span></div>').join('');
+  [...document.querySelectorAll('#nearList .nearRow')].forEach((row, i) => {
+    row.onclick = () => { const x = others[i]; viewer.trackedEntity = x.e; showContact(x.o); };
+  });
+}
+
+// Whatever the spine says is currently outside its own normal, so the globe
+// carries the same context the 2D board does rather than being a pretty but
+// unaware second display.
+async function loadContext() {
+  try {
+    const r = await fetch(PROXY + '/spine/state');
+    const d = await r.json();
+    if (!d.ready) return;
+    const rows = Object.entries(d.metrics)
+      .filter(([, v]) => v.value !== null)
+      .map(([, v]) => '<div class="ctxRow' + (v.state === 'high' ? ' hot' : '') + '">'
+        + '<span>' + v.label.replace(/ \(24h\)/, '') + '</span><b>' + v.value
+        + (v.state === 'high' ? ' \u25b2' : '') + '</b></div>').join('');
+    document.getElementById('ctxBody').innerHTML = rows
+      + '<div style="margin-top:6px;opacity:.7">sampled ' + Math.round(d.ageSec / 60) + 'm ago</div>';
+  } catch (e) {
+    document.getElementById('ctxBody').textContent = 'context unavailable';
+  }
+}
+
 const handler = new Cesium.ScreenSpaceEventHandler(scene.canvas);
 handler.setInputAction((click) => {
   const picked = scene.pick(click.position);
   const ent = picked && picked.id;
   if (!ent || !ent._meta) return;
-  followed = ent;
-  const m = ent._meta;
-  document.getElementById('rdName').textContent = m.name || 'CONTACT';
-  document.getElementById('rdAlt').textContent =
-    m.kind === 'AIR' ? (m.altFt ? m.altFt.toLocaleString() + ' ft' : '—') : m.kind.toUpperCase();
-  document.getElementById('rdMeta').textContent =
-    m.kind === 'AIR' ? [m.type, m.gs ? Math.round(m.gs) + ' kt' : null].filter(Boolean).join(' · ') : 'GROUND SITE';
+  showContact(ent._meta);
   document.getElementById('btnFollow').classList.add('on');
   document.getElementById('btnFollow').textContent = 'FOLLOWING';
   viewer.trackedEntity = ent;
 }, Cesium.ScreenSpaceEventType.LEFT_CLICK);
 
+document.getElementById('btnBuildings').onclick = function () {
+  buildingsOn = !buildingsOn;
+  if (osmBuildings) osmBuildings.show = buildingsOn;
+  this.classList.toggle('on', buildingsOn);
+};
+
 document.getElementById('btnFollow').onclick = function () {
-  viewer.trackedEntity = undefined; followed = null;
+  viewer.trackedEntity = undefined;
   this.classList.remove('on'); this.textContent = 'UNLOCK';
   document.getElementById('rdName').textContent = 'NO CONTACT SELECTED';
-  document.getElementById('rdAlt').textContent = '—';
-  document.getElementById('rdMeta').textContent = '—';
+  document.getElementById('rdSq').textContent = '';
+  document.getElementById('rdGrid').innerHTML = '';
+  document.getElementById('rdSub').textContent = 'Click a contact to inspect it.';
+  document.getElementById('nearPanel').style.display = 'none';
 };
 
 /* count what is actually on screen, which is the number that means something */
@@ -296,9 +551,10 @@ setInterval(() => {
 
 /* ------------------------------------------------------------------ go */
 (async () => {
-  await Promise.allSettled([loadAircraft(), loadInstallations()]);
+  await Promise.allSettled([loadAircraft(), loadInstallations(), loadContext()]);
   document.getElementById('load').classList.add('gone');
   setInterval(loadAircraft, 30000);
+  setInterval(loadContext, 15 * 60000);
 })();
 </script>
 </body>
