@@ -193,9 +193,21 @@ const viewer = new Cesium.Viewer('globe', {
 const scene = viewer.scene;
 let osmBuildings = null;
 let buildingsOn = true;
-// Positions are now time-based, so the clock must actually tick.
+/* Positions are time-based, so the clock is the thing that moves them — and it
+   has to agree with the clock the samples are stamped with.
+
+   Cesium's default advances currentTime by elapsed frame time, which drifts
+   behind real time whenever rendering stalls: a burst of tile loads on zoom
+   out is enough, and it never catches up. Samples are stamped with wall-clock
+   time, so the two diverge, positions get evaluated further and further in the
+   past, and once the gap passes forwardExtrapolationDuration every contact
+   freezes at the same instant. That is exactly the "zoomed out and they all
+   stopped" behaviour.
+
+   SYSTEM_CLOCK pins currentTime to real time instead of accumulating it, so
+   the two can never drift apart no matter how badly a frame stalls. */
+viewer.clock.clockStep = Cesium.ClockStep.SYSTEM_CLOCK;
 viewer.clock.shouldAnimate = true;
-viewer.clock.multiplier = 1;
 
 if (ION_TOKEN) {
   Cesium.Ion.defaultAccessToken = ION_TOKEN;
@@ -432,7 +444,11 @@ function project(lat, lon, altM, gs, track, rate, dtSec) {
 function newTrack(m) {
   const p = new Cesium.SampledPositionProperty();
   p.forwardExtrapolationType = Cesium.ExtrapolationType.EXTRAPOLATE;
-  p.forwardExtrapolationDuration = 180;   // stop guessing after three minutes
+  /* Ten minutes rather than three. A contact whose feed has gone quiet should
+     coast and be marked stale, not vanish mid-flight — and with the clock now
+     pinned to real time this bound is only reached when the data really has
+     stopped arriving. */
+  p.forwardExtrapolationDuration = 600;
   p.backwardExtrapolationType = Cesium.ExtrapolationType.HOLD;
   p.setInterpolationOptions({
     interpolationDegree: 1,
@@ -518,12 +534,16 @@ async function loadAircraft() {
       e.billboard.image = ICONS[kind] || ICONS.airliner;
       // Emergency squawks outrank everything else on the display.
       const hot = ['7500', '7600', '7700'].includes(String(a.squawk));
-      e.billboard.color = hot ? Cesium.Color.fromCssColorString('#ff3355')
+      // Kept on the record as a Color. Reading it back off the entity returns a
+      // Property, not a Color, so the fade below needs its own copy.
+      e._meta.baseColor = hot ? Cesium.Color.fromCssColorString('#ff3355')
         : kind === 'fastjet' ? Cesium.Color.fromCssColorString('#ffcc00')
         : kind === 'heli' ? Cesium.Color.fromCssColorString('#00ff88')
         : CYAN;
+      e.billboard.color = e._meta.baseColor;
       e.billboard.width = kind === 'widebody' || kind === 'quadjet' ? 28 : 24;
       e.billboard.height = e.billboard.width;
+      e._meta.fixAt = Date.now();
       // Screen-space rotation, so the symbol points where the aircraft is going
       // regardless of how the camera is oriented.
       e.billboard.rotation = Cesium.Math.toRadians(-(a.track || 0));
@@ -750,6 +770,18 @@ document.getElementById('btnFollow').onclick = function () {
   document.getElementById('rdSub').textContent = 'Click a contact to inspect it.';
   document.getElementById('nearPanel').style.display = 'none';
 };
+
+/* A contact coasting on an old fix is still a guess, so it fades as the guess
+   ages. Better than showing a stale position at full confidence. */
+setInterval(() => {
+  const now = Date.now();
+  for (const e of air.entities.values) {
+    const age = (now - (e._meta.fixAt || now)) / 1000;
+    const a = age < 60 ? 1 : age < 300 ? 0.6 : 0.3;
+    const base = e._meta.baseColor || CYAN;
+    if (e.billboard) e.billboard.color = base.withAlpha(a);
+  }
+}, 5000);
 
 /* count what is actually on screen, which is the number that means something */
 setInterval(() => {
