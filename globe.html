@@ -224,10 +224,14 @@ body.flying .panel:hover,body.flying .read:hover,body.flying .ctl:hover{opacity:
     <div class="row" style="padding-top:0"><span style="font-size:9px;color:var(--td)">SCOPE</span><span id="feedScope" style="font-size:9px;color:var(--td)">global</span></div>
     <div class="row"><span>INSTALLATIONS</span><b class="v" id="nInst" style="color:var(--g)">--</b></div>
     <div class="row"><span>CAMERAS</span><b class="v" id="nCam" style="color:var(--p)">--</b></div>
+    <div class="row"><span>WARNINGS</span><b class="v" id="nWarn" style="color:var(--o)">off</b></div>
+    <div class="row"><span>FIRES</span><b class="v" id="nFire" style="color:var(--r)">off</b></div>
+    <div class="row"><span>VESSELS</span><b class="v" id="nShip" style="color:var(--c)">off</b></div>
     <div class="row"><span>IN VIEW</span><b class="v" id="nView" style="color:var(--y)">--</b></div>
     <div class="hint" id="emptyHint" style="display:none;color:var(--y)">
       No military traffic in this view. Press <b>ALL</b> for civil aircraft.</div>
     <div class="hint" id="camHint" style="display:none;color:var(--p)"></div>
+    <div class="hint" id="shipHint" style="display:none;color:var(--c)"></div>
     <div class="hint">Drag to move · right-drag or ctrl-drag to tilt · scroll or pinch to zoom.
       Arrow keys tilt and turn in steps (hold shift for bigger ones).
       Click a contact to lock on, then <b>C</b> to ride it. <b>Esc</b> lets go.</div>
@@ -278,6 +282,9 @@ body.flying .panel:hover,body.flying .read:hover,body.flying .ctl:hover{opacity:
       <button id="btnBuildings" disabled title="Global 3D buildings from OpenStreetMap, extruded to their mapped heights">BUILDINGS</button>
       <button id="btnCams" title="Public roadside cameras published by their operators — London and California only. Click one for the current frame.">CAMERAS</button>
       <button id="btnChokes" title="Nine straits and canals where a large share of world trade has no alternative route">CHOKEPOINTS</button>
+      <button id="btnWarn" title="GDACS orange and red alerts worldwide — earthquake, cyclone, flood, wildfire, drought, volcano">WARNINGS</button>
+      <button id="btnFires" title="NASA FIRMS thermal hotspots from the last 48 hours, in a box around the view">FIRES</button>
+      <button id="btnShips" title="AIS vessel positions. The open feed is Digitraffic, so coverage is the Baltic only.">VESSELS</button>
       <button id="btnWatch" title="Follow named flights — your own trip, or anything you want updates on">WATCH</button>
     </div>
   </div>
@@ -1338,6 +1345,41 @@ function showContact(m) {
   sq.textContent = alert ? alert : (m.squawk ? 'SQ ' + m.squawk : '');
   sq.className = alert ? 'hot' : '';
 
+  if (m.kind === 'WARNING') {
+    document.getElementById('rdGrid').innerHTML =
+      '<span class="k">ALERT</span><span class="v" style="color:'
+        + (ALERT_COLOUR[m.alert] || 'var(--td)') + '">' + m.alert.toUpperCase() + '</span>'
+      + '<span class="k">TYPE</span><span class="v">' + m.type + '</span>'
+      + '<span class="k">COUNTRY</span><span class="v">' + m.country + '</span>'
+      + '<span class="k">SEVERITY</span><span class="v">' + m.severity + '</span>';
+    document.getElementById('rdSub').textContent =
+      m.from + ' to ' + m.to + ' · GDACS (European Commission JRC / UN OCHA)';
+    document.getElementById('nearPanel').style.display = 'none';
+    return;
+  }
+  if (m.kind === 'FIRE') {
+    document.getElementById('rdGrid').innerHTML =
+      '<span class="k">POWER</span><span class="v">' + fmt(m.frp, ' MW', 1) + '</span>'
+      + '<span class="k">BRIGHTNESS</span><span class="v">' + fmt(m.bright, ' K') + '</span>'
+      + '<span class="k">CONFIDENCE</span><span class="v">' + (m.confidence || '—') + '</span>'
+      + '<span class="k">PASS</span><span class="v">' + (m.daynight === 'D' ? 'DAY' : 'NIGHT') + '</span>';
+    document.getElementById('rdSub').textContent =
+      'Detected ' + m.date + ' by ' + (m.sat || 'VIIRS') + '. A hotspot is a thermal anomaly, '
+      + 'not a confirmed fire — flares and hot roofs read the same way.';
+    document.getElementById('nearPanel').style.display = 'none';
+    return;
+  }
+  if (m.kind === 'SHIP') {
+    document.getElementById('rdGrid').innerHTML =
+      '<span class="k">SPEED</span><span class="v">' + fmt(m.sog, ' kt', 1) + '</span>'
+      + '<span class="k">COURSE</span><span class="v">' + bearingName(m.cog) + '</span>'
+      + '<span class="k">HEADING</span><span class="v">' + fmt(m.heading, '&deg;') + '</span>'
+      + '<span class="k">MMSI</span><span class="v">' + (m.mmsi != null ? m.mmsi : '—') + '</span>';
+    document.getElementById('rdSub').textContent =
+      'AIS via Digitraffic (Finnish Transport Infrastructure Agency).';
+    document.getElementById('nearPanel').style.display = 'none';
+    return;
+  }
   if (m.kind === 'CHOKE') {
     document.getElementById('rdGrid').innerHTML =
       '<span class="k">STATUS</span><span class="v" style="color:'
@@ -2496,6 +2538,214 @@ function initWatch() {
   setInterval(refreshQuota, 5 * 60000);
   refreshQuota();
 }
+
+
+/* ================================================== WARNINGS · FIRES · SHIPS
+   Three feeds that were already on the 2D board and were missing here. Each
+   one is a different shape of the same problem: how much of the world does it
+   actually cover, and does the display admit it.
+
+   GDACS is genuinely global. FIRMS is genuinely global. Digitraffic is Finnish
+   and covers the Baltic, which is exactly the trap the camera layer had — an
+   empty map over Melbourne looks identical to a broken feed, so the coverage
+   is stated rather than left to be inferred from silence. */
+
+/* ---- warnings: GDACS orange and red events, worldwide -------------------- */
+const GDACS_URL = 'https://www.gdacs.org/gdacsapi/api/events/geteventlist/SEARCH'
+  + '?fromDate=&toDate=&alertlevel=Orange;Red';
+const GDACS_TYPE = {
+  EQ: 'EARTHQUAKE', TC: 'CYCLONE', FL: 'FLOOD',
+  WF: 'WILDFIRE', DR: 'DROUGHT', VO: 'VOLCANO',
+};
+const ALERT_COLOUR = { Red: '#ff3355', Orange: '#ff8800', Green: '#00ff88' };
+let warnOn = false;
+const warns = new Cesium.CustomDataSource('warnings');
+
+async function loadWarnings() {
+  warns.entities.removeAll();
+  if (!warnOn) { document.getElementById('nWarn').textContent = 'off'; return; }
+  document.getElementById('nWarn').textContent = '…';
+  let feats;
+  try {
+    // GDACS sends Access-Control-Allow-Origin:*, so this is browser-direct and
+    // needs no proxy — the Worker is the fallback, not the default.
+    const r = await fetch(GDACS_URL, { signal: AbortSignal.timeout(20000) });
+    if (!r.ok) throw new Error('gdacs ' + r.status);
+    feats = (await r.json()).features || [];
+  } catch (e) {
+    try {
+      const r = await fetch(PROXY + '/p?url=' + encodeURIComponent(GDACS_URL));
+      feats = (await r.json()).features || [];
+    } catch (e2) { document.getElementById('nWarn').textContent = 'error'; return; }
+  }
+  for (const f of feats) {
+    const c = f.geometry && f.geometry.coordinates;
+    if (!c || typeof c[0] !== 'number') continue;
+    const p = f.properties || {};
+    const col = Cesium.Color.fromCssColorString(ALERT_COLOUR[p.alertlevel] || '#7a8a9a');
+    const kind = GDACS_TYPE[p.eventtype] || p.eventtype;
+    const e = warns.entities.add({
+      position: Cesium.Cartesian3.fromDegrees(c[0], c[1], 0),
+      point: {
+        pixelSize: p.alertlevel === 'Red' ? 15 : 11,
+        color: col.withAlpha(0.22), outlineColor: col, outlineWidth: 2,
+        disableDepthTestDistance: Number.POSITIVE_INFINITY,
+      },
+      label: {
+        text: kind, font: '9px "Share Tech Mono", monospace', fillColor: col,
+        showBackground: true,
+        backgroundColor: Cesium.Color.fromCssColorString('#03060c').withAlpha(0.85),
+        pixelOffset: new Cesium.Cartesian2(0, -20),
+        disableDepthTestDistance: Number.POSITIVE_INFINITY,
+        distanceDisplayCondition: new Cesium.DistanceDisplayCondition(0, 9.0e6),
+      },
+    });
+    e._meta = {
+      kind: 'WARNING', name: (p.eventname || kind) + (p.country ? ' — ' + p.country : ''),
+      type: kind, alert: p.alertlevel, country: p.country || '—',
+      severity: (p.severitydata && p.severitydata.severitytext) || '—',
+      from: (p.fromdate || '').slice(0, 10), to: (p.todate || '').slice(0, 10),
+      lat: c[1], lon: c[0],
+    };
+  }
+  const red = feats.filter((f) => (f.properties || {}).alertlevel === 'Red').length;
+  const n = warns.entities.values.length;
+  document.getElementById('nWarn').textContent = n + (red ? '  (' + red + ' red)' : '');
+}
+
+/* ---- fires: FIRMS hotspots, last 48 hours ------------------------------- */
+let firesOn = false;
+let fireGen = 0;
+const fires = new Cesium.CustomDataSource('fires');
+
+async function loadFires() {
+  const gen = ++fireGen;
+  fires.entities.removeAll();
+  if (!firesOn) { document.getElementById('nFire').textContent = 'off'; return; }
+  const c = cameraCentre();
+  /* Capped like every other viewport query. FIRMS will happily return tens of
+     thousands of hotspots for a continent, which is neither drawable nor
+     readable — the panel says when the view is too wide rather than pretending
+     a truncated answer is the whole picture. */
+  const half = Math.min(12, Math.max(2, viewHalfSpanDeg(viewer.camera.positionCartographic.height / 1000) * 1.6));
+  const halfLon = Math.min(18, half / Math.max(0.25, Math.cos(c.lat * Math.PI / 180)));
+  const bbox = [c.lat - half, c.lon - halfLon, c.lat + half, c.lon + halfLon]
+    .map((v) => v.toFixed(2)).join(',');
+  document.getElementById('nFire').textContent = '…';
+  let d;
+  try {
+    const r = await fetch(PROXY + '/firms?bbox=' + encodeURIComponent(bbox),
+      { signal: AbortSignal.timeout(45000) });
+    d = await r.json();
+  } catch (e) { document.getElementById('nFire').textContent = 'error'; return; }
+  if (gen !== fireGen) return;                    // superseded by a later pan
+  if (d.error) { document.getElementById('nFire').textContent = 'error'; return; }
+  const hot = d.hotspots || [];
+  for (const h of hot.slice(0, 3000)) {
+    /* Fire radiative power, in megawatts, is the only field here that says how
+       big a fire is rather than how sure the satellite was that it saw one. */
+    const frp = h.frp || 0;
+    const col = frp > 100 ? '#ffffff' : frp > 30 ? '#ffcc00' : frp > 8 ? '#ff8800' : '#ff3355';
+    const e = fires.entities.add({
+      position: Cesium.Cartesian3.fromDegrees(h.lon, h.lat, 0),
+      point: {
+        pixelSize: frp > 100 ? 9 : frp > 30 ? 7 : 5,
+        color: Cesium.Color.fromCssColorString(col).withAlpha(0.9),
+        disableDepthTestDistance: Number.POSITIVE_INFINITY,
+        distanceDisplayCondition: new Cesium.DistanceDisplayCondition(0, 3.0e6),
+      },
+    });
+    e._meta = { kind: 'FIRE', name: 'HOTSPOT', frp, bright: h.bright,
+                confidence: h.confidence, date: h.date, sat: h.sat,
+                daynight: h.daynight, lat: h.lat, lon: h.lon };
+  }
+  document.getElementById('nFire').textContent =
+    hot.length + (d.truncated ? '+' : '');
+  document.getElementById('nFire').title =
+    'NASA FIRMS, last ' + (d.days || 2) + ' days, in a ' + Math.round(half * 2)
+    + '° box around the view. Colour is fire radiative power: red weakest, white strongest.';
+}
+
+/* ---- vessels: AIS ------------------------------------------------------- */
+const AIS_URL = 'https://meri.digitraffic.fi/api/ais/v1/locations';
+let shipsOn = false;
+const ships = new Cesium.CustomDataSource('ships');
+
+async function loadShips() {
+  ships.entities.removeAll();
+  if (!shipsOn) {
+    document.getElementById('nShip').textContent = 'off';
+    document.getElementById('shipHint').style.display = 'none';
+    return;
+  }
+  document.getElementById('nShip').textContent = '…';
+  let feats;
+  try {
+    /* Browser-direct: Digitraffic sends Access-Control-Allow-Origin:* and
+       routing it through a proxy is what killed this feed on the 2D board.
+       It also requires gzip and answers 406 without it — browsers always send
+       Accept-Encoding, which is why this works here and not from a shell. */
+    const r = await fetch(AIS_URL, { signal: AbortSignal.timeout(25000) });
+    if (!r.ok) throw new Error('ais ' + r.status);
+    feats = (await r.json()).features || [];
+  } catch (e) {
+    document.getElementById('nShip').textContent = 'upstream down';
+    document.getElementById('nShip').title = String(e.message || e);
+    return;
+  }
+  let moving = 0;
+  for (const f of feats.slice(0, 4000)) {
+    const g = f.geometry && f.geometry.coordinates;
+    const p = f.properties || {};
+    if (!g || typeof g[0] !== 'number') continue;
+    const sog = p.sog || 0;
+    if (sog > 0.5) moving++;
+    const under = sog > 0.5;
+    const col = under ? '#00e8ff' : '#7a8a9a';
+    const e = ships.entities.add({
+      position: Cesium.Cartesian3.fromDegrees(g[0], g[1], 0),
+      point: {
+        pixelSize: under ? 6 : 4,
+        color: Cesium.Color.fromCssColorString(col).withAlpha(under ? 0.95 : 0.55),
+        disableDepthTestDistance: Number.POSITIVE_INFINITY,
+        distanceDisplayCondition: new Cesium.DistanceDisplayCondition(0, 2.5e6),
+      },
+    });
+    e._meta = { kind: 'SHIP', name: 'MMSI ' + (p.mmsi != null ? p.mmsi : '—'),
+                mmsi: p.mmsi, sog, cog: p.cog, heading: p.heading,
+                navStat: p.navStat, lat: g[1], lon: g[0] };
+  }
+  const n = ships.entities.values.length;
+  document.getElementById('nShip').textContent = n + '  (' + moving + ' under way)';
+  /* Digitraffic is the Finnish transport agency: this is the Baltic and the
+     Gulf of Finland, not the world. An empty ocean elsewhere is coverage, not
+     failure, and the camera layer already taught us that silence gets read as
+     a broken feed. */
+  const sh = document.getElementById('shipHint');
+  sh.style.display = 'block';
+  sh.innerHTML = 'AIS coverage is the Baltic only — Digitraffic is the Finnish '
+    + 'transport agency and it is the open feed that exists. '
+    + '<a href="#" id="shipGo">Go to the Gulf of Finland</a>';
+  document.getElementById('shipGo').onclick = (ev) => { ev.preventDefault();
+    viewer.camera.flyTo({ destination: Cesium.Cartesian3.fromDegrees(24.5, 59.6, 700000), duration: 2 }); };
+}
+
+for (const ds of [warns, fires, ships]) viewer.dataSources.add(ds);
+
+document.getElementById('btnWarn').onclick = function () {
+  warnOn = !warnOn; this.classList.toggle('on', warnOn); loadWarnings();
+};
+document.getElementById('btnFires').onclick = function () {
+  firesOn = !firesOn; this.classList.toggle('on', firesOn); loadFires();
+};
+document.getElementById('btnShips').onclick = function () {
+  shipsOn = !shipsOn; this.classList.toggle('on', shipsOn); loadShips();
+};
+
+// Fires follow the view; warnings and vessels are single global fetches.
+viewer.camera.moveEnd.addEventListener(() => { if (firesOn) loadFires(); });
+setInterval(() => { if (warnOn) loadWarnings(); }, 15 * 60000);
+setInterval(() => { if (shipsOn && document.visibilityState === 'visible') loadShips(); }, 60000);
 
 /* ------------------------------------------------------------------ go */
 (async () => {
