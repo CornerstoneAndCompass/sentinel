@@ -787,7 +787,10 @@ async function loadAircraft() {
       scopeText = Math.round(half * 2 * 60) + ' nm box';
       lastSweepTiles = 0;
     }
-    const r = await fetch(u);
+    /* No browser caching on the feed. The Worker and the edge already cache —
+       that is what protects the request budget — and a second copy in the
+       browser only re-serves a frame we have already drawn. */
+    const r = await fetch(u, { cache: 'no-store' });
     if (!r.ok) {
       // 429 in particular: the aggregator rate-limits, and it answers with an
       // HTML page that JSON.parse then fails on with a message about "<" that
@@ -801,6 +804,23 @@ async function loadAircraft() {
     if (!j) { document.getElementById('feedScope').textContent = 'bad response'; return; }
     const list = Array.isArray(j.ac) ? j.ac : [];
     const seen = new Set();
+
+    /* When a fix was taken, not when we happened to receive it.
+
+       Every feed stamps its snapshot with `now` and each aircraft with
+       `seen_pos`, the seconds since that position was last heard. Timestamping
+       samples with the poll time instead throws that away, and the error is not
+       subtle: two polls half a second apart can carry fixes thirty seconds
+       apart, so the interpolator sees thirty seconds of real travel compressed
+       into half a second and extrapolates at sixty times the aircraft's actual
+       speed. Measured before this fix: a contact at 438 knots crossing four
+       hundred kilometres a minute.
+
+       Using the fix's own time also makes repeated snapshots harmless — they
+       carry the same timestamp, so there is nothing new to add. */
+    const feedNow = typeof j.now === 'number' ? j.now : Date.now();
+    const fixTime = (a) => Cesium.JulianDate.fromDate(
+      new Date(feedNow - (typeof a.seen_pos === 'number' ? a.seen_pos : 0) * 1000));
 
     for (const a of list) {
       const lat = a.lat, lon = a.lon;
@@ -847,12 +867,26 @@ async function loadAircraft() {
         e._meta = meta;
         e._track = track;
         seedTrack(track, { lat, lon, altM, gs: a.gs, track: a.track, rate: a.baro_rate },
-                  Cesium.JulianDate.now());
-      } else {
-        // Correct the running estimate with the new fix.
-        e._track.addSample(Cesium.JulianDate.now(),
-          Cesium.Cartesian3.fromDegrees(lon, lat, altM));
+                  fixTime(a));
+      } else if (e._meta.lat !== lat || e._meta.lon !== lon) {
+        // Correct the running estimate with the new fix, at the moment the fix
+        // was taken. Out-of-order arrivals are dropped rather than recorded:
+        // a sample behind the last one inverts the implied velocity.
+        const t = fixTime(a);
+        const times = e._track._property && e._track._property._times;
+        const newest = times && times.length ? times[times.length - 1] : null;
+        if (!newest || Cesium.JulianDate.greaterThan(t, newest)) {
+          e._track.addSample(t, Cesium.Cartesian3.fromDegrees(lon, lat, altM));
+        }
       }
+      /* A repeated fix is deliberately not recorded. It is not new
+         information, and storing it is actively harmful: two identical samples
+         hand the extrapolator a velocity of zero, so the contact stops dead
+         until a genuinely new fix arrives. That is why military traffic sat
+         frozen — the feed updates on its own schedule, the browser may re-serve
+         a cached frame, and the sweep runs faster than either, so duplicates
+         are the normal case rather than the exception. Ignoring them lets the
+         last real velocity carry the contact until the next real fix. */
 
       // One record, refreshed. t0 is the moment of this fix, which is what the
       // per-frame reckoning measures from.
@@ -897,7 +931,7 @@ async function loadAircraft() {
       e.billboard.width = (kind === 'widebody' || kind === 'quadjet' ? 28 : 24)
         * (e._meta.isMil ? 1 : 0.75);
       e.billboard.height = e.billboard.width;
-      e._meta.fixAt = Date.now();
+      e._meta.fixAt = feedNow - (typeof a.seen_pos === 'number' ? a.seen_pos : 0) * 1000;
       // Rotation is a live callback reading _meta.track, so updating the record
       // above is all that is needed here.
     }
@@ -1036,6 +1070,23 @@ viewer.camera.moveEnd.addEventListener(() => {
 let camIndex = null, camsOn = false, camGen = 0;
 const PURPLE = Cesium.Color.fromCssColorString('#aa66ff');
 
+/* Thumbnails only close in, and only a screenful of them. */
+const THUMB_MAX_ALT_KM = 140;
+const THUMB_COUNT = 18;
+let camStamp = Date.now();
+
+/* The frames are stills the operator replaces every minute or so, so they need
+   re-fetching to stay live. Swapping the URL in place rather than rebuilding
+   the layer keeps them from flickering out and back. */
+setInterval(() => {
+  if (!camsOn) return;
+  camStamp = Date.now();
+  for (const e of cams.entities.values) {
+    if (!e._isThumb || !e._meta) continue;
+    e.billboard.image = e._meta.image + '?t=' + camStamp;
+  }
+}, 60000);
+
 async function loadCams() {
   /* Generation guard. The index fetch takes seconds on a cold cache, and a
      camera move during it starts a second pass — both then clear and both then
@@ -1067,6 +1118,26 @@ async function loadCams() {
     return Cesium.Rectangle.contains(rect, carto);
   }).slice(0, 400);
 
+  /* Close in, the frames themselves go on the map.
+
+     A dot you have to click tells you a camera exists; the point of a camera
+     is what it can see, and that only reads when the picture is on the globe
+     next to the road it is pointing at. Both operators serve their stills with
+     Access-Control-Allow-Origin, so the images can be used as WebGL textures
+     directly — checked, because without that header this would silently draw
+     nothing at all.
+
+     Capped and only close in, because eighteen thumbnails is a screenful and
+     four hundred is a few megabytes of JPEG for a picture nobody can read. */
+  const camAltKm = viewer.camera.positionCartographic.height / 1000;
+  const centre = cameraCentre();
+  const thumbs = camAltKm > THUMB_MAX_ALT_KM ? [] : inView
+    .map((c) => ({ c, d: Math.hypot(c.lat - centre.lat, c.lon - centre.lon) }))
+    .sort((a, b) => a.d - b.d)
+    .slice(0, THUMB_COUNT)
+    .map((x) => x.c);
+  const thumbSet = new Set(thumbs);
+
   for (const c of inView) {
     if (gen !== camGen) return;
     const e = cams.entities.add({
@@ -1088,6 +1159,31 @@ async function loadCams() {
     });
     e._meta = { kind: 'CAMERA', name: c.name, lat: c.lat, lon: c.lon,
                 image: c.image, operator: c.operator };
+
+    if (thumbSet.has(c)) {
+      // Raised off the ground on its own leader line so the frame does not
+      // cover the road it is showing.
+      e.billboard = {
+        image: c.image + '?t=' + camStamp,
+        width: 132, height: 74,
+        verticalOrigin: Cesium.VerticalOrigin.BOTTOM,
+        pixelOffset: new Cesium.Cartesian2(0, -14),
+        disableDepthTestDistance: Number.POSITIVE_INFINITY,
+        scaleByDistance: new Cesium.NearFarScalar(2000, 1.0, 260000, 0.45),
+        distanceDisplayCondition: new Cesium.DistanceDisplayCondition(0, 300000),
+      };
+      e.label = {
+        text: c.name.length > 26 ? c.name.slice(0, 25) + '…' : c.name,
+        font: '9px "Share Tech Mono", monospace',
+        fillColor: PURPLE, showBackground: true,
+        backgroundColor: Cesium.Color.fromCssColorString('#03060c').withAlpha(0.85),
+        verticalOrigin: Cesium.VerticalOrigin.BOTTOM,
+        pixelOffset: new Cesium.Cartesian2(0, -90),
+        disableDepthTestDistance: Number.POSITIVE_INFINITY,
+        distanceDisplayCondition: new Cesium.DistanceDisplayCondition(0, 300000),
+      };
+      e._isThumb = true;
+    }
   }
   /* Zero cameras looks the same as a broken layer. Only two operators publish
      an open camera feed — Transport for London and Caltrans — so the coverage
@@ -1109,6 +1205,11 @@ async function loadCams() {
   }
   document.getElementById('nCam').textContent =
     inView.length + (camIndex.length > inView.length ? ' / ' + camIndex.length : '');
+  document.getElementById('nCam').title = thumbs.length
+    ? thumbs.length + ' live frames on the map; the rest are markers.'
+    : inView.length
+      ? 'Zoom in below ' + THUMB_MAX_ALT_KM + ' km to see the frames on the map.'
+      : '';
 }
 
 /* Full-size camera frame. Traffic cameras are low resolution to begin with, so
@@ -1938,7 +2039,8 @@ async function locateWatch(w) {
   w.busy = true;
   renderWatch();
   try {
-    const r = await fetch(PROXY + '/flight?q=' + encodeURIComponent(w.reg || w.cs));
+    const r = await fetch(PROXY + '/flight?q=' + encodeURIComponent(w.reg || w.cs),
+      { cache: 'no-store' });
     const j = r.ok ? await r.json() : null;
     const fix = j && j.found ? j : { found: false };
     if (fix.found) {

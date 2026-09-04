@@ -235,6 +235,12 @@ async function passthrough(request, env, ctx) {
     if (stale) {
       const h = new Headers(stale.headers);
       Object.entries(CORS).forEach(([k, v]) => h.set(k, v));
+      /* The stale copy is stored with a day-long TTL so it survives in the
+         edge cache, but that TTL must not travel to the browser: a client that
+         caches one stale frame for a day keeps redrawing it long after the
+         upstream recovers, and the board looks frozen rather than degraded.
+         Staleness is handled here, where it is labelled and visible. */
+      h.set('Cache-Control', 'no-store');
       h.set('X-Sentinel-Cache', 'STALE');
       h.set('X-Sentinel-Upstream-Status', String(res.status));
       return new Response(stale.body, { status: 200, headers: h });
@@ -247,6 +253,7 @@ async function passthrough(request, env, ctx) {
           headers: {
             ...CORS,
             'Content-Type': 'application/json',
+            'Cache-Control': 'no-store',
             'X-Sentinel-Cache': 'KV-STALE',
             'X-Sentinel-Upstream-Status': String(res.status),
           },
