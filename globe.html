@@ -1406,6 +1406,26 @@ function showContact(m) {
   sq.textContent = alert ? alert : (m.squawk ? 'SQ ' + m.squawk : '');
   sq.className = alert ? 'hot' : '';
 
+  if (m.kind === 'WX') {
+    document.getElementById('rdGrid').innerHTML =
+      '<span class="k">EVENT</span><span class="v">' + m.event + '</span>'
+      + '<span class="k">SEVERITY</span><span class="v">' + (m.severity || '—') + '</span>'
+      + '<span class="k">URGENCY</span><span class="v">' + (m.urgency || '—') + '</span>'
+      + '<span class="k">UNTIL</span><span class="v">' + (m.ends || '—') + '</span>';
+    document.getElementById('rdSub').textContent = (m.headline || m.area) + ' · US NWS';
+    document.getElementById('nearPanel').style.display = 'none';
+    return;
+  }
+  if (m.kind === 'TSUNAMI') {
+    document.getElementById('rdGrid').innerHTML =
+      '<span class="k">STATUS</span><span class="v" style="color:'
+        + (m.warning ? 'var(--r)' : 'var(--c)') + '">'
+        + (m.warning ? 'WARNING' : 'INFORMATION') + '</span>'
+      + '<span class="k">UPDATED</span><span class="v">' + m.updated + '</span>';
+    document.getElementById('rdSub').textContent = m.name + ' · NOAA';
+    document.getElementById('nearPanel').style.display = 'none';
+    return;
+  }
   if (m.kind === 'SAT') {
     document.getElementById('rdGrid').innerHTML =
       '<span class="k">ALTITUDE</span><span class="v">' + fmt(Math.round(m.altM / 1000), ' km') + '</span>'
@@ -3379,6 +3399,161 @@ async function loadCloud(on) {
   }
 }
 
+
+/* ---- orbit paths: one revolution, drawn ahead of each satellite --------- */
+/* Costs nothing but arithmetic — the elements are already loaded for the
+   satellite layer, so this is the same SGP4 run forward in steps rather than
+   evaluated once. Drawn as a ground track at altitude, which is what makes an
+   inclination legible: a polar orbit and a 51-degree one look identical as
+   moving dots and completely different as paths. */
+async function loadOrbits(ds) {
+  ds.entities.removeAll();
+  if (typeof satellite === 'undefined') throw new Error('satellite.js did not load');
+  if (!satsLoaded) {
+    const r = await fetch(PROXY + '/tle', { signal: AbortSignal.timeout(25000) });
+    if (!r.ok) throw new Error('tle ' + r.status);
+    satsLoaded = (await r.json()).items || [];
+  }
+  const now = new Date();
+  let drawn = 0;
+  for (const s of satsLoaded) {
+    let rec;
+    try { rec = satellite.twoline2satrec(s.line1, s.line2); } catch (e) { continue; }
+    if (!rec || rec.error) continue;
+    // Mean motion is in radians per minute, so the period falls straight out.
+    const periodMin = (2 * Math.PI) / rec.no;
+    if (!isFinite(periodMin) || periodMin <= 0 || periodMin > 2000) continue;
+    const STEPS = 90;
+    /* Split at the antimeridian. A polyline whose longitude jumps from +180 to
+       -180 is drawn as a line straight back across the whole planet, which is
+       the classic ground-track artefact and looks like the satellite teleported. */
+    const runs = [];
+    let run = [];
+    let prevLon = null;
+    for (let i = 0; i <= STEPS; i++) {
+      const t = new Date(now.getTime() + (periodMin * 60000 * i) / STEPS);
+      let pv;
+      try { pv = satellite.propagate(rec, t); } catch (e) { break; }
+      if (!pv || !pv.position) break;
+      const g = satellite.eciToGeodetic(pv.position, satellite.gstime(t));
+      const lat = satellite.degreesLat(g.latitude);
+      const lon = satellite.degreesLong(g.longitude);
+      const alt = g.height * 1000;
+      if (!isFinite(lat) || !isFinite(lon) || !isFinite(alt)) continue;
+      if (prevLon !== null && Math.abs(lon - prevLon) > 180) { runs.push(run); run = []; }
+      run.push(lon, lat, alt);
+      prevLon = lon;
+    }
+    if (run.length >= 6) runs.push(run);
+    for (const r of runs) {
+      if (r.length < 6) continue;
+      ds.entities.add({
+        polyline: {
+          positions: Cesium.Cartesian3.fromDegreesArrayHeights(r),
+          width: 1.2,
+          material: new Cesium.PolylineGlowMaterialProperty({
+            glowPower: 0.18,
+            color: Cesium.Color.fromCssColorString('#aa66ff').withAlpha(0.45),
+          }),
+          arcType: Cesium.ArcType.NONE,
+        },
+      });
+    }
+    if (runs.length) drawn++;
+  }
+  if (!drawn) throw new Error('no orbits could be propagated');
+  return drawn;
+}
+
+/* ---- US severe weather: NWS active alerts ------------------------------- */
+const NWS_URL = 'https://api.weather.gov/alerts/active?status=actual&severity=Extreme,Severe';
+const NWS_COLOUR = (ev) =>
+  /tornado|hurricane|tsunami/i.test(ev) ? '#ff3355'
+  : /flash flood|extreme|blizzard|ice storm/i.test(ev) ? '#ff8800'
+  : /thunderstorm|flood|wind|fire|red flag/i.test(ev) ? '#ffcc00'
+  : '#00e8ff';
+
+async function loadSevereWx(ds) {
+  ds.entities.removeAll();
+  const r = await fetch(NWS_URL, { signal: AbortSignal.timeout(25000) });
+  if (!r.ok) throw new Error('nws ' + r.status);
+  const feats = (await r.json()).features || [];
+  let withGeom = 0;
+  for (const f of feats) {
+    const p = f.properties || {};
+    const g = f.geometry;
+    if (!g) continue;                       // zone-coded only; no shape to draw
+    withGeom++;
+    const col = Cesium.Color.fromCssColorString(NWS_COLOUR(p.event || ''));
+    const rings = g.type === 'Polygon' ? [g.coordinates]
+      : g.type === 'MultiPolygon' ? g.coordinates : [];
+    for (const poly of rings) {
+      const outer = poly[0];
+      if (!Array.isArray(outer) || outer.length < 4) continue;
+      const e = ds.entities.add({
+        polygon: {
+          hierarchy: Cesium.Cartesian3.fromDegreesArray(outer.flatMap((c) => [c[0], c[1]])),
+          material: col.withAlpha(0.16),
+          outline: true, outlineColor: col.withAlpha(0.8), outlineWidth: 1.5,
+          height: 0,
+        },
+      });
+      e._meta = { kind: 'WX', name: p.event || 'Alert', event: p.event,
+                  severity: p.severity, urgency: p.urgency,
+                  area: (p.areaDesc || '').split(';')[0],
+                  headline: p.headline || '', ends: (p.ends || p.expires || '').slice(0, 16).replace('T', ' '),
+                  lat: outer[0][1], lon: outer[0][0] };
+    }
+  }
+  /* Roughly half of NWS alerts carry no polygon — they are issued against
+     forecast-zone codes instead, and resolving those needs a second lookup per
+     alert. Rather than silently drop them, say how many are not on the map. */
+  return { n: withGeom, total: feats.length };
+}
+
+/* ---- tsunami: NOAA bulletins ------------------------------------------- */
+async function loadTsunami(ds) {
+  ds.entities.removeAll();
+  // tsunami.gov sends no CORS header, so this one genuinely needs the proxy.
+  const u = PROXY + '/p?url=' + encodeURIComponent('https://www.tsunami.gov/events/xml/PAAQAtom.xml');
+  const r = await fetch(u, { signal: AbortSignal.timeout(25000) });
+  if (!r.ok) throw new Error('tsunami ' + r.status);
+  const xml = new DOMParser().parseFromString(await r.text(), 'application/xml');
+  const entries = [...xml.getElementsByTagName('entry')];
+  const pick = (el, tag) => {
+    const n = el.getElementsByTagName(tag)[0];
+    return n ? n.textContent.trim() : '';
+  };
+  for (const en of entries) {
+    const lat = parseFloat(pick(en, 'geo:lat') || pick(en, 'lat'));
+    const lon = parseFloat(pick(en, 'geo:long') || pick(en, 'long'));
+    if (!isFinite(lat) || !isFinite(lon)) continue;
+    const title = pick(en, 'title');
+    /* An information statement is not a warning. The feed carries both and the
+       difference is the entire point of the layer, so it is read off the text
+       rather than colouring everything alarming. */
+    const warn = /warning|watch/i.test(title);
+    const col = Cesium.Color.fromCssColorString(warn ? '#ff3355' : '#00e8ff');
+    const e = ds.entities.add({
+      position: Cesium.Cartesian3.fromDegrees(lon, lat, 0),
+      point: { pixelSize: warn ? 16 : 11, color: col.withAlpha(0.25),
+               outlineColor: col, outlineWidth: 2,
+               disableDepthTestDistance: NEAR_DEPTH_SKIP },
+      label: {
+        text: warn ? 'TSUNAMI WARNING' : 'TSUNAMI INFO',
+        font: '9px "Share Tech Mono", monospace', fillColor: col, showBackground: true,
+        backgroundColor: Cesium.Color.fromCssColorString('#03060c').withAlpha(0.85),
+        pixelOffset: new Cesium.Cartesian2(0, -20),
+        disableDepthTestDistance: NEAR_DEPTH_SKIP,
+      },
+    });
+    e._meta = { kind: 'TSUNAMI', name: title, warning: warn,
+                updated: pick(en, 'updated').slice(0, 16).replace('T', ' '),
+                summary: pick(en, 'summary').slice(0, 300), lat, lon };
+  }
+  return entries.length;
+}
+
 /* Every layer, as data. Order inside a group is the order it is drawn in the
    panel. `prov` is 'live' when the source changes on its own and 'ref' when it
    is a table in this file. */
@@ -3389,6 +3564,8 @@ const LAYER_DEFS = [
 
   { id:'sats',    g:'orb',  label:'SATELLITES',     prov:'live', src:'CelesTrak elements, propagated here by SGP4',
     ds:'sats', load:loadSats },
+  { id:'orbits',  g:'orb',  label:'ORBIT PATHS',    prov:'live', src:'one revolution ahead, propagated here from the same elements',
+    ds:'orbits', load:loadOrbits },
   { id:'launch',  g:'orb',  label:'LAUNCHES',       prov:'live', src:'Launch Library 2 / The Space Devs',
     ds:'launch', load:loadLaunches },
 
@@ -3403,6 +3580,10 @@ const LAYER_DEFS = [
   { id:'fires',   g:'haz',  label:'FIRES',          prov:'live', src:'NASA FIRMS' },
   { id:'quakes',  g:'haz',  label:'EARTHQUAKES',    prov:'live', src:'USGS, M2.5+ last 24h',
     ds:'quakes', load:loadQuakes },
+  { id:'severewx',g:'haz',  label:'US SEVERE WX',   prov:'live', src:'US National Weather Service active alerts. United States only.',
+    ds:'severewx', load:loadSevereWx },
+  { id:'tsunami', g:'haz',  label:'TSUNAMI',        prov:'live', src:'NOAA tsunami bulletins. Usually empty, which is the point.',
+    ds:'tsunami', load:loadTsunami },
 
   { id:'chokes',  g:'sec',  label:'CHOKEPOINTS',    prov:'ref',  src:'editorial status table' },
   { id:'conflict',g:'sec',  label:'CONFLICTS',      prov:'ref',  src:'conflict zone table',
@@ -3542,8 +3723,9 @@ function culledSources() {
      occluder built for points on the surface would hide ones that are
      genuinely visible over the limb. The depth buffer handles them correctly
      because nothing about them skips it. */
+  const skip = new Set(['sats', 'orbits']);
   return [chokes, warns, fires, ships, cams, inst,
-          ...Object.entries(layerDs).filter(([k]) => k !== 'sats').map(([, v]) => v)];
+          ...Object.entries(layerDs).filter(([k]) => !skip.has(k)).map(([, v]) => v)];
 }
 scene.preRender.addEventListener(() => {
   horizon.cameraPosition = viewer.camera.positionWC;
