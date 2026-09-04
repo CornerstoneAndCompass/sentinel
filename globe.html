@@ -117,6 +117,35 @@ html,body{height:100%;overflow:hidden;background:#03060c;
 .catRow b{font-family:'Orbitron',sans-serif;font-weight:400;font-size:11px;color:var(--tm)}
 .catRow:hover{color:#fff}
 .catRow.off{opacity:.35;text-decoration:line-through}
+
+/* Layer panel. Buttons rather than checkboxes because a layer is a thing you
+   switch on, and because the lit state has to read at a glance across four
+   groups. */
+.panel.layers{left:auto;right:12px;top:52px;width:250px;max-height:calc(100vh - 270px);
+  overflow-y:auto;padding-bottom:6px}
+.lgrp{margin-bottom:8px}
+.lgHead{display:flex;align-items:center;gap:6px;font-family:'Orbitron',sans-serif;font-size:8px;
+  font-weight:700;letter-spacing:2px;color:var(--tm);border-bottom:1px solid var(--brd);
+  padding-bottom:4px;margin-bottom:5px}
+.lgHead b{margin-left:auto;font-weight:400;font-size:9px;color:var(--td)}
+.lgAll{font-family:inherit;font-size:8px;letter-spacing:1px;color:var(--td);cursor:pointer}
+.lgAll:hover{color:var(--c)}
+.lgBody{display:flex;flex-wrap:wrap;gap:3px}
+.lbtn{background:transparent;border:1px solid var(--brd);color:var(--td);font-family:inherit;
+  font-size:8px;letter-spacing:1px;padding:4px 7px;border-radius:3px;cursor:pointer;
+  position:relative}
+.lbtn:hover{color:var(--tm);border-color:var(--cg)}
+.lbtn.on{background:var(--cd);border-color:var(--cg);color:var(--c)}
+/* A reference layer is a table in this file, not a feed. The corner mark is
+   the same one the 2D board uses, so the two boards say it the same way. */
+.lbtn.ref::after{content:'';position:absolute;top:2px;right:2px;width:0;height:0;
+  border-top:4px solid var(--y);border-left:4px solid transparent}
+.lbtn.err{border-color:var(--r);color:var(--r);opacity:.7}
+.provLegend{display:flex;align-items:center;gap:5px;flex-wrap:wrap;font-size:8px;
+  color:var(--td);letter-spacing:1px;border-top:1px solid var(--brd);padding-top:7px;margin-top:4px}
+.prov{padding:1px 4px;border-radius:2px;font-size:7px;letter-spacing:1px}
+.prov.live{background:rgba(0,255,136,.15);color:var(--g)}
+.prov.ref{background:rgba(255,204,0,.15);color:var(--y)}
 .panel.near{max-height:260px;overflow-y:auto}
 
 /* Flight watch. Right-hand column so it never competes with the contact
@@ -279,12 +308,7 @@ body.flying .panel:hover,body.flying .read:hover,body.flying .ctl:hover{opacity:
       <button id="btnAll" title="Civil and military traffic in the view. There is no global all-traffic call, so this follows the camera as a box of 250 nm tiles — and it is the one feed that is billed, so it sweeps once a minute and pauses when the tab is hidden.">ALL</button>
     </div>
     <div class="grp"><span class="ctlLbl">LAYERS</span>
-      <button id="btnBuildings" disabled title="Global 3D buildings from OpenStreetMap, extruded to their mapped heights">BUILDINGS</button>
-      <button id="btnCams" title="Public roadside cameras published by their operators — London and California only. Click one for the current frame.">CAMERAS</button>
-      <button id="btnChokes" title="Nine straits and canals where a large share of world trade has no alternative route">CHOKEPOINTS</button>
-      <button id="btnWarn" title="GDACS orange and red alerts worldwide — earthquake, cyclone, flood, wildfire, drought, volcano">WARNINGS</button>
-      <button id="btnFires" title="NASA FIRMS thermal hotspots from the last 48 hours, in a box around the view">FIRES</button>
-      <button id="btnShips" title="AIS vessel positions. The open feed is Digitraffic, so coverage is the Baltic only.">VESSELS</button>
+      <button id="btnLayers" title="Every map layer, grouped, with its source">LAYERS &#9662;</button>
       <button id="btnWatch" title="Follow named flights — your own trip, or anything you want updates on">WATCH</button>
     </div>
   </div>
@@ -294,6 +318,11 @@ body.flying .panel:hover,body.flying .read:hover,body.flying .ctl:hover{opacity:
       <button id="rdClose" title="Close and let the camera go  [Esc]">&times;</button></div>
     <div class="rdGrid" id="rdGrid"></div>
     <div class="rdSub" id="rdSub">Click a contact to inspect it.</div>
+  </div>
+
+  <div class="panel layers" id="layerPanel" hidden>
+    <div class="ptitle">Map layers <span id="layerCount" style="float:right;color:var(--td)">0/0</span></div>
+    <div id="layerList"></div>
   </div>
 
   <div class="panel watch" id="watchPanel" hidden>
@@ -412,11 +441,12 @@ if (ION_TOKEN) {
   Cesium.createOsmBuildingsAsync().then((tileset) => {
     osmBuildings = scene.primitives.add(tileset);
     osmBuildings.show = buildingsOn;
-    const b = document.getElementById('btnBuildings');
-    if (b) { b.disabled = false; b.classList.toggle('on', buildingsOn); }
-  }).catch(() => {
-    const b = document.getElementById('btnBuildings');
-    if (b) { b.textContent = 'NO BUILDINGS'; b.disabled = true; }
+  }).catch((e) => {
+    // The layer panel is generated later, so record the failure and let it
+    // render as a dead toggle with the reason on hover.
+    buildingsOn = false;
+    if (typeof layerErr !== 'undefined') { layerErr.bldg = 'tileset unavailable'; }
+    if (typeof renderLayerPanel === 'function') renderLayerPanel();
   });
 }
 scene.globe.enableLighting = true;
@@ -1035,9 +1065,17 @@ async function loadAircraft() {
    entirely when the view is wider than a query can serve rather than firing a
    request that is certain to fail. */
 let instBusy = false, instKey = '';
+let instOn = true;
+
+function setBuildings(on) {
+  buildingsOn = on;
+  if (osmBuildings) osmBuildings.show = on;
+}
+
 async function loadInstallations(force) {
   const rect = viewer.camera.computeViewRectangle();
   const el = document.getElementById('nInst');
+  if (!instOn) { el.textContent = 'off'; inst.entities.removeAll(); instKey = ''; return; }
   if (!rect) { el.textContent = '—'; return; }
 
   const deg = Cesium.Math.toDegrees;
@@ -1308,12 +1346,6 @@ document.getElementById('btnDay').onclick = () => setDaylight(!daylight);
 
 document.getElementById('btnOff').onclick = () => setFeedMode('off');
 
-document.getElementById('btnCams').onclick = function () {
-  camsOn = !camsOn;
-  this.classList.toggle('on', camsOn);
-  loadCams();
-};
-
 /* ------------------------------------------------------ select + follow */
 // Squawk 7500/7600/7700 are the three codes that mean something is wrong, and
 // they are in the feed already. A tracking display that does not surface them
@@ -1345,6 +1377,35 @@ function showContact(m) {
   sq.textContent = alert ? alert : (m.squawk ? 'SQ ' + m.squawk : '');
   sq.className = alert ? 'hot' : '';
 
+  if (m.kind === 'QUAKE') {
+    document.getElementById('rdGrid').innerHTML =
+      '<span class="k">MAGNITUDE</span><span class="v">M' + m.mag.toFixed(1) + '</span>'
+      + '<span class="k">DEPTH</span><span class="v">' + fmt(m.depth, ' km', 1) + '</span>'
+      + '<span class="k">WHEN</span><span class="v">' + m.time + ' UTC</span>'
+      + (m.tsunami ? '<span class="k">TSUNAMI</span><span class="v" style="color:var(--r)">FLAGGED</span>' : '');
+    document.getElementById('rdSub').textContent = m.place + ' · USGS';
+    document.getElementById('nearPanel').style.display = 'none';
+    return;
+  }
+  if (m.kind === 'REF') {
+    /* Reference layers all carry a name and a description and then disagree
+       about everything else, so the panel shows whichever of the known fields
+       this row happens to have rather than a fixed set per layer. */
+    const fields = [['risk','RISK'],['threat','THREAT'],['intensity','INTENSITY'],
+      ['density','DENSITY'],['status','STATUS'],['type','TYPE'],['branch','OPERATOR'],
+      ['country','COUNTRY'],['reactors','REACTORS'],['incidents','INCIDENTS'],
+      ['fatalities','FATALITIES'],['freq','FREQUENCY'],['capacity','CAPACITY'],['owner','OWNER']];
+    document.getElementById('rdGrid').innerHTML = fields
+      .filter(([k]) => m[k] !== undefined && m[k] !== null && m[k] !== '')
+      .slice(0, 5)
+      .map(([k, lbl]) => '<span class="k">' + lbl + '</span><span class="v">' + m[k] + '</span>')
+      .join('');
+    document.getElementById('rdSub').innerHTML =
+      (m.desc || '') + '<br><span style="color:var(--y)">REFERENCE — '
+      + m.layer + ', a fixed table in this build.</span>';
+    document.getElementById('nearPanel').style.display = 'none';
+    return;
+  }
   if (m.kind === 'WARNING') {
     document.getElementById('rdGrid').innerHTML =
       '<span class="k">ALERT</span><span class="v" style="color:'
@@ -1682,12 +1743,6 @@ viewer.camera.moveEnd.addEventListener(() => {
   acTimer = setTimeout(loadAircraft, 900);
 });
 
-document.getElementById('btnBuildings').onclick = function () {
-  buildingsOn = !buildingsOn;
-  if (osmBuildings) osmBuildings.show = buildingsOn;
-  this.classList.toggle('on', buildingsOn);
-};
-
 document.getElementById('btnFollow').onclick = releaseTracking;
 
 /* Keys, because a drag is a poor way to ask for a specific angle and the
@@ -1902,11 +1957,6 @@ function renderChokepoints() {
    loadAircraft catches its own errors and the only symptom was contacts with
    no category. Declarations and the code that uses them stay together. */
 viewer.dataSources.add(chokes);
-document.getElementById('btnChokes').onclick = function () {
-  chokesOn = !chokesOn;
-  this.classList.toggle('on', chokesOn);
-  renderChokepoints();
-};
 document.getElementById('catList').addEventListener('click', (ev) => {
   const row = ev.target.closest('.catRow');
   if (row) toggleCategory(row.dataset.cat);
@@ -2732,20 +2782,389 @@ async function loadShips() {
 
 for (const ds of [warns, fires, ships]) viewer.dataSources.add(ds);
 
-document.getElementById('btnWarn').onclick = function () {
-  warnOn = !warnOn; this.classList.toggle('on', warnOn); loadWarnings();
-};
-document.getElementById('btnFires').onclick = function () {
-  firesOn = !firesOn; this.classList.toggle('on', firesOn); loadFires();
-};
-document.getElementById('btnShips').onclick = function () {
-  shipsOn = !shipsOn; this.classList.toggle('on', shipsOn); loadShips();
-};
 
 // Fires follow the view; warnings and vessels are single global fetches.
 viewer.camera.moveEnd.addEventListener(() => { if (firesOn) loadFires(); });
 setInterval(() => { if (warnOn) loadWarnings(); }, 15 * 60000);
 setInterval(() => { if (shipsOn && document.visibilityState === 'visible') loadShips(); }, 60000);
+
+
+/* ==================================================================== LAYERS
+   The globe had eight layers hand-wired as buttons in the bottom bar while the
+   2D board had thirty in a proper panel. Adding the ninth by hand would have
+   made the bar unusable, so layers are a registry now: each one declares what
+   it is called, which group it belongs in, whether it is a live feed or a
+   fixed table, and how to draw itself. The panel is generated from that, which
+   is what makes the next twenty cheap.
+
+   The live/reference distinction is carried through from the 2D board and is
+   not decoration. Half of these are hand-maintained tables — piracy zones,
+   cyber origins, strategic sites — and a table that changes when the file is
+   edited must never be mistaken for one that changes when the world does. */
+
+const SUBMARINE_CABLES=[
+  {name:'TAT-14',pts:[[40.9,-72.1],[50.8,-1.1],[53.5,6.9]],capacity:'3.2 Tbps',owner:'Consortium',status:'RETIRED'},
+  {name:'AEConnect-1',pts:[[40.5,-74.0],[51.8,-10.0]],capacity:'52 Tbps',owner:'Aqua Comms',status:'ACTIVE'},
+  {name:'MAREA',pts:[[39.5,-74.2],[37.2,-6.9]],capacity:'200 Tbps',owner:'Microsoft/Meta',status:'ACTIVE'},
+  {name:'Dunant',pts:[[40.5,-73.8],[47.5,-2.8]],capacity:'250 Tbps',owner:'Google',status:'ACTIVE'},
+  {name:'SEA-ME-WE 3',pts:[[1.3,103.8],[22.3,114.2],[12.9,100.5],[6.9,79.9],[12.1,45.0],[27.2,33.8],[31.2,29.9],[37.0,15.0],[43.3,5.3],[36.7,-6.3]],capacity:'960 Gbps',owner:'Consortium',status:'ACTIVE'},
+  {name:'SEA-ME-WE 6',pts:[[1.3,103.8],[6.1,80.2],[23.6,58.6],[27.2,33.8],[31.2,29.9],[43.3,5.3],[36.7,-6.3]],capacity:'100+ Tbps',owner:'Consortium',status:'ACTIVE'},
+  {name:'PEACE Cable',pts:[[31.5,121.5],[22.3,114.2],[1.3,103.8],[6.1,80.2],[23.6,58.6],[12.1,45.0],[27.2,33.8],[36.7,-6.3],[47.5,-2.8]],capacity:'96 Tbps',owner:'HMN/PEACE',status:'ACTIVE'},
+  {name:'Japan-US Cable',pts:[[35.5,139.7],[21.3,-157.8],[37.8,-122.4]],capacity:'30 Tbps',owner:'Google',status:'ACTIVE'},
+  {name:'Equiano',pts:[[51.4,1.4],[38.7,-9.1],[28.5,-16.3],[14.7,-17.4],[6.5,3.4],[-6.2,12.3],[-33.9,18.4]],capacity:'144 Tbps',owner:'Google',status:'ACTIVE'},
+  {name:'2Africa',pts:[[-33.9,18.4],[-4.0,39.7],[12.1,45.0],[23.6,58.6],[25.3,55.3],[27.2,33.8],[31.2,29.9],[37.0,15.0],[36.7,-6.3],[33.6,-7.6],[14.7,-17.4],[6.5,3.4],[4.0,9.7]],capacity:'180 Tbps',owner:'Meta',status:'ACTIVE'},
+  {name:'Arctic Connect',pts:[[60.2,25.0],[70.0,28.0],[71.0,50.0],[69.0,100.0],[65.0,150.0],[53.5,141.0],[43.1,141.0]],capacity:'Planned',owner:'Cinia',status:'PLANNED'},
+  {name:'NordLink',pts:[[54.3,8.1],[58.1,6.5]],capacity:'Power/Data',owner:'Statnett/TenneT',status:'ACTIVE'},
+];
+
+const NUCLEAR_FACILITIES=[
+  {name:'Zaporizhzhia NPP',lat:47.51,lon:34.58,country:'UA',reactors:6,status:'SHUTDOWN',risk:'CRITICAL',desc:'Largest in Europe, under Russian military occupation since March 2022'},
+  {name:'Chernobyl Exclusion',lat:51.39,lon:30.10,country:'UA',reactors:0,status:'DECOMMISSIONED',risk:'HIGH',desc:'Site of 1986 disaster, briefly occupied by Russian forces in 2022'},
+  {name:'Bushehr NPP',lat:28.83,lon:50.89,country:'IR',reactors:1,status:'OPERATIONAL',risk:'HIGH',desc:'Irans only operational nuclear power plant, Russian-built VVER-1000'},
+  {name:'Yongbyon Complex',lat:39.80,lon:125.75,country:'KP',reactors:1,status:'OPERATIONAL',risk:'EXTREME',desc:'North Korean plutonium production reactor + enrichment centrifuges'},
+  {name:'Natanz Enrichment',lat:33.72,lon:51.73,country:'IR',reactors:0,status:'OPERATIONAL',risk:'EXTREME',desc:'Primary uranium enrichment site, underground centrifuge facility'},
+  {name:'Dimona (Negev NRC)',lat:31.00,lon:35.15,country:'IL',reactors:1,status:'OPERATIONAL',risk:'HIGH',desc:'Undeclared Israeli nuclear weapons production facility'},
+  {name:'Kudankulam NPP',lat:8.17,lon:77.71,country:'IN',reactors:4,status:'OPERATIONAL',risk:'MODERATE',desc:'Indian Russian-built VVER-1000 reactors, close to Sri Lanka'},
+  {name:'Barakah NPP',lat:23.96,lon:52.26,country:'AE',reactors:4,status:'OPERATIONAL',risk:'LOW',desc:'UAE first nuclear plant, Korean-built APR-1400s'},
+  {name:'Haiyang NPP',lat:36.69,lon:121.64,country:'CN',reactors:4,status:'OPERATIONAL',risk:'MODERATE',desc:'Chinese AP1000 reactors, Shandong Province'},
+  {name:'Akkuyu NPP',lat:36.14,lon:33.53,country:'TR',reactors:4,status:'CONSTRUCTION',risk:'MODERATE',desc:'Turkeys first NPP, Russian-built VVER-1200'},
+  {name:'Rooppur NPP',lat:24.07,lon:89.05,country:'BD',reactors:2,status:'CONSTRUCTION',risk:'MODERATE',desc:'Bangladeshs first NPP, Russian VVER-1200'},
+  {name:'Fukushima Daiichi',lat:37.42,lon:141.03,country:'JP',reactors:6,status:'DECOMMISSIONED',risk:'HIGH',desc:'2011 triple meltdown, ongoing decommission and treated water release'},
+  {name:'La Hague Reprocessing',lat:49.68,lon:-1.88,country:'FR',reactors:0,status:'OPERATIONAL',risk:'MODERATE',desc:'Worlds largest nuclear reprocessing facility'},
+  {name:'Sellafield',lat:54.42,lon:-3.50,country:'GB',reactors:0,status:'DECOMMISSIONED',risk:'HIGH',desc:'UK nuclear reprocessing and decommissioning site, legacy waste'},
+  {name:'Mayak PA',lat:55.71,lon:60.80,country:'RU',reactors:0,status:'OPERATIONAL',risk:'HIGH',desc:'Russian nuclear weapons material production, 1957 Kyshtym disaster site'},
+];
+
+const PIRACY_ZONES=[
+  {name:'Gulf of Aden',lat:12.5,lon:47.0,radius:300000,incidents:45,risk:'EXTREME',desc:'Houthi anti-ship missile/drone attacks on commercial shipping since Nov 2023'},
+  {name:'Bab el-Mandeb Strait',lat:12.8,lon:43.3,radius:100000,incidents:38,risk:'EXTREME',desc:'Houthi chokepoint attacks, US/UK military strikes in response'},
+  {name:'Red Sea (Southern)',lat:15.0,lon:42.0,radius:250000,incidents:30,risk:'HIGH',desc:'Extended Houthi threat zone, ships rerouting via Cape of Good Hope'},
+  {name:'Gulf of Guinea',lat:4.0,lon:3.0,radius:400000,incidents:22,risk:'HIGH',desc:'Kidnapping for ransom, armed robbery, oil theft — Nigeria, Ghana, Togo waters'},
+  {name:'Strait of Malacca',lat:2.5,lon:101.5,radius:200000,incidents:15,risk:'MODERATE',desc:'Armed robbery, petty theft — worlds busiest shipping lane'},
+  {name:'Singapore Strait',lat:1.2,lon:104.0,radius:60000,incidents:12,risk:'MODERATE',desc:'Opportunistic boarding of anchored/slow vessels'},
+  {name:'Sulu-Celebes Sea',lat:6.0,lon:121.0,radius:250000,incidents:8,risk:'HIGH',desc:'Abu Sayyaf kidnapping threat, Philippines/Malaysia/Indonesia tri-border'},
+  {name:'Indian Ocean (Western)',lat:-2.0,lon:52.0,radius:400000,incidents:5,risk:'MODERATE',desc:'Somali piracy resurgence risk, long-range skiff attacks'},
+  {name:'Caribbean (Venezuela)',lat:11.5,lon:-67.0,radius:150000,incidents:6,risk:'MODERATE',desc:'Armed robbery targeting yachts and fishing vessels'},
+  {name:'Bangladesh/Myanmar Coast',lat:21.0,lon:90.0,radius:100000,incidents:4,risk:'LOW',desc:'Rohingya refugee boat interceptions, petty theft'},
+];
+
+const CYBER_THREAT_ORIGINS=[
+  {name:'GRU Unit 74455 (Sandworm)',lat:55.75,lon:37.62,country:'RU',type:'STATE APT',threat:'EXTREME',desc:'Russian military intelligence, NotPetya, power grid attacks, Industroyer'},
+  {name:'Lazarus Group (Bureau 121)',lat:39.02,lon:125.75,country:'KP',type:'STATE APT',threat:'EXTREME',desc:'North Korean cyber army, WannaCry, Ronin Bridge, $2B+ crypto theft'},
+  {name:'APT41 (Winnti)',lat:31.23,lon:121.47,country:'CN',type:'STATE APT',threat:'HIGH',desc:'Chinese dual-purpose espionage/financial group, supply chain attacks'},
+  {name:'Charming Kitten (APT35)',lat:35.69,lon:51.39,country:'IR',type:'STATE APT',threat:'HIGH',desc:'Iranian IRGC-linked, targets defense and diplomats, credential phishing'},
+  {name:'Conti/Royal Successor',lat:55.75,lon:37.62,country:'RU',type:'RANSOMWARE',threat:'HIGH',desc:'Russian ransomware syndicate, targeted hospitals and critical infra'},
+  {name:'LockBit 3.0 Affiliates',lat:55.75,lon:37.62,country:'RU',type:'RANSOMWARE',threat:'EXTREME',desc:'Largest ransomware-as-a-service, disrupted by FBI Feb 2024 but resurging'},
+  {name:'Volt Typhoon',lat:39.90,lon:116.40,country:'CN',type:'STATE APT',threat:'EXTREME',desc:'Chinese pre-positioning in US critical infrastructure, living-off-the-land'},
+  {name:'Anonymous Sudan',lat:15.60,lon:32.53,country:'SD',type:'HACKTIVIST',threat:'MODERATE',desc:'Pro-Russian DDoS group, targeted Microsoft, hospitals, airports'},
+  {name:'CyberAv3ngers (IRGC)',lat:35.69,lon:51.39,country:'IR',type:'STATE APT',threat:'HIGH',desc:'IRGC-CEC linked, attacks on water systems and PLCs worldwide'},
+  {name:'Turla (Snake)',lat:55.75,lon:37.62,country:'RU',type:'STATE APT',threat:'HIGH',desc:'FSB-linked, 20yr espionage campaign, hijacks other APT infrastructure'},
+];
+
+const MILITARY_BASES=[
+  {name:'Diego Garcia (US/UK)',lat:-7.32,lon:72.42,type:'NAVAL/AIR',branch:'US NAVY/RAF',desc:'Strategic Indian Ocean base, B-2 bomber staging, submarine support'},
+  {name:'Camp Lemonnier',lat:11.55,lon:43.15,type:'EXPEDITIONARY',branch:'US AFRICOM',desc:'Only permanent US base in Africa, anti-terror ops, drone strikes'},
+  {name:'Ramstein Air Base',lat:49.44,lon:7.60,type:'AIR FORCE',branch:'USAFE',desc:'US Air Forces Europe HQ, Ukraine aid coordination hub'},
+  {name:'Thule Air Base',lat:76.53,lon:-68.70,type:'SPACE/RADAR',branch:'US SPACE FORCE',desc:'Northernmost US base, ballistic missile early warning radar'},
+  {name:'Pine Gap',lat:-23.80,lon:133.74,type:'SIGINT',branch:'CIA/NSA/ASD',desc:'Joint US-Australia signals intelligence facility, satellite ground station'},
+  {name:'Incirlik Air Base',lat:37.00,lon:35.43,type:'AIR FORCE',branch:'USAFE/TUAF',desc:'NATO tactical nuclear weapons storage, B61 gravity bombs'},
+  {name:'Kadena Air Base',lat:26.35,lon:127.77,type:'AIR FORCE',branch:'USAF PACAF',desc:'Largest US air base in Pacific, F-15C/E, KC-135, RC-135'},
+  {name:'Yokosuka Naval Base',lat:35.28,lon:139.67,type:'NAVAL',branch:'US 7TH FLEET',desc:'Largest US naval facility outside CONUS, carrier strike group homeport'},
+  {name:'HMNB Clyde (Faslane)',lat:56.07,lon:-4.82,type:'SUBMARINE',branch:'ROYAL NAVY',desc:'UK Trident SSBN base, continuous at-sea nuclear deterrent'},
+  {name:'Kaliningrad Oblast',lat:54.71,lon:20.51,type:'FORWARD',branch:'RUSSIAN NAVY/AF',desc:'Russian exclave, Baltic Fleet HQ, Iskander missiles, S-400'},
+  {name:'Tartus Naval Facility',lat:34.89,lon:35.89,type:'NAVAL',branch:'RUSSIAN NAVY',desc:'Only Russian naval base in Mediterranean, Syria logistics hub'},
+  {name:'Hainan/Yulin Naval',lat:18.22,lon:109.53,type:'SUBMARINE',branch:'PLA NAVY',desc:'Chinese SSBN base, underground sub pens, South China Sea projection'},
+  {name:'Djibouti (PLA)',lat:11.59,lon:43.15,type:'LOGISTICS',branch:'PLA',desc:'Chinas first overseas military base, 2017, near Camp Lemonnier'},
+  {name:'Ream Naval Base',lat:10.50,lon:103.63,type:'NAVAL',branch:'PLA NAVY',desc:'Chinese-funded expansion in Cambodia, strategic South China Sea access'},
+  {name:'Severomorsk',lat:69.07,lon:33.42,type:'NAVAL',branch:'RUSSIAN NORTHERN FLEET',desc:'HQ of Russias Northern Fleet, nuclear submarine base, Kola Peninsula'},
+  {name:'Guam (Andersen AFB)',lat:13.58,lon:144.93,type:'AIR/NAVAL',branch:'USAF/USN',desc:'B-52/B-2 forward deployment, Pacific power projection hub'},
+  {name:'Al Udeid Air Base',lat:25.12,lon:51.31,type:'AIR FORCE',branch:'US CENTCOM AFFOR',desc:'Largest US base in Middle East, Combined Air Ops Center'},
+  {name:'Okinawa (Camp Schwab)',lat:26.55,lon:128.05,type:'MARINE',branch:'USMC III MEF',desc:'Marine Corps forward presence, controversial base expansion'},
+];
+
+const RF_STATIONS=[
+  {name:'Lualualei VLF',lat:21.42,lon:-158.15,freq:'21.4 kHz',type:'VLF SUBMARINE COMMS',desc:'US Navy submarine communication, extremely low frequency'},
+  {name:'Cutler VLF',lat:44.65,lon:-67.28,freq:'24.0 kHz',type:'VLF SUBMARINE COMMS',desc:'Most powerful VLF transmitter in US, reaches subs worldwide'},
+  {name:'Harold E. Holt (NWC)',lat:-21.82,lon:114.17,freq:'19.8 kHz',type:'VLF SUBMARINE COMMS',desc:'US/Australia joint, communicates with Pacific submarine fleet'},
+  {name:'Murmansk-BN',lat:68.97,lon:33.07,freq:'HF Jam',type:'HF JAMMER',desc:'Russian strategic HF jamming system, can blanket entire NATO HF bands'},
+  {name:'Russian Kontayner OTH',lat:52.42,lon:44.58,freq:'3-30 MHz',type:'OTH RADAR',desc:'Over-the-horizon radar, 3000km range, detects stealth aircraft'},
+  {name:'JORN (Jindalee)',lat:-23.60,lon:134.45,freq:'5-30 MHz',type:'OTH RADAR',desc:'Australian OTH radar network, monitors air/sea from Java to S. China Sea'},
+  {name:'Cobra Dane',lat:52.74,lon:174.09,freq:'L-band',type:'SPACE TRACKING RADAR',desc:'US phased array, tracks ballistic missiles and space objects over Pacific'},
+  {name:'Fylingdales',lat:54.36,lon:-0.67,freq:'UHF',type:'BMEWS RADAR',desc:'UK/US ballistic missile early warning, AN/FPS-126 phased array'},
+  {name:'Qitai FAST-2',lat:44.15,lon:89.77,freq:'70 MHz-3GHz',type:'RADIO TELESCOPE',desc:'Chinese 110m steerable dish, dual use astronomical/military SIGINT capable'},
+  {name:'Misawa Security Ops',lat:40.70,lon:141.38,freq:'Multi',type:'SIGINT GROUND STATION',desc:'NSA/USAF signals intelligence, Echelon network, monitors Pacific/Asia'},
+];
+
+const DRONE_HOTSPOTS=[
+  {name:'Ukraine Front Line UAS',lat:48.2,lon:37.5,radius:200000,type:'COMBAT',density:'EXTREME',desc:'FPV drones, Shahed-136 kamikaze, Bayraktar TB2, Lancet — heaviest drone warfare in history'},
+  {name:'Houthi UAV Launch Zone',lat:15.5,lon:44.0,radius:150000,type:'COMBAT',density:'HIGH',desc:'Samad/Qasef suicide drones targeting Saudi Arabia, Red Sea shipping'},
+  {name:'Gaza/Israel Drone Corridor',lat:31.5,lon:34.5,radius:80000,type:'COMBAT',density:'HIGH',desc:'IDF Hermes 450/900, Hamas modified commercial drones, Hezbollah surveillance UAVs'},
+  {name:'US-Mexico Border (CBP)',lat:32.0,lon:-111.0,radius:300000,type:'SURVEILLANCE',density:'HIGH',desc:'CBP Predator B drones, persistent surveillance along Arizona/Texas border'},
+  {name:'UK Drone Incursion Zone',lat:51.2,lon:0.5,radius:100000,type:'UNKNOWN',density:'MODERATE',desc:'2024 unidentified drone swarms over RAF bases, still unexplained'},
+  {name:'South China Sea ISR',lat:16.0,lon:112.0,radius:300000,type:'SURVEILLANCE',density:'HIGH',desc:'PLA WZ-7 Soaring Dragon, BZK-005 MALE drones over contested waters'},
+  {name:'Sahel Drone Strikes',lat:14.0,lon:1.0,radius:300000,type:'COMBAT',density:'MODERATE',desc:'French Reaper strikes (ended), Turkish Bayraktar sales to Mali/Niger juntas'},
+  {name:'Iran/Iraq Border UAS',lat:33.5,lon:45.5,radius:150000,type:'COMBAT',density:'MODERATE',desc:'Iranian Shahed drones, Iraqi militia reconnaissance UAVs'},
+];
+
+const CONFLICT_ZONES=[
+  {name:'Ukraine - Eastern Front',lat:48.5,lon:37.5,radius:250000,intensity:'WAR',fatalities:'500K+',desc:'Full-scale war, Donbas/Zaporizhzhia front, daily artillery/drone exchanges'},
+  {name:'Gaza/Israel',lat:31.5,lon:34.5,radius:50000,intensity:'WAR',fatalities:'40K+',desc:'IDF ground operation, massive civilian casualties, Hamas tunnel warfare'},
+  {name:'Sudan Civil War',lat:15.5,lon:32.5,radius:400000,intensity:'WAR',fatalities:'15K+',desc:'RSF vs SAF, ethnic cleansing in Darfur, Khartoum devastated'},
+  {name:'Myanmar Civil War',lat:19.8,lon:96.2,radius:350000,intensity:'WAR',fatalities:'10K+',desc:'Junta vs resistance, ethnic armies gaining territory, air strikes on civilians'},
+  {name:'Eastern DRC (M23/ADF)',lat:-1.5,lon:29.0,radius:200000,intensity:'HIGH',fatalities:'5K+',desc:'M23 Rwanda-backed advance, ADF-ISIS attacks, Goma besieged'},
+  {name:'Sahel Insurgency',lat:14.5,lon:0.0,radius:500000,intensity:'HIGH',fatalities:'8K+',desc:'JNIM/ISGS jihadi groups, military junta coups, French withdrawal'},
+  {name:'Ethiopia (Amhara/Oromia)',lat:9.0,lon:38.7,radius:250000,intensity:'MODERATE',fatalities:'2K+',desc:'Fano militia uprising, Oromia insurgency, post-Tigray instability'},
+  {name:'Pakistan (Balochistan/KP)',lat:30.0,lon:67.0,radius:300000,intensity:'MODERATE',fatalities:'1K+',desc:'TTP resurgence, BLA separatism, cross-border Afghan militant attacks'},
+  {name:'Somalia (Al-Shabaab)',lat:2.0,lon:45.3,radius:300000,intensity:'MODERATE',fatalities:'3K+',desc:'Al-Shabaab control rural areas, AU/Somali govt offensives'},
+  {name:'Haiti (Gang Violence)',lat:18.5,lon:-72.3,radius:50000,intensity:'HIGH',fatalities:'5K+',desc:'Armed gangs control 80%+ of Port-au-Prince, state collapse'},
+  {name:'Colombia (ELN/Dissident)',lat:7.0,lon:-73.0,radius:300000,intensity:'MODERATE',fatalities:'1K+',desc:'ELN and FARC dissidents, coca production zones, peace talks stalled'},
+  {name:'India-Pakistan LoC',lat:34.0,lon:75.0,radius:100000,intensity:'LOW',fatalities:'Low',desc:'Line of Control tension, periodic shelling, drone incursions'},
+  {name:'South China Sea Standoff',lat:14.5,lon:116.0,radius:300000,intensity:'LOW',fatalities:'0',desc:'PLA Coast Guard vs Philippines/Vietnam, water cannon, ramming incidents'},
+  {name:'Lebanon (Hezbollah/Israel)',lat:33.3,lon:35.5,radius:80000,intensity:'HIGH',fatalities:'2K+',desc:'Cross-border strikes, Israeli ground incursion, Hezbollah rocket barrages'},
+];
+
+
+/* Severity words, ranked. Every reference table uses its own field name for
+   the same idea, so this maps all of them onto one scale rather than teaching
+   each layer its own colours. */
+const SEV_COLOUR = {
+  EXTREME: '#ff3355', CRITICAL: '#ff3355', WAR: '#ff3355',
+  HIGH: '#ff8800', SEVERE: '#ff8800', ELEVATED: '#ff8800', ACTIVE: '#ff8800',
+  MODERATE: '#ffcc00', MEDIUM: '#ffcc00', WARM: '#ffcc00',
+  LOW: '#00ff88', NORMAL: '#00ff88', STABLE: '#00ff88',
+};
+const sevColour = (...vals) => {
+  for (const v of vals) {
+    const c = SEV_COLOUR[String(v || '').toUpperCase()];
+    if (c) return c;
+  }
+  return '#7a8a9a';
+};
+
+/* One renderer for every point-shaped reference table. They differ only in
+   which fields carry the severity and what the readout should call them. */
+function refPoints(ds, rows, opts) {
+  ds.entities.removeAll();
+  for (const r of rows) {
+    if (typeof r.lat !== 'number' || typeof r.lon !== 'number') continue;
+    const col = Cesium.Color.fromCssColorString(
+      sevColour(...(opts.sev || []).map((k) => r[k])));
+    const e = ds.entities.add({
+      position: Cesium.Cartesian3.fromDegrees(r.lon, r.lat, 0),
+      point: {
+        pixelSize: 11, color: col.withAlpha(0.25), outlineColor: col, outlineWidth: 2,
+        disableDepthTestDistance: Number.POSITIVE_INFINITY,
+      },
+      label: {
+        text: r.name.toUpperCase(), font: '9px "Share Tech Mono", monospace',
+        fillColor: col, showBackground: true,
+        backgroundColor: Cesium.Color.fromCssColorString('#03060c').withAlpha(0.85),
+        pixelOffset: new Cesium.Cartesian2(0, -20),
+        disableDepthTestDistance: Number.POSITIVE_INFINITY,
+        distanceDisplayCondition: new Cesium.DistanceDisplayCondition(0, 9.0e6),
+      },
+    });
+    /* The radius fields are a claimed area of effect, not a measured boundary.
+       Drawn faintly and only when one is given, so it reads as an annotation
+       rather than a survey. */
+    if (r.radius) {
+      e.ellipse = {
+        semiMajorAxis: r.radius, semiMinorAxis: r.radius,
+        material: col.withAlpha(0.06),
+        outline: true, outlineColor: col.withAlpha(0.35),
+        height: 0,
+      };
+    }
+    e._meta = Object.assign({ kind: 'REF', layer: opts.label }, r);
+  }
+}
+
+/* Cables are routes, not points. */
+function refCables(ds, rows) {
+  ds.entities.removeAll();
+  for (const r of rows) {
+    if (!Array.isArray(r.pts) || r.pts.length < 2) continue;
+    const live = String(r.status || '').toUpperCase() !== 'RETIRED';
+    const col = Cesium.Color.fromCssColorString(live ? '#00e8ff' : '#7a8a9a');
+    const e = ds.entities.add({
+      polyline: {
+        positions: Cesium.Cartesian3.fromDegreesArray(r.pts.flatMap((p) => [p[1], p[0]])),
+        width: live ? 2 : 1.5,
+        material: new Cesium.PolylineGlowMaterialProperty({
+          glowPower: 0.2, color: col.withAlpha(live ? 0.75 : 0.35),
+        }),
+        clampToGround: false,
+      },
+    });
+    e._meta = Object.assign({ kind: 'REF', layer: 'SEA CABLE' }, r,
+      { lat: r.pts[0][0], lon: r.pts[0][1] });
+  }
+}
+
+/* ---- earthquakes: USGS, magnitude 2.5+, last 24 hours ------------------- */
+const USGS_URL = 'https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/2.5_day.geojson';
+async function loadQuakes(ds) {
+  ds.entities.removeAll();
+  const r = await fetch(USGS_URL, { signal: AbortSignal.timeout(20000) });
+  if (!r.ok) throw new Error('usgs ' + r.status);
+  const feats = (await r.json()).features || [];
+  for (const f of feats) {
+    const c = f.geometry && f.geometry.coordinates;
+    const p = f.properties || {};
+    if (!c || typeof c[0] !== 'number') continue;
+    const m = p.mag || 0;
+    const col = Cesium.Color.fromCssColorString(
+      m >= 6 ? '#ff3355' : m >= 5 ? '#ff8800' : m >= 4 ? '#ffcc00' : '#00ff88');
+    const e = ds.entities.add({
+      position: Cesium.Cartesian3.fromDegrees(c[0], c[1], 0),
+      point: {
+        // Area with magnitude, not radius — a M6 releases about a thousand
+        // times the energy of a M4 and a linear scale hides that entirely.
+        pixelSize: Math.max(5, Math.min(26, Math.pow(2, m - 1.5))),
+        color: col.withAlpha(0.3), outlineColor: col, outlineWidth: 1.5,
+        disableDepthTestDistance: Number.POSITIVE_INFINITY,
+      },
+      label: m >= 5 ? {
+        text: 'M' + m.toFixed(1), font: '9px "Share Tech Mono", monospace',
+        fillColor: col, showBackground: true,
+        backgroundColor: Cesium.Color.fromCssColorString('#03060c').withAlpha(0.85),
+        pixelOffset: new Cesium.Cartesian2(0, -18),
+        disableDepthTestDistance: Number.POSITIVE_INFINITY,
+      } : undefined,
+    });
+    e._meta = { kind: 'QUAKE', name: 'M' + m.toFixed(1), mag: m,
+                place: p.place || '—', depth: (c[2] != null ? c[2] : null),
+                time: p.time ? new Date(p.time).toISOString().slice(0, 16).replace('T', ' ') : '—',
+                tsunami: p.tsunami, lat: c[1], lon: c[0] };
+  }
+  return feats.length;
+}
+
+/* Every layer, as data. Order inside a group is the order it is drawn in the
+   panel. `prov` is 'live' when the source changes on its own and 'ref' when it
+   is a table in this file. */
+const LAYER_DEFS = [
+  { id:'ships',   g:'sea',  label:'VESSELS',        prov:'live', src:'AIS via Digitraffic (Baltic only)' },
+  { id:'cams',    g:'sea',  label:'CAMERAS',        prov:'live', src:'TfL and Caltrans open data' },
+  { id:'bldg',    g:'sea',  label:'BUILDINGS',      prov:'live', src:'OpenStreetMap, via Cesium ion' },
+
+  { id:'warn',    g:'haz',  label:'WARNINGS',       prov:'live', src:'GDACS (EC JRC / UN OCHA)' },
+  { id:'fires',   g:'haz',  label:'FIRES',          prov:'live', src:'NASA FIRMS' },
+  { id:'quakes',  g:'haz',  label:'EARTHQUAKES',    prov:'live', src:'USGS, M2.5+ last 24h',
+    ds:'quakes', load:loadQuakes },
+
+  { id:'chokes',  g:'sec',  label:'CHOKEPOINTS',    prov:'ref',  src:'editorial status table' },
+  { id:'conflict',g:'sec',  label:'CONFLICTS',      prov:'ref',  src:'conflict zone table',
+    ds:'conflict', rows:() => CONFLICT_ZONES, sev:['intensity'] },
+  { id:'piracy',  g:'sec',  label:'PIRACY',         prov:'ref',  src:'piracy risk zones',
+    ds:'piracy', rows:() => PIRACY_ZONES, sev:['risk'] },
+  { id:'drones',  g:'sec',  label:'DRONE ZONES',    prov:'ref',  src:'reported UAS zones',
+    ds:'drones', rows:() => DRONE_HOTSPOTS, sev:['density'] },
+  { id:'cyber',   g:'sec',  label:'CYBER ORIGINS',  prov:'ref',  src:'threat-origin table',
+    ds:'cyber', rows:() => CYBER_THREAT_ORIGINS, sev:['threat'] },
+  { id:'rf',      g:'sec',  label:'RF SIGNALS',     prov:'ref',  src:'RF / SIGINT site table',
+    ds:'rf', rows:() => RF_STATIONS, sev:[] },
+
+  { id:'cables',  g:'inf',  label:'SEA CABLES',     prov:'ref',  src:'cable route list',
+    ds:'cables', cables:true },
+  { id:'nukes',   g:'inf',  label:'NUCLEAR',        prov:'ref',  src:'facility list',
+    ds:'nukes', rows:() => NUCLEAR_FACILITIES, sev:['risk','status'] },
+  { id:'bases',   g:'inf',  label:'STRATEGIC SITES',prov:'ref',  src:'curated, reviewed by hand',
+    ds:'bases', rows:() => MILITARY_BASES, sev:[] },
+  { id:'inst',    g:'inf',  label:'INSTALLATIONS',  prov:'live', src:'OpenStreetMap via Overpass' },
+];
+const LAYER_GROUPS = [
+  ['sea', 'SEA &amp; SURFACE'], ['haz', 'HAZARDS'],
+  ['sec', 'SECURITY'], ['inf', 'INFRASTRUCTURE'],
+];
+const layerOn = {};
+const layerDs = {};
+const layerErr = {};
+/* Seeded from what is actually on rather than assumed off — buildings and
+   installations were already running before the panel existed, and a toggle
+   that shows the wrong state is worse than no toggle. */
+const LAYER_DEFAULT_ON = { bldg: true, inst: true };
+for (const d of LAYER_DEFS) {
+  layerOn[d.id] = Boolean(LAYER_DEFAULT_ON[d.id]);
+  if (d.ds) { layerDs[d.id] = new Cesium.CustomDataSource(d.ds); viewer.dataSources.add(layerDs[d.id]); }
+}
+
+/* Layers that predate the registry keep their own loaders; the registry drives
+   them through this rather than duplicating their logic. */
+const LEGACY = {
+  ships: (on) => { shipsOn = on; loadShips(); },
+  cams:  (on) => { camsOn = on; loadCams(); },
+  warn:  (on) => { warnOn = on; loadWarnings(); },
+  fires: (on) => { firesOn = on; loadFires(); },
+  chokes:(on) => { chokesOn = on; renderChokepoints(); },
+  inst:  (on) => { instOn = on; loadInstallations(); },
+  bldg:  (on) => { setBuildings(on); },
+};
+
+async function setLayer(id, on) {
+  const d = LAYER_DEFS.find((x) => x.id === id);
+  if (!d) return;
+  layerOn[id] = on;
+  layerErr[id] = null;
+  renderLayerPanel();
+  try {
+    if (LEGACY[id]) { LEGACY[id](on); return; }
+    const ds = layerDs[id];
+    if (!on) { ds.entities.removeAll(); return; }
+    if (d.cables) refCables(ds, SUBMARINE_CABLES);
+    else if (d.rows) refPoints(ds, d.rows(), { sev: d.sev, label: d.label });
+    else if (d.load) await d.load(ds);
+  } catch (e) {
+    layerErr[id] = (e && e.message) || 'failed';
+    layerOn[id] = false;
+  }
+  renderLayerPanel();
+}
+
+function renderLayerPanel() {
+  const host = document.getElementById('layerList');
+  if (!host) return;
+  let onTotal = 0;
+  const html = LAYER_GROUPS.map(([g, title]) => {
+    const items = LAYER_DEFS.filter((d) => d.g === g);
+    const on = items.filter((d) => layerOn[d.id]).length;
+    onTotal += on;
+    return '<div class="lgrp"><div class="lgHead">' + title
+      + '<b>' + on + '/' + items.length + '</b>'
+      + '<span class="lgAll" data-all="' + g + '">ALL</span>'
+      + '<span class="lgAll" data-none="' + g + '">NONE</span></div>'
+      + '<div class="lgBody">' + items.map((d) => {
+        const cls = 'lbtn' + (layerOn[d.id] ? ' on' : '') + (d.prov === 'ref' ? ' ref' : '')
+          + (layerErr[d.id] ? ' err' : '');
+        const tip = (d.prov === 'ref'
+          ? 'REFERENCE — ' + d.src + '. A fixed table in this build, not a live feed: '
+            + 'it changes when the file is edited, not when the world does.'
+          : 'LIVE — ' + d.src + '.') + (layerErr[d.id] ? '\n\nLast attempt failed: ' + layerErr[d.id] : '');
+        return '<button class="' + cls + '" data-layer="' + d.id + '" title="' + tip + '">'
+          + d.label + '</button>';
+      }).join('') + '</div></div>';
+  }).join('');
+  const refs = LAYER_DEFS.filter((d) => d.prov === 'ref').length;
+  host.innerHTML = html
+    + '<div class="provLegend"><span class="prov live">LIVE</span>fed continuously'
+    + '<span class="prov ref">REF</span>fixed table &middot; ' + refs + ' layers</div>';
+  document.getElementById('layerCount').textContent = onTotal + '/' + LAYER_DEFS.length;
+}
+
+document.getElementById('layerList').addEventListener('click', (ev) => {
+  const b = ev.target.closest('[data-layer]');
+  if (b) { setLayer(b.dataset.layer, !layerOn[b.dataset.layer]); return; }
+  const all = ev.target.closest('[data-all]');
+  if (all) { for (const d of LAYER_DEFS.filter((x) => x.g === all.dataset.all)) setLayer(d.id, true); return; }
+  const none = ev.target.closest('[data-none]');
+  if (none) { for (const d of LAYER_DEFS.filter((x) => x.g === none.dataset.none)) setLayer(d.id, false); }
+});
+document.getElementById('btnLayers').onclick = function () {
+  const p = document.getElementById('layerPanel');
+  p.hidden = !p.hidden;
+  this.classList.toggle('on', !p.hidden);
+};
+renderLayerPanel();
 
 /* ------------------------------------------------------------------ go */
 (async () => {
