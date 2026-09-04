@@ -241,12 +241,119 @@ body.flying .panel:hover,body.flying .read:hover,body.flying .ctl:hover{opacity:
   background:#03060c;z-index:50;font-family:'Orbitron',sans-serif;letter-spacing:6px;
   color:var(--c);font-size:13px;transition:opacity .6s}
 .load.gone{opacity:0;pointer-events:none}
+
+/* ---------------------------------------------------------------- embed
+
+   The board runs inside another product's page as well as on its own, and it
+   runs on a phone. Both were impossible before: the HUD is pinned to four
+   corners at fixed pixel widths, so at 375px the left column covered the globe,
+   the control bar's `max-width: calc(100vw - 300px)` computed to a NEGATIVE
+   width, and the readout's 250px minimum pushed itself off the right edge.
+
+   Everything here is additive and gated on classes the page only sets when it
+   is asked to:
+
+     embed        from ?embed=1. Drops the chrome that belongs to the standalone
+                  app: its own title bar and its own credits link, which are
+                  duplicated by whatever is hosting it.
+     compact      from the VIEWPORT, not from embed, so a narrow standalone
+                  window gets the same treatment as a phone in an iframe and a
+                  wide iframe on a desktop gets none of it.
+     hud-drawer   embed OR compact. The left panels become a drawer behind one
+                  button instead of covering the thing they annotate.
+     panels-open  the drawer's state. Open by default when there is room for it,
+                  closed on a phone, and the button flips it either way.
+
+   The classes go on <html>, not <body>, so the inline script at the end of
+   <head> can set them before the first paint. On <body> the page would flash
+   the full desktop HUD and then rearrange, which on a phone is a visible jump
+   from "covered in panels" to "a globe". */
+html.embed .bar{display:none}
+html.embed .lcol{top:58px}
+
+/* The drawer. Moved off screen rather than display:none, so it slides instead
+   of appearing and anything inside it that measures itself still can. */
+/* Both ends are an explicit translateX so the pair interpolates without the
+   engine having to read a keyword as a transform. */
+html.hud-drawer .lcol{transform:translateX(calc(-100% - 16px));transition:transform .22s ease;z-index:20}
+html.hud-drawer.panels-open .lcol{transform:translateX(0)}
+/* WITHOUT THIS THE DRAWER CAN NEVER OPEN, rather than opening abruptly. The
+   open state is the END of a transition, and a paused or suppressed transition
+   leaves the panel at the closed position with the class already applied. That
+   is not hypothetical: measured in a background document, getAnimations()
+   reported the transition running with currentTime stuck at 0 and the panel
+   never moved. A reader who has asked for less motion would hit the same wall,
+   so they get the state with no journey to it. */
+@media (prefers-reduced-motion: reduce){
+  html.hud-drawer .lcol{transition:none}
+}
+html.hud-drawer #panelToggle{display:inline-flex}
+
+html.compact .lcol{top:58px;bottom:152px;width:min(240px,78vw)}
+html.compact .ctl{
+  max-width:calc(100vw - 24px);right:12px;bottom:10px;
+  /* Wrapping a six group bar on a phone eats half the screen. One scrolling row
+     keeps every control reachable and the globe visible. */
+  flex-wrap:nowrap;overflow-x:auto;scrollbar-width:none}
+html.compact .ctl::-webkit-scrollbar{height:0}
+html.compact .read{left:12px;right:12px;min-width:0;bottom:58px;max-height:42vh;overflow-y:auto}
+html.compact .brand{font-size:10px;letter-spacing:3px}
+html.compact .cls{display:none}
+
+/* The drawer button. Hidden by default: the desktop standalone board has room
+   for its panels and does not need it. 40px tall because it is the one control
+   that gets pressed one handed. */
+#panelToggle{display:none;position:fixed;top:10px;left:12px;z-index:30;
+  align-items:center;gap:6px;background:var(--pnl);border:1px solid var(--brd);
+  border-radius:4px;color:var(--c);font-family:'Orbitron',sans-serif;font-size:9px;
+  letter-spacing:2px;padding:8px 11px;cursor:pointer;backdrop-filter:blur(12px);min-height:40px}
+#panelToggle:hover{color:var(--tm)}
+html.panels-open #panelToggle{background:var(--cd);border-color:var(--cg)}
+
+/* On a phone the standalone board STILL HAS ITS TITLE BAR, and the button was
+   landing on top of it: LAYERS sat over the word SENTINEL. Embed mode has no
+   bar to collide with, so this is the one case that needs handling. The button
+   moves into the bar rather than below it - a second row of chrome on a 375px
+   screen costs more than the brand does. */
+html.compact:not(.embed) .bar{padding-left:100px}
+html.compact:not(.embed) #panelToggle{top:5px;min-height:28px;padding:6px 10px}
+
+html.embed .cesium-viewer-bottom{display:none!important}
 </style>
+<script>
+/* Set the layout classes BEFORE the first paint.
+   In <head> and on <html> deliberately: on <body>, or in the main script at the
+   bottom, the page paints the full desktop HUD and then rearranges, which on a
+   phone is a visible jump from "covered in panels" to "a globe". */
+(function () {
+  try {
+    var q = new URLSearchParams(location.search);
+    var c = document.documentElement.classList;
+    var embed = q.get('embed') === '1';
+    if (embed) c.add('embed');
+    var wasCompact = null;
+    var apply = function () {
+      var compact = window.innerWidth < 820;
+      c.toggle('compact', compact);
+      c.toggle('hud-drawer', compact || embed);
+      // Open by default when there is room, closed on a phone. Only decided
+      // here on the first pass and on a size CHANGE that crosses the boundary,
+      // so a resize never yanks the drawer shut under somebody's hand.
+      if (compact === wasCompact) return;
+      wasCompact = compact;
+      c.toggle('panels-open', !compact);
+    };
+    apply();
+    window.addEventListener('resize', apply);
+  } catch (e) { /* the board still works with the desktop layout */ }
+})();
+</script>
 </head>
 <body>
 <div id="globe"></div>
 
 <div class="hud">
+  <button id="panelToggle" type="button" aria-label="Show or hide the panels">LAYERS</button>
   <div class="bar">
     <span class="brand">SENTINEL // GLOBE</span>
     <span class="cls">OSINT · UNCLASSIFIED · OPEN SOURCES</span>
@@ -651,6 +758,60 @@ scene.fog.enabled = true;
 viewer.camera.setView({
   destination: Cesium.Cartesian3.fromDegrees(10, 45, 9_000_000),
 });
+
+/* ------------------------------------------------------- host integration
+
+   The board can be opened pointed at somewhere, which is what makes it useful
+   inside another product rather than beside it: MyMomo's Travel feature links
+   here with the destination of the next trip, so "what is going on where I am
+   flying to" is one tap rather than a search.
+
+     ?focus=<lat>,<lon>   fly there on load
+     ?alt=<metres>        how far out to sit, default 1,200 km
+     ?label=<text>        a marker, so the place is named on the globe
+
+   Every parameter is optional and every one is validated. A malformed focus is
+   ignored rather than throwing, because the board dropping to a blank screen is
+   a far worse answer to a bad query string than simply opening where it always
+   does. `label` is written through Cesium's own label entity, never into HTML,
+   so a hostile value is text on a globe and nothing else. */
+(function () {
+  try {
+    const q = new URLSearchParams(location.search);
+    const btn = document.getElementById('panelToggle');
+    if (btn) btn.onclick = () => document.documentElement.classList.toggle('panels-open');
+
+    const focus = (q.get('focus') || '').split(',');
+    const lat = Number(focus[0]), lon = Number(focus[1]);
+    if (!Number.isFinite(lat) || !Number.isFinite(lon)) return;
+    if (Math.abs(lat) > 90 || Math.abs(lon) > 180) return;
+
+    const alt = Math.min(Math.max(Number(q.get('alt')) || 1_200_000, 2_000), 20_000_000);
+    viewer.camera.setView({ destination: Cesium.Cartesian3.fromDegrees(lon, lat, alt) });
+
+    const label = (q.get('label') || '').slice(0, 60);
+    if (!label) return;
+    viewer.entities.add({
+      position: Cesium.Cartesian3.fromDegrees(lon, lat),
+      point: { pixelSize: 9, color: Cesium.Color.fromCssColorString('#00e8ff'),
+        outlineColor: Cesium.Color.fromCssColorString('#03060c'), outlineWidth: 2,
+        disableDepthTestDistance: 0 },
+      label: {
+        text: label, font: '11px "Share Tech Mono", monospace',
+        fillColor: Cesium.Color.fromCssColorString('#00e8ff'),
+        showBackground: true,
+        backgroundColor: Cesium.Color.fromCssColorString('rgba(5,10,20,0.85)'),
+        pixelOffset: new Cesium.Cartesian2(0, -18),
+        verticalOrigin: Cesium.VerticalOrigin.BOTTOM,
+        // Hidden once the camera is far enough out that the label would sit on
+        // the wrong side of the planet.
+        distanceDisplayCondition: new Cesium.DistanceDisplayCondition(0, 14_000_000),
+      },
+    });
+  } catch (e) {
+    console.warn('[globe] host parameters ignored:', e && e.message);
+  }
+})();
 
 /* ------------------------------------------------------------------ hud */
 setInterval(() => {
