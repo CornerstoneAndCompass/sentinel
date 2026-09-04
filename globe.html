@@ -7,6 +7,7 @@
 <meta name="robots" content="noindex, nofollow, noarchive, nosnippet">
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/cesium/1.124.0/Widgets/widgets.css">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/cesium/1.124.0/Cesium.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/satellite.js/5.0.0/satellite.min.js"></script>
 <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;500;700;900&family=Share+Tech+Mono&display=swap" rel="stylesheet">
 <style>
 /* Prototype only. This exists to answer one question — does a 3D globe close
@@ -530,6 +531,18 @@ ssc.inertiaZoom = 0.5;
        down came out pointing at the ground, when on screen it climbs towards
        the horizon. That difference is perspective, and only projecting real
        points captures it. */
+/* How close something has to be before it is allowed to ignore the depth
+   buffer. Markers sit on the ellipsoid at height zero, so real terrain is
+   often above them and a strict depth test hides a camera pin behind the hill
+   it is standing on. Skipping the test entirely fixes that and causes a worse
+   bug: the marker then ignores the whole planet, so chokepoints on the far
+   side of the Earth draw straight through it — Panama over Papua New Guinea.
+
+   A finite distance gets both. Inside two hundred kilometres the depth test is
+   skipped and local relief cannot swallow a marker; beyond it the test applies
+   and the globe occludes what is behind it. */
+const NEAR_DEPTH_SKIP = 200000;
+
 const ROT_CARTO = new Cesium.Cartographic();
 const ROT_AHEAD = new Cesium.Cartesian3();
 const ROT_W0 = new Cesium.Cartesian2();
@@ -1246,7 +1259,7 @@ async function loadCams() {
         pixelSize: 11, color: PURPLE.withAlpha(0.95),
         outlineColor: Cesium.Color.BLACK.withAlpha(0.85), outlineWidth: 2,
         heightReference: Cesium.HeightReference.CLAMP_TO_GROUND,
-        disableDepthTestDistance: Number.POSITIVE_INFINITY,
+        disableDepthTestDistance: NEAR_DEPTH_SKIP,
         distanceDisplayCondition: new Cesium.DistanceDisplayCondition(0, 600000),
       },
     });
@@ -1261,7 +1274,7 @@ async function loadCams() {
         width: 132, height: 74,
         verticalOrigin: Cesium.VerticalOrigin.BOTTOM,
         pixelOffset: new Cesium.Cartesian2(0, -14),
-        disableDepthTestDistance: Number.POSITIVE_INFINITY,
+        disableDepthTestDistance: NEAR_DEPTH_SKIP,
         scaleByDistance: new Cesium.NearFarScalar(2000, 1.0, 260000, 0.45),
         distanceDisplayCondition: new Cesium.DistanceDisplayCondition(0, 300000),
       };
@@ -1272,7 +1285,7 @@ async function loadCams() {
         backgroundColor: Cesium.Color.fromCssColorString('#03060c').withAlpha(0.85),
         verticalOrigin: Cesium.VerticalOrigin.BOTTOM,
         pixelOffset: new Cesium.Cartesian2(0, -90),
-        disableDepthTestDistance: Number.POSITIVE_INFINITY,
+        disableDepthTestDistance: NEAR_DEPTH_SKIP,
         distanceDisplayCondition: new Cesium.DistanceDisplayCondition(0, 300000),
       };
       e._isThumb = true;
@@ -1377,6 +1390,42 @@ function showContact(m) {
   sq.textContent = alert ? alert : (m.squawk ? 'SQ ' + m.squawk : '');
   sq.className = alert ? 'hot' : '';
 
+  if (m.kind === 'SAT') {
+    document.getElementById('rdGrid').innerHTML =
+      '<span class="k">ALTITUDE</span><span class="v">' + fmt(Math.round(m.altM / 1000), ' km') + '</span>'
+      + '<span class="k">LATITUDE</span><span class="v">' + m.lat.toFixed(2) + '&deg;</span>'
+      + '<span class="k">LONGITUDE</span><span class="v">' + m.lon.toFixed(2) + '&deg;</span>';
+    document.getElementById('rdSub').textContent =
+      'Position predicted from CelesTrak orbital elements by SGP4, computed in this '
+      + 'browser. Not a report of where it is — a calculation of where it should be.';
+    document.getElementById('nearPanel').style.display = 'none';
+    return;
+  }
+  if (m.kind === 'LAUNCH') {
+    document.getElementById('rdGrid').innerHTML =
+      '<span class="k">WINDOW</span><span class="v">' + m.net + ' UTC</span>'
+      + '<span class="k">STATUS</span><span class="v">' + (m.status || '—') + '</span>'
+      + '<span class="k">PAD</span><span class="v">' + m.pad + '</span>';
+    document.getElementById('rdSub').textContent = m.site + ' · Launch Library 2';
+    document.getElementById('nearPanel').style.display = 'none';
+    return;
+  }
+  if (m.kind === 'DARK') {
+    document.getElementById('rdGrid').innerHTML =
+      '<span class="k">EVENT</span><span class="v">' + m.type + '</span>'
+      + '<span class="k">FLAG</span><span class="v">' + m.flag + '</span>'
+      + '<span class="k">TYPE</span><span class="v">' + m.vtype + '</span>'
+      + '<span class="k">FROM SHORE</span><span class="v">' + fmt(m.shoreKm, ' km') + '</span>'
+      + '<span class="k">SEEN</span><span class="v">' + m.start + '</span>';
+    document.getElementById('rdSub').textContent =
+      m.type === 'GAP' ? 'AIS transmission stopped and resumed elsewhere. Global Fishing Watch, '
+        + 'about five days behind live.'
+      : m.type === 'LOITERING' ? 'Vessel held position away from port. Global Fishing Watch, '
+        + 'about five days behind live.'
+      : 'Two vessels met at sea. Global Fishing Watch, about five days behind live.';
+    document.getElementById('nearPanel').style.display = 'none';
+    return;
+  }
   if (m.kind === 'QUAKE') {
     document.getElementById('rdGrid').innerHTML =
       '<span class="k">MAGNITUDE</span><span class="v">M' + m.mag.toFixed(1) + '</span>'
@@ -1936,14 +1985,14 @@ function renderChokepoints() {
       position: Cesium.Cartesian3.fromDegrees(c.lon, c.lat, 0),
       point: {
         pixelSize: 13, color: col.withAlpha(0.25), outlineColor: col, outlineWidth: 2,
-        disableDepthTestDistance: Number.POSITIVE_INFINITY,
+        disableDepthTestDistance: NEAR_DEPTH_SKIP,
       },
       label: {
         text: c.name.toUpperCase(), font: '10px "Share Tech Mono", monospace',
         fillColor: col, showBackground: true,
         backgroundColor: Cesium.Color.fromCssColorString('#03060c').withAlpha(0.85),
         pixelOffset: new Cesium.Cartesian2(0, -22),
-        disableDepthTestDistance: Number.POSITIVE_INFINITY,
+        disableDepthTestDistance: NEAR_DEPTH_SKIP,
       },
     });
     e._meta = { kind: 'CHOKE', name: c.name, status: c.status,
@@ -2639,14 +2688,14 @@ async function loadWarnings() {
       point: {
         pixelSize: p.alertlevel === 'Red' ? 15 : 11,
         color: col.withAlpha(0.22), outlineColor: col, outlineWidth: 2,
-        disableDepthTestDistance: Number.POSITIVE_INFINITY,
+        disableDepthTestDistance: NEAR_DEPTH_SKIP,
       },
       label: {
         text: kind, font: '9px "Share Tech Mono", monospace', fillColor: col,
         showBackground: true,
         backgroundColor: Cesium.Color.fromCssColorString('#03060c').withAlpha(0.85),
         pixelOffset: new Cesium.Cartesian2(0, -20),
-        disableDepthTestDistance: Number.POSITIVE_INFINITY,
+        disableDepthTestDistance: NEAR_DEPTH_SKIP,
         distanceDisplayCondition: new Cesium.DistanceDisplayCondition(0, 9.0e6),
       },
     });
@@ -2701,7 +2750,7 @@ async function loadFires() {
       point: {
         pixelSize: frp > 100 ? 9 : frp > 30 ? 7 : 5,
         color: Cesium.Color.fromCssColorString(col).withAlpha(0.9),
-        disableDepthTestDistance: Number.POSITIVE_INFINITY,
+        disableDepthTestDistance: NEAR_DEPTH_SKIP,
         distanceDisplayCondition: new Cesium.DistanceDisplayCondition(0, 3.0e6),
       },
     });
@@ -2757,7 +2806,7 @@ async function loadShips() {
       point: {
         pixelSize: under ? 6 : 4,
         color: Cesium.Color.fromCssColorString(col).withAlpha(under ? 0.95 : 0.55),
-        disableDepthTestDistance: Number.POSITIVE_INFINITY,
+        disableDepthTestDistance: NEAR_DEPTH_SKIP,
         distanceDisplayCondition: new Cesium.DistanceDisplayCondition(0, 2.5e6),
       },
     });
@@ -2953,14 +3002,14 @@ function refPoints(ds, rows, opts) {
       position: Cesium.Cartesian3.fromDegrees(r.lon, r.lat, 0),
       point: {
         pixelSize: 11, color: col.withAlpha(0.25), outlineColor: col, outlineWidth: 2,
-        disableDepthTestDistance: Number.POSITIVE_INFINITY,
+        disableDepthTestDistance: NEAR_DEPTH_SKIP,
       },
       label: {
         text: r.name.toUpperCase(), font: '9px "Share Tech Mono", monospace',
         fillColor: col, showBackground: true,
         backgroundColor: Cesium.Color.fromCssColorString('#03060c').withAlpha(0.85),
         pixelOffset: new Cesium.Cartesian2(0, -20),
-        disableDepthTestDistance: Number.POSITIVE_INFINITY,
+        disableDepthTestDistance: NEAR_DEPTH_SKIP,
         distanceDisplayCondition: new Cesium.DistanceDisplayCondition(0, 9.0e6),
       },
     });
@@ -3022,14 +3071,14 @@ async function loadQuakes(ds) {
         // times the energy of a M4 and a linear scale hides that entirely.
         pixelSize: Math.max(5, Math.min(26, Math.pow(2, m - 1.5))),
         color: col.withAlpha(0.3), outlineColor: col, outlineWidth: 1.5,
-        disableDepthTestDistance: Number.POSITIVE_INFINITY,
+        disableDepthTestDistance: NEAR_DEPTH_SKIP,
       },
       label: m >= 5 ? {
         text: 'M' + m.toFixed(1), font: '9px "Share Tech Mono", monospace',
         fillColor: col, showBackground: true,
         backgroundColor: Cesium.Color.fromCssColorString('#03060c').withAlpha(0.85),
         pixelOffset: new Cesium.Cartesian2(0, -18),
-        disableDepthTestDistance: Number.POSITIVE_INFINITY,
+        disableDepthTestDistance: NEAR_DEPTH_SKIP,
       } : undefined,
     });
     e._meta = { kind: 'QUAKE', name: 'M' + m.toFixed(1), mag: m,
@@ -3040,6 +3089,152 @@ async function loadQuakes(ds) {
   return feats.length;
 }
 
+
+/* ---- satellites: TLE propagated in the browser -------------------------- */
+/* CelesTrak publishes orbital elements, not positions. Turning one into the
+   other is SGP4, and satellite.js does it — so the Worker serves the elements
+   once and every frame's position is computed here. That is also why these are
+   the only contacts on the board with no feed latency at all: nothing is being
+   reported, it is being predicted from a model that was accurate when the
+   elements were published. */
+let satsLoaded = null;
+async function loadSats(ds) {
+  ds.entities.removeAll();
+  if (typeof satellite === 'undefined') throw new Error('satellite.js did not load');
+  if (!satsLoaded) {
+    const r = await fetch(PROXY + '/tle', { signal: AbortSignal.timeout(25000) });
+    if (!r.ok) throw new Error('tle ' + r.status);
+    satsLoaded = (await r.json()).items || [];
+  }
+  let ok = 0;
+  for (const s of satsLoaded) {
+    let rec;
+    try { rec = satellite.twoline2satrec(s.line1, s.line2); } catch (e) { continue; }
+    if (!rec || rec.error) continue;
+    const fix = () => {
+      try {
+        const now = new Date();
+        const pv = satellite.propagate(rec, now);
+        if (!pv || !pv.position) return null;
+        const g = satellite.eciToGeodetic(pv.position, satellite.gstime(now));
+        return {
+          lat: satellite.degreesLat(g.latitude),
+          lon: satellite.degreesLong(g.longitude),
+          altM: g.height * 1000,
+        };
+      } catch (e) { return null; }
+    };
+    const first = fix();
+    if (!first || !isFinite(first.altM) || first.altM < 0) continue;
+    ok++;
+    const meta = { kind: 'SAT', name: s.name, lat: first.lat, lon: first.lon,
+                   altM: first.altM, norad: s.norad || null };
+    const e = ds.entities.add({
+      // Recomputed every frame rather than polled: the position is a
+      // calculation, so there is nothing to wait for.
+      position: new Cesium.CallbackProperty(() => {
+        const f = fix();
+        if (!f) return undefined;
+        meta.lat = f.lat; meta.lon = f.lon; meta.altM = f.altM;
+        return Cesium.Cartesian3.fromDegrees(f.lon, f.lat, f.altM);
+      }, false),
+      point: { pixelSize: 6, color: Cesium.Color.fromCssColorString('#aa66ff'),
+               outlineColor: Cesium.Color.BLACK.withAlpha(0.6), outlineWidth: 1 },
+      label: {
+        text: s.name, font: '9px "Share Tech Mono", monospace',
+        fillColor: Cesium.Color.fromCssColorString('#aa66ff'), showBackground: true,
+        backgroundColor: Cesium.Color.fromCssColorString('#03060c').withAlpha(0.8),
+        pixelOffset: new Cesium.Cartesian2(0, -16),
+        distanceDisplayCondition: new Cesium.DistanceDisplayCondition(0, 3.0e7),
+      },
+    });
+    e._meta = meta;
+  }
+  if (!ok) throw new Error('no usable elements');
+  return ok;
+}
+
+/* ---- launches: next windows, on their pads ------------------------------ */
+const LL2_URL = 'https://ll.thespacedevs.com/2.2.0/launch/upcoming/?limit=20';
+async function loadLaunches(ds) {
+  ds.entities.removeAll();
+  let results;
+  try {
+    // Launch Library answers browsers with CORS but refuses our Worker, so this
+    // is one of the feeds where direct-first is the working order, not a
+    // preference. The proxy is the fallback for when the browser cannot.
+    const r = await fetch(LL2_URL, { signal: AbortSignal.timeout(20000) });
+    if (!r.ok) throw new Error('ll2 ' + r.status);
+    results = (await r.json()).results || [];
+  } catch (e) {
+    const r = await fetch(PROXY + '/launches', { signal: AbortSignal.timeout(25000) });
+    if (!r.ok) throw new Error('launches ' + r.status);
+    const j = await r.json();
+    results = j.results || j.items || [];
+  }
+  for (const x of results) {
+    const pad = x.pad || {};
+    const lat = parseFloat(pad.latitude), lon = parseFloat(pad.longitude);
+    if (!isFinite(lat) || !isFinite(lon)) continue;
+    const st = (x.status || {}).abbrev || '';
+    const col = Cesium.Color.fromCssColorString(
+      st === 'Go' ? '#00ff88' : st === 'TBC' || st === 'TBD' ? '#ffcc00' : '#7a8a9a');
+    const e = ds.entities.add({
+      position: Cesium.Cartesian3.fromDegrees(lon, lat, 0),
+      point: { pixelSize: 10, color: col.withAlpha(0.25), outlineColor: col, outlineWidth: 2,
+               disableDepthTestDistance: NEAR_DEPTH_SKIP },
+      label: {
+        text: (x.name || '').split('|')[0].trim(),
+        font: '9px "Share Tech Mono", monospace', fillColor: col, showBackground: true,
+        backgroundColor: Cesium.Color.fromCssColorString('#03060c').withAlpha(0.85),
+        pixelOffset: new Cesium.Cartesian2(0, -18),
+        disableDepthTestDistance: NEAR_DEPTH_SKIP,
+        distanceDisplayCondition: new Cesium.DistanceDisplayCondition(0, 9.0e6),
+      },
+    });
+    e._meta = { kind: 'LAUNCH', name: x.name || 'Launch', status: st,
+                net: (x.net || '').replace('T', ' ').slice(0, 16),
+                pad: pad.name || '—', site: (pad.location || {}).name || '—',
+                lat, lon };
+  }
+  return ds.entities.values.length;
+}
+
+/* ---- dark vessels: Global Fishing Watch --------------------------------- */
+async function loadDark(ds) {
+  ds.entities.removeAll();
+  const r = await fetch(PROXY + '/gfw/events', { signal: AbortSignal.timeout(30000) });
+  if (!r.ok) throw new Error('gfw ' + r.status);
+  const j = await r.json();
+  if (!j.configured) throw new Error('no GFW token configured');
+  const TYPE_COLOUR = { GAP: '#ff3355', LOITERING: '#ff8800', ENCOUNTER: '#ffcc00' };
+  for (const ev of j.entries || []) {
+    const p = ev.position;
+    if (!p || typeof p.lat !== 'number') continue;
+    const col = Cesium.Color.fromCssColorString(TYPE_COLOUR[ev.type] || '#7a8a9a');
+    const v = ev.vessel || {};
+    const e = ds.entities.add({
+      position: Cesium.Cartesian3.fromDegrees(p.lon, p.lat, 0),
+      point: { pixelSize: 7, color: col.withAlpha(0.35), outlineColor: col, outlineWidth: 1.5,
+               disableDepthTestDistance: NEAR_DEPTH_SKIP },
+    });
+    e._meta = {
+      kind: 'DARK', name: v.name || v.ssvid || 'unknown vessel', type: ev.type,
+      flag: v.flag || '—', vtype: v.type || '—',
+      start: (ev.start || '').replace('T', ' ').slice(0, 16),
+      shoreKm: ev.distances && ev.distances.startDistanceFromShoreKm,
+      lat: p.lat, lon: p.lon,
+    };
+  }
+  /* The window is two weeks and the totals are in the hundreds of thousands,
+     so what is drawn is a sample. Saying which is the difference between a map
+     and a claim about the ocean. */
+  const t = j.totals || {};
+  return { n: ds.entities.values.length,
+           note: 'sample of ' + Object.values(t).reduce((a, b) => a + b, 0).toLocaleString()
+                 + ' events over ' + ((j.window && j.window.days) || 14) + ' days' };
+}
+
 /* Every layer, as data. Order inside a group is the order it is drawn in the
    panel. `prov` is 'live' when the source changes on its own and 'ref' when it
    is a table in this file. */
@@ -3047,6 +3242,11 @@ const LAYER_DEFS = [
   { id:'ships',   g:'sea',  label:'VESSELS',        prov:'live', src:'AIS via Digitraffic (Baltic only)' },
   { id:'cams',    g:'sea',  label:'CAMERAS',        prov:'live', src:'TfL and Caltrans open data' },
   { id:'bldg',    g:'sea',  label:'BUILDINGS',      prov:'live', src:'OpenStreetMap, via Cesium ion' },
+
+  { id:'sats',    g:'orb',  label:'SATELLITES',     prov:'live', src:'CelesTrak elements, propagated here by SGP4',
+    ds:'sats', load:loadSats },
+  { id:'launch',  g:'orb',  label:'LAUNCHES',       prov:'live', src:'Launch Library 2 / The Space Devs',
+    ds:'launch', load:loadLaunches },
 
   { id:'warn',    g:'haz',  label:'WARNINGS',       prov:'live', src:'GDACS (EC JRC / UN OCHA)' },
   { id:'fires',   g:'haz',  label:'FIRES',          prov:'live', src:'NASA FIRMS' },
@@ -3064,6 +3264,8 @@ const LAYER_DEFS = [
     ds:'cyber', rows:() => CYBER_THREAT_ORIGINS, sev:['threat'] },
   { id:'rf',      g:'sec',  label:'RF SIGNALS',     prov:'ref',  src:'RF / SIGINT site table',
     ds:'rf', rows:() => RF_STATIONS, sev:[] },
+  { id:'dark',    g:'sec',  label:'DARK VESSELS',   prov:'live', src:'Global Fishing Watch, ~5 day lag',
+    ds:'dark', load:loadDark },
 
   { id:'cables',  g:'inf',  label:'SEA CABLES',     prov:'ref',  src:'cable route list',
     ds:'cables', cables:true },
@@ -3074,7 +3276,7 @@ const LAYER_DEFS = [
   { id:'inst',    g:'inf',  label:'INSTALLATIONS',  prov:'live', src:'OpenStreetMap via Overpass' },
 ];
 const LAYER_GROUPS = [
-  ['sea', 'SEA &amp; SURFACE'], ['haz', 'HAZARDS'],
+  ['sea', 'SEA &amp; SURFACE'], ['orb', 'ORBIT'], ['haz', 'HAZARDS'],
   ['sec', 'SECURITY'], ['inf', 'INFRASTRUCTURE'],
 ];
 const layerOn = {};
@@ -3165,6 +3367,41 @@ document.getElementById('btnLayers').onclick = function () {
   this.classList.toggle('on', !p.hidden);
 };
 renderLayerPanel();
+
+/* Cull everything below the horizon.
+
+   The depth buffer already hides far-side markers now that the skip distance
+   is finite, but relying on it alone is invisible from the code and untestable
+   from script — you cannot read the depth buffer to prove a marker is hidden.
+   This does the same thing explicitly so it can be asserted, and it also
+   catches labels, which are drawn as screen-space overlays and would otherwise
+   keep floating over the wrong continent with nothing behind them.
+
+   Aircraft are excluded on purpose: their visibility is already owned by the
+   role filter, and two things writing `show` would fight over it. */
+const horizon = new Cesium.EllipsoidalOccluder(Cesium.Ellipsoid.WGS84, new Cesium.Cartesian3());
+function culledSources() {
+  /* Satellites are excluded: they orbit hundreds of kilometres up, and an
+     occluder built for points on the surface would hide ones that are
+     genuinely visible over the limb. The depth buffer handles them correctly
+     because nothing about them skips it. */
+  return [chokes, warns, fires, ships, cams, inst,
+          ...Object.entries(layerDs).filter(([k]) => k !== 'sats').map(([, v]) => v)];
+}
+scene.preRender.addEventListener(() => {
+  horizon.cameraPosition = viewer.camera.positionWC;
+  const t = viewer.clock.currentTime;
+  for (const ds of culledSources()) {
+    if (!ds) continue;
+    for (const e of ds.entities.values) {
+      const p = e.position && e.position.getValue(t);
+      // A cable is a polyline with no position of its own; leave it alone.
+      if (!p) continue;
+      e.show = horizon.isPointVisible(p);
+    }
+  }
+});
+
 
 /* ------------------------------------------------------------------ go */
 (async () => {
