@@ -64,10 +64,18 @@ html,body{height:100%;overflow:hidden;background:#03060c;
 .row b{font-family:'Orbitron',sans-serif;font-weight:400;font-size:13px}
 .hint{font-size:9px;color:var(--td);letter-spacing:1px;margin-top:7px;line-height:1.5;
   border-top:1px solid var(--brd);padding-top:7px}
-.ctl{position:fixed;bottom:14px;left:12px;display:flex;gap:3px;background:var(--pnl);
-  border:1px solid var(--brd);border-radius:4px;padding:3px;backdrop-filter:blur(12px);align-items:center}
-.ctl.cam{bottom:52px}
-.ctlLbl{font-size:8px;letter-spacing:2px;color:var(--td);padding:0 6px 0 3px}
+.hint a{color:inherit;text-decoration:underline;text-underline-offset:2px;cursor:pointer}
+/* One bar, grouped. Two undifferentiated rows of buttons ran sensor treatments,
+   camera presets, tracking, feed selection and layer toggles together with no
+   boundary between them, so nothing said which button belonged to which job.
+   Every group is now named and separated, and the bar wraps upward rather than
+   growing under the readout in the opposite corner. */
+.ctl{position:fixed;bottom:14px;left:12px;max-width:calc(100vw - 300px);
+  display:flex;flex-wrap:wrap;gap:2px 0;background:var(--pnl);
+  border:1px solid var(--brd);border-radius:4px;padding:4px;backdrop-filter:blur(12px);align-items:center}
+.grp{display:flex;align-items:center;gap:3px;padding:0 8px;border-right:1px solid var(--brd)}
+.grp:last-child{border-right:none}
+.ctlLbl{font-size:8px;letter-spacing:2px;color:var(--td);padding-right:4px;white-space:nowrap}
 .ctl button{background:transparent;border:1px solid transparent;color:var(--td);
   font-family:inherit;font-size:9px;letter-spacing:1px;padding:5px 9px;border-radius:3px;cursor:pointer}
 .ctl button:hover{color:var(--tm)}
@@ -80,6 +88,19 @@ html,body{height:100%;overflow:hidden;background:#03060c;
 .rdHead{display:flex;align-items:center;gap:8px;font-family:'Orbitron',sans-serif;font-size:12px;
   color:var(--c);letter-spacing:2px;padding-bottom:6px;margin-bottom:6px;border-bottom:1px solid var(--brd)}
 #rdSq{margin-left:auto;font-size:8px;letter-spacing:1px;color:var(--td)}
+#rdClose{background:none;border:none;color:var(--td);font-size:16px;line-height:1;
+  cursor:pointer;padding:0 0 0 8px;font-family:inherit}
+#rdClose:hover{color:var(--r)}
+.rdBtn{display:block;width:100%;margin-top:6px;background:transparent;border:1px solid var(--brd);
+  color:var(--td);font-family:inherit;font-size:8px;letter-spacing:1px;padding:4px 0;
+  border-radius:3px;cursor:pointer}
+.rdBtn:hover{color:var(--tm);border-color:var(--cg)}
+.lb{position:fixed;inset:0;z-index:60;background:rgba(3,6,12,.93);display:flex;
+  align-items:center;justify-content:center;flex-direction:column;gap:10px;padding:32px}
+.lb img{max-width:min(1100px,92vw);max-height:78vh;border:1px solid var(--brd);border-radius:3px}
+.lb .lbBar{display:flex;gap:8px;align-items:center;font-size:11px;letter-spacing:1px;color:var(--tm)}
+.lb button{background:var(--cd);border:1px solid var(--cg);color:var(--c);font-family:inherit;
+  font-size:9px;letter-spacing:1px;padding:5px 12px;border-radius:3px;cursor:pointer}
 #rdSq.hot{color:var(--r);border:1px solid var(--r);padding:1px 4px;border-radius:2px}
 .rdGrid{display:grid;grid-template-columns:auto 1fr;gap:2px 10px;font-size:10px}
 .rdGrid .k{color:var(--td);letter-spacing:1px}
@@ -195,6 +216,7 @@ body.flying .panel:hover,body.flying .read:hover,body.flying .ctl:hover{opacity:
     <div class="row"><span>IN VIEW</span><b class="v" id="nView" style="color:var(--y)">--</b></div>
     <div class="hint" id="emptyHint" style="display:none;color:var(--y)">
       No military traffic in this view. Press <b>ALL</b> for civil aircraft.</div>
+    <div class="hint" id="camHint" style="display:none;color:var(--p)"></div>
     <div class="hint">Drag to move · right-drag or ctrl-drag to tilt · scroll or pinch to zoom.
       Arrow keys tilt and turn in steps (hold shift for bigger ones).
       Click a contact to lock on, then <b>C</b> to ride it. <b>Esc</b> lets go.</div>
@@ -212,32 +234,40 @@ body.flying .panel:hover,body.flying .read:hover,body.flying .ctl:hover{opacity:
   </div>
 
   <div class="ctl">
-    <button class="on" data-s="none">NORMAL</button>
-    <button data-s="flir">FLIR</button>
-    <button data-s="nvg">NVG</button>
-    <button data-s="noir">NOIR</button>
-    <button id="btnTilt">TILT</button>
-    <button id="btnFollow">UNLOCK</button>
-    <button id="btnCockpit" disabled title="Click an aircraft first. This then rides it — chase camera locked to its track. Shortcut: C">COCKPIT</button>
-    <span class="ctlLbl">TRAFFIC</span>
-    <button id="btnMil" class="on" title="Military traffic, worldwide">MIL</button>
-    <button id="btnAll" title="Civil and military traffic in the view. There is no global all-traffic call, so this follows the camera as a box of 250 nm tiles — and it is the one feed that is billed, so it sweeps once a minute and pauses when the tab is hidden.">ALL</button>
-  </div>
-
-  <div class="ctl cam">
-    <span class="ctlLbl">VIEW</span>
-    <button onclick="setPitchPreset(-90)" title="Look straight down">TOP</button>
-    <button onclick="setPitchPreset(-45)" title="Oblique">45&deg;</button>
-    <button onclick="setPitchPreset(-12)" title="Near level with the horizon">LEVEL</button>
-    <button onclick="nudgePitch(6)" title="Pitch up">&#9650;</button>
-    <button onclick="nudgePitch(-6)" title="Pitch down">&#9660;</button>
-    <button id="btnBuildings" disabled title="Global 3D buildings from OpenStreetMap, extruded to their mapped heights">BUILDINGS</button>
-    <button id="btnCams" title="Public roadside cameras published by their operators. Click one for the current frame.">CAMERAS</button>
-    <button id="btnWatch" title="Follow named flights — your own trip, or anything you want updates on">WATCH</button>
+    <div class="grp"><span class="ctlLbl">SENSOR</span>
+      <button class="on" data-s="none">NORMAL</button>
+      <button data-s="flir">FLIR</button>
+      <button data-s="nvg">NVG</button>
+      <button data-s="noir">NOIR</button>
+    </div>
+    <div class="grp"><span class="ctlLbl">VIEW</span>
+      <button onclick="setPitchPreset(-90)" title="Look straight down">TOP</button>
+      <button onclick="setPitchPreset(-45)" title="Oblique">45&deg;</button>
+      <button onclick="setPitchPreset(-12)" title="Near level with the horizon">LEVEL</button>
+      <button onclick="nudgePitch(6)" title="Pitch up  [up arrow]">&#9650;</button>
+      <button onclick="nudgePitch(-6)" title="Pitch down  [down arrow]">&#9660;</button>
+      <button id="btnTilt" title="Swap between the whole globe and a tilted regional view">ZOOM</button>
+      <button id="btnDay" title="Light the whole globe as though it were midday. Cesium lights from the real sun position, which leaves whatever you are watching in darkness half the time.">DAY</button>
+    </div>
+    <div class="grp"><span class="ctlLbl">LOCK</span>
+      <button id="btnFollow" title="Release the camera from the contact it is following  [Esc]">UNLOCK</button>
+      <button id="btnCockpit" disabled title="Click an aircraft first. This then rides it — chase camera locked to its track. Shortcut: C">COCKPIT</button>
+    </div>
+    <div class="grp"><span class="ctlLbl">TRAFFIC</span>
+      <button id="btnOff" title="Stop the aircraft feed entirely. Nothing is fetched and nothing is billed.">OFF</button>
+      <button id="btnMil" class="on" title="Military traffic worldwide, from the free feed. Costs nothing.">MIL</button>
+      <button id="btnAll" title="Civil and military traffic in the view. There is no global all-traffic call, so this follows the camera as a box of 250 nm tiles — and it is the one feed that is billed, so it sweeps once a minute and pauses when the tab is hidden.">ALL</button>
+    </div>
+    <div class="grp"><span class="ctlLbl">LAYERS</span>
+      <button id="btnBuildings" disabled title="Global 3D buildings from OpenStreetMap, extruded to their mapped heights">BUILDINGS</button>
+      <button id="btnCams" title="Public roadside cameras published by their operators — London and California only. Click one for the current frame.">CAMERAS</button>
+      <button id="btnWatch" title="Follow named flights — your own trip, or anything you want updates on">WATCH</button>
+    </div>
   </div>
 
   <div class="read" id="read">
-    <div class="rdHead"><span id="rdName">NO CONTACT SELECTED</span><span id="rdSq"></span></div>
+    <div class="rdHead"><span id="rdName">NO CONTACT SELECTED</span><span id="rdSq"></span>
+      <button id="rdClose" title="Close and let the camera go  [Esc]">&times;</button></div>
     <div class="rdGrid" id="rdGrid"></div>
     <div class="rdSub" id="rdSub">Click a contact to inspect it.</div>
   </div>
@@ -419,6 +449,67 @@ ssc.lookEventTypes = [];
 ssc.inertiaSpin = 0.5;
 ssc.inertiaTranslate = 0.5;
 ssc.inertiaZoom = 0.5;
+
+/* Which way a contact points on screen.
+
+   This used to be camera heading minus track, which is only correct looking
+   straight down. Tilt towards the horizon and the horizontal plane goes
+   edge-on, but that formula keeps rotating every symbol by its full compass
+   angle — so level traffic gets drawn standing on its tail or diving at the
+   ground. From the cockpit, where the view is level by definition, the whole
+   sky looked like it was climbing out or crashing.
+
+   What works is projecting a point ahead of the aircraft along its own track
+   and measuring the screen angle between the two. Two earlier attempts were
+   wrong in instructive ways, and both are why this is written out at length:
+
+     * A fixed two-kilometre lead. Geometrically right, numerically useless —
+       at cruising altitude two kilometres subtends a fifth of a pixel, so the
+       answer was rounding noise and the degeneracy guard suppressed it almost
+       everywhere. The lead has to scale with how far away the camera is, and
+       then the projected offset is the same size on screen at every zoom.
+
+     * Resolving the velocity onto the camera's right and up axes. Cheaper, no
+       distance term, and correct looking down — but it gives the direction in
+       camera space, not the direction the symbol actually travels across the
+       screen. An aircraft flying directly away from a camera that is pitched
+       down came out pointing at the ground, when on screen it climbs towards
+       the horizon. That difference is perspective, and only projecting real
+       points captures it. */
+const ROT_CARTO = new Cesium.Cartographic();
+const ROT_AHEAD = new Cesium.Cartesian3();
+const ROT_W0 = new Cesium.Cartesian2();
+const ROT_W1 = new Cesium.Cartesian2();
+const EARTH_R = 6371000;
+const toWindow = Cesium.SceneTransforms.worldToWindowCoordinates
+  || Cesium.SceneTransforms.wgs84ToWindowCoordinates;
+
+function screenRotation(ent, meta) {
+  if (!ent || meta.track == null) return 0;
+  const p = ent.position && ent.position.getValue(viewer.clock.currentTime);
+  if (!p) return 0;
+
+  /* A lead proportional to viewing distance, so the two points always land a
+     useful number of pixels apart whatever the zoom. Five per cent puts them
+     roughly a twentieth of the screen apart at any altitude. */
+  const dist = Cesium.Cartesian3.distance(viewer.camera.positionWC, p);
+  const lead = Math.min(60000, Math.max(200, dist * 0.05)) / EARTH_R;
+
+  Cesium.Cartographic.fromCartesian(p, Cesium.Ellipsoid.WGS84, ROT_CARTO);
+  const th = Cesium.Math.toRadians(meta.track);
+  const lat = ROT_CARTO.latitude + Math.cos(th) * lead;
+  const lon = ROT_CARTO.longitude
+    + (Math.sin(th) * lead) / Math.max(0.05, Math.cos(ROT_CARTO.latitude));
+  Cesium.Cartesian3.fromRadians(lon, lat, ROT_CARTO.height, Cesium.Ellipsoid.WGS84, ROT_AHEAD);
+
+  const a = toWindow(scene, p, ROT_W0);
+  const b = toWindow(scene, ROT_AHEAD, ROT_W1);
+  if (!a || !b) return 0;
+  const dx = b.x - a.x, dy = b.y - a.y;
+  if (dx * dx + dy * dy < 1) return 0;   // nose-on: any angle would be a guess
+  // Screen y grows downward; Cesium rotates counter-clockwise from image-up.
+  return Math.atan2(-dy, dx) - Cesium.Math.PI_OVER_TWO;
+}
 
 // Explicit pitch control, because a drag gesture is a poor way to ask for a
 // specific angle and there is no way to discover the modifier keys.
@@ -674,6 +765,7 @@ function viewHalfSpanDeg(altKm) {
 }
 
 async function loadAircraft() {
+  if (feedMode === 'off') return;
   try {
     /* Military is one stable global URL and stays on the free feed, where it
        has always worked. Civil traffic goes through the Worker's own area
@@ -729,15 +821,10 @@ async function loadAircraft() {
           position: track,
           billboard: {
             image: ICONS.airliner, width: 24, height: 24, color: CYAN,
-            /* Screen-space rotation, so it must account for where north is on
-               screen. Cesium measures counter-clockwise from image-up; a
-               compass track is clockwise from north; and the camera's heading
-               rotates north on screen. Hence heading minus track, evaluated
-               every frame rather than written once per poll — otherwise the
-               symbol points correctly only while the camera faces north and
-               drifts off its own trail as soon as you spin the view. */
+            // Evaluated every frame rather than written once per poll: the
+            // angle depends on where the camera is, not only on the track.
             rotation: new Cesium.CallbackProperty(function () {
-              return viewer.camera.heading - Cesium.Math.toRadians(meta.track || 0);
+              return screenRotation(e, meta);
             }, false),
             alignedAxis: Cesium.Cartesian3.ZERO,
             scaleByDistance: new Cesium.NearFarScalar(5.0e4, 1.5, 6.0e6, 0.5),
@@ -957,7 +1044,11 @@ async function loadCams() {
      dropped. */
   const gen = ++camGen;
   cams.entities.removeAll();
-  if (!camsOn) { document.getElementById('nCam').textContent = 'off'; return; }
+  if (!camsOn) {
+    document.getElementById('nCam').textContent = 'off';
+    document.getElementById('camHint').style.display = 'none';
+    return;
+  }
   if (!camIndex) {
     try {
       const r = await fetch(PROXY + '/cams?src=all');
@@ -980,19 +1071,86 @@ async function loadCams() {
     if (gen !== camGen) return;
     const e = cams.entities.add({
       position: Cesium.Cartesian3.fromDegrees(c.lon, c.lat, 0),
+      /* Big enough to hit, and drawn over the terrain rather than into it.
+         A six-pixel point clamped to the ground sits behind every hill and
+         building between it and the camera, so at any useful altitude you were
+         clicking at something the depth buffer had already discarded — which
+         is why it only worked zoomed all the way in. Ignoring the depth test
+         is right here: a camera marker is a label for a place, not an object
+         in the scene that things should occlude. */
       point: {
-        pixelSize: 6, color: PURPLE.withAlpha(0.9),
-        outlineColor: Cesium.Color.BLACK, outlineWidth: 1,
+        pixelSize: 11, color: PURPLE.withAlpha(0.95),
+        outlineColor: Cesium.Color.BLACK.withAlpha(0.85), outlineWidth: 2,
         heightReference: Cesium.HeightReference.CLAMP_TO_GROUND,
-        distanceDisplayCondition: new Cesium.DistanceDisplayCondition(0, 250000),
+        disableDepthTestDistance: Number.POSITIVE_INFINITY,
+        distanceDisplayCondition: new Cesium.DistanceDisplayCondition(0, 600000),
       },
     });
     e._meta = { kind: 'CAMERA', name: c.name, lat: c.lat, lon: c.lon,
                 image: c.image, operator: c.operator };
   }
+  /* Zero cameras looks the same as a broken layer. Only two operators publish
+     an open camera feed — Transport for London and Caltrans — so the coverage
+     is London and California and nowhere else. Say that, and offer to go
+     there, rather than showing a silent zero over Melbourne. */
+  const ch = document.getElementById('camHint');
+  if (camIndex.length && !inView.length) {
+    ch.style.display = 'block';
+    ch.innerHTML = camIndex.length.toLocaleString()
+      + ' cameras published, all in London and California — the only operators with open '
+      + 'feeds. None in this view. <a href="#" id="camGoL">Go to London</a> &middot; '
+      + '<a href="#" id="camGoC">California</a>';
+    const fly = (lat, lon) => (ev) => { ev.preventDefault(); viewer.camera.flyTo({
+      destination: Cesium.Cartesian3.fromDegrees(lon, lat, 120000), duration: 2 }); };
+    document.getElementById('camGoL').onclick = fly(51.507, -0.128);
+    document.getElementById('camGoC').onclick = fly(37.77, -122.42);
+  } else {
+    ch.style.display = 'none';
+  }
   document.getElementById('nCam').textContent =
     inView.length + (camIndex.length > inView.length ? ' / ' + camIndex.length : '');
 }
+
+/* Full-size camera frame. Traffic cameras are low resolution to begin with, so
+   a thumbnail in the corner of the readout shows that something is on the road
+   without showing what. */
+let lightbox = null;
+function openLightbox(m) {
+  closeLightbox();
+  lightbox = document.createElement('div');
+  lightbox.className = 'lb';
+  lightbox.innerHTML =
+    '<img src="' + m.image + '?t=' + Date.now() + '" alt="">'
+    + '<div class="lbBar"><b>' + m.name + '</b>'
+    + '<span style="color:var(--td)">' + m.operator + ' · live frame</span>'
+    + '<button data-r>REFRESH</button><button data-x>CLOSE  [ESC]</button></div>';
+  lightbox.querySelector('[data-r]').onclick = () => {
+    lightbox.querySelector('img').src = m.image + '?t=' + Date.now();
+  };
+  lightbox.querySelector('[data-x]').onclick = closeLightbox;
+  // Clicking the backdrop closes; clicking the image itself must not.
+  lightbox.onclick = (ev) => { if (ev.target === lightbox) closeLightbox(); };
+  document.body.appendChild(lightbox);
+}
+function closeLightbox() {
+  if (lightbox) { lightbox.remove(); lightbox = null; }
+}
+
+document.getElementById('rdClose').onclick = () => { closeLightbox(); releaseTracking(); };
+
+/* Permanent daylight. Cesium lights the globe from the real sun position,
+   which is honest and useless when the place you are watching is at 3am — half
+   the camera frames were unreadable and so was the terrain under them. This
+   turns the terminator off entirely rather than faking a time of day. */
+let daylight = false;
+function setDaylight(on) {
+  daylight = on;
+  scene.globe.enableLighting = !on;
+  document.getElementById('btnDay').classList.toggle('on', on);
+}
+document.getElementById('btnDay').onclick = () => setDaylight(!daylight);
+
+document.getElementById('btnOff').onclick = () => setFeedMode('off');
 
 document.getElementById('btnCams').onclick = function () {
   camsOn = !camsOn;
@@ -1033,11 +1191,23 @@ function showContact(m) {
 
   if (m.kind === 'CAMERA') {
     document.getElementById('rdGrid').innerHTML = '';
+    /* The frame is a still that the operator replaces every so often, so the
+       cache-buster is what makes REFRESH mean anything. Clicking it opens the
+       full-size frame, because a 230-pixel-wide thumbnail of a traffic camera
+       is not enough to see what is actually on the road. */
     document.getElementById('rdSub').innerHTML =
-      '<img src="' + m.image + '" alt="" style="width:100%;max-width:230px;'
-      + 'border:1px solid var(--brd);display:block;margin:4px 0" '
+      '<img id="camFrame" src="' + m.image + '?t=' + Date.now() + '" alt="" '
+      + 'title="Click to enlarge" '
+      + 'style="width:100%;border:1px solid var(--brd);display:block;margin:4px 0;cursor:zoom-in" '
       + 'onerror="this.style.display=\'none\'">'
-      + '<span style="opacity:.7">' + m.operator + ' · live frame</span>';
+      + '<span style="opacity:.7">' + m.operator + ' · live frame</span>'
+      + '<button id="camRefresh" class="rdBtn">REFRESH</button>';
+    document.getElementById('camFrame').onclick = () => openLightbox(m);
+    document.getElementById('camRefresh').onclick = () => {
+      const im = document.getElementById('camFrame');
+      im.style.display = 'block';
+      im.src = m.image + '?t=' + Date.now();
+    };
     document.getElementById('nearPanel').style.display = 'none';
     return;
   }
@@ -1176,11 +1346,31 @@ function enterCockpit(ent) {
 }
 
 function exitCockpit() {
+  const ent = cockpitEntity;
   cockpitEntity = null;
   document.getElementById('cockpit').hidden = true;
   document.body.classList.remove('flying');
   document.getElementById('btnCockpit').classList.remove('on');
   scene.screenSpaceCameraController.enableInputs = true;
+
+  /* Hand the aircraft back to the follow camera rather than abandoning the
+     view wherever the ride happened to end — which left you staring at empty
+     terrain with the contact you had been flying somewhere off to one side.
+     viewFrom is the offset Cesium uses for a tracked entity, expressed in the
+     entity's own east-north-up frame, so this sits the camera behind and above
+     the aircraft rather than at whatever bearing the flight finished on. */
+  if (!ent || !air.entities.getById(ent.id)) return;
+  const m = ent._meta || {};
+  const th = Cesium.Math.toRadians(m.track || 0);
+  ent.viewFrom = new Cesium.Cartesian3(
+    -Math.sin(th) * 2600, -Math.cos(th) * 2600, 1100);
+  selectedEntity = ent;
+  viewer.trackedEntity = ent;
+  const cb = document.getElementById('btnCockpit');
+  cb.disabled = m.kind !== 'AIR';
+  const b = document.getElementById('btnFollow');
+  b.classList.add('on'); b.textContent = 'FOLLOWING';
+  showContact(m);
 }
 
 const CHASE_BACK = 165;   // metres behind
@@ -1247,13 +1437,28 @@ document.getElementById('btnAll').onclick = () => setFeedMode('all');
 function setFeedMode(m) {
   if (feedMode === m) return;
   feedMode = m;
-  document.getElementById('btnMil').classList.toggle('on', m === 'mil');
-  document.getElementById('btnAll').classList.toggle('on', m === 'all');
-  document.getElementById('nAirLabel').textContent = m === 'mil' ? 'MILITARY AIR' : 'ALL TRAFFIC';
-  // The two feeds cover different sets, so carrying entities across would leave
+  for (const [id, mode] of [['btnOff', 'off'], ['btnMil', 'mil'], ['btnAll', 'all']]) {
+    document.getElementById(id).classList.toggle('on', m === mode);
+  }
+  document.getElementById('nAirLabel').textContent =
+    m === 'off' ? 'AIR TRAFFIC' : m === 'mil' ? 'MILITARY AIR' : 'ALL TRAFFIC';
+  // The feeds cover different sets, so carrying entities across would leave
   // contacts on screen that the new feed never mentions.
   releaseTracking();
   air.entities.removeAll();
+  /* OFF is a real off switch, not a hidden layer: it stops the sweep, so a
+     board left open on another tab costs nothing at all. The alternative —
+     hiding contacts while still fetching them — is the expensive mistake this
+     is here to prevent. */
+  if (m === 'off') {
+    if (cockpitEntity) exitCockpit();
+    document.getElementById('nAir').textContent = 'off';
+    document.getElementById('nView').textContent = '0';
+    document.getElementById('feedScope').textContent = 'not polling';
+    document.getElementById('feedScope').title = 'The aircraft feed is stopped. Nothing is fetched and nothing is billed.';
+    document.getElementById('emptyHint').style.display = 'none';
+    return;
+  }
   loadAircraft();
 }
 
@@ -1280,7 +1485,8 @@ window.addEventListener('keydown', (ev) => {
   if (/^(INPUT|TEXTAREA)$/.test((ev.target.tagName || '')) ) return;
   const k = ev.key;
   if (k === 'Escape') {
-    if (cockpitEntity) exitCockpit();
+    if (lightbox) closeLightbox();
+    else if (cockpitEntity) exitCockpit();
     else if (viewer.trackedEntity) releaseTracking();
     return;
   }
@@ -1331,6 +1537,7 @@ setInterval(() => {
      military at all — so an empty military view says which button fixes it. */
   const empty = document.getElementById('emptyHint');
   const show = n === 0 && feedMode === 'mil' && air.entities.values.length > 0;
+  if (feedMode === 'off') { document.getElementById('nView').textContent = '0'; }
   empty.style.display = show ? 'block' : 'none';
 }, 2000);
 
@@ -1784,11 +1991,8 @@ function paintWatchPin(w) {
       point: { pixelSize: 26, color: Cesium.Color.TRANSPARENT, outlineColor: col, outlineWidth: 2 },
       billboard: {
         image: ICONS.airliner, width: 22, height: 22, color: col,
-        // Same screen-space correction as the live contacts: Cesium measures
-        // counter-clockwise from image-up, a track is clockwise from north,
-        // and the camera's heading moves where north is on screen.
         rotation: new Cesium.CallbackProperty(function () {
-          return viewer.camera.heading - Cesium.Math.toRadians(meta.track || 0);
+          return screenRotation(e, meta);
         }, false),
         alignedAxis: Cesium.Cartesian3.ZERO,
       },
