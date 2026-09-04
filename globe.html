@@ -76,6 +76,35 @@ html,body{height:100%;overflow:hidden;background:#03060c;
 .rdGrid .v{font-family:'Orbitron',sans-serif;font-size:11px;color:var(--tm)}
 .rdSub{font-size:9px;color:var(--td);margin-top:6px;letter-spacing:1px;line-height:1.5}
 .panel.near{top:auto;bottom:96px;left:12px;max-height:260px;overflow-y:auto}
+
+/* Flight watch. Right-hand column so it never competes with the contact
+   readout for the same corner. */
+.panel.watch{left:auto;right:12px;top:52px;width:258px;max-height:calc(100vh - 200px);
+  overflow-y:auto;padding-bottom:4px}
+.wAdd{display:flex;gap:4px;margin-bottom:7px}
+.wAdd input{flex:1;min-width:0;background:rgba(0,232,255,.05);border:1px solid var(--brd);
+  border-radius:3px;color:var(--tm);font-family:inherit;font-size:11px;padding:5px 7px;
+  letter-spacing:1px;text-transform:uppercase}
+.wAdd input::placeholder{color:var(--td);text-transform:none;letter-spacing:0}
+.wAdd input:focus{outline:none;border-color:var(--cg)}
+.wAdd input#wDest{flex:0 0 52px}
+.wAdd button{background:var(--cd);border:1px solid var(--cg);color:var(--c);font-family:inherit;
+  font-size:9px;letter-spacing:1px;padding:0 9px;border-radius:3px;cursor:pointer}
+.wNote{font-size:9px;color:var(--g);letter-spacing:1px;min-height:12px;margin-bottom:6px}
+.wEmpty{font-size:10px;color:var(--td);letter-spacing:1px;padding:4px 0 8px}
+.wRow{border-top:1px solid var(--brd);padding:7px 0 6px}
+.wRow:first-child{border-top:none}
+.wTop{display:flex;align-items:baseline;gap:6px;font-size:12px}
+.wTop b{font-family:'Orbitron',sans-serif;font-weight:400;color:var(--c);letter-spacing:1px}
+.wTop i{font-style:normal;font-size:9px;color:var(--td)}
+.wPh{margin-left:auto;font-family:'Orbitron',sans-serif;font-size:8px;letter-spacing:2px}
+.wSub{font-size:9px;color:var(--td);letter-spacing:1px;margin-top:2px;line-height:1.45}
+.wAct{display:flex;gap:3px;margin-top:5px}
+.wAct button{flex:1;background:transparent;border:1px solid var(--brd);color:var(--td);
+  font-family:inherit;font-size:8px;letter-spacing:1px;padding:3px 0;border-radius:3px;cursor:pointer}
+.wAct button:hover:not(:disabled){color:var(--tm);border-color:var(--cg)}
+.wAct button:disabled{opacity:.3;cursor:default}
+.wAct button.wRm:hover{color:var(--r);border-color:var(--r)}
 .panel.ctx{top:auto;bottom:14px;left:238px;width:230px}
 .nearRow{display:flex;gap:8px;align-items:baseline;font-size:10px;padding:3px 0;cursor:pointer;
   border-bottom:1px solid rgba(255,255,255,.04)}
@@ -179,6 +208,7 @@ body.flying .panel:hover,body.flying .read:hover,body.flying .ctl:hover{opacity:
     <button onclick="nudgePitch(-6)" title="Pitch down">&#9660;</button>
     <button id="btnBuildings" disabled title="Global 3D buildings from OpenStreetMap, extruded to their mapped heights">BUILDINGS</button>
     <button id="btnCams" title="Public roadside cameras published by their operators. Click one for the current frame.">CAMERAS</button>
+    <button id="btnWatch" title="Follow named flights — your own trip, or anything you want updates on">WATCH</button>
   </div>
 
   <div class="read" id="read">
@@ -190,6 +220,20 @@ body.flying .panel:hover,body.flying .read:hover,body.flying .ctl:hover{opacity:
   <div class="panel near" id="nearPanel" style="display:none">
     <div class="ptitle">Nearby <span id="nearRange" style="float:right;color:var(--td)">250 km</span></div>
     <div id="nearList"></div>
+  </div>
+
+  <div class="panel watch" id="watchPanel" hidden>
+    <div class="ptitle">Flight Watch <span id="wCost" style="float:right;color:var(--td);font-size:8px;letter-spacing:1px"></span></div>
+    <div class="wAdd">
+      <input id="wCs" placeholder="BA117" maxlength="8" autocomplete="off" spellcheck="false">
+      <input id="wDest" placeholder="JFK" maxlength="4" autocomplete="off" spellcheck="false">
+      <button id="wAddBtn">ADD</button>
+    </div>
+    <div class="wNote" id="wNote"></div>
+    <div id="wList"></div>
+    <div class="hint">Flight number as printed on the ticket, plus the destination if
+      you want an arrival estimate. Each flight is checked every 10 minutes by default —
+      every check is one request against the plan, so tighten it only when it matters.</div>
   </div>
 
   <div class="panel ctx" id="ctxPanel">
@@ -572,30 +616,41 @@ function cameraCentre() {
   };
 }
 
-// adsb.lol caps this at 250 nautical miles; below that, scale with altitude.
-function viewRadiusNm(altKm) {
-  return Math.round(Math.min(250, Math.max(25, altKm * 0.55)));
-}
+/* Half-height of the queried box, in degrees of latitude, from camera
+   altitude. There were two versions of this function and the second silently
+   replaced the first — same name, different units — so a value in kilometres
+   was being read as a span in degrees. One function now, and the units are in
+   the name.
 
-// Half the visible north-south span, in nautical miles, clamped to what the
-// endpoint will actually serve.
-function viewRadiusNm(spanDeg) {
-  const nm = (spanDeg * 60) / 2;
-  return Math.round(Math.min(250, Math.max(25, nm)));
+   The cap is a cost decision, not a display one: the area feed is billed per
+   250 nm tile, and an uncapped box at globe view is dozens of them. So a wide
+   view queries a window on the sky rather than all of it, and the panel says
+   how big that window is instead of implying it covers the screen. */
+function viewHalfSpanDeg(altKm) {
+  return Math.min(7, Math.max(1.5, altKm / 150));
 }
 
 async function loadAircraft() {
   try {
-    let upstream, radiusNm = null;
+    /* Military is one stable global URL and stays on the free feed, where it
+       has always worked. Civil traffic goes through the Worker's own area
+       route rather than the generic proxy: that one snaps tiles to a fixed
+       world grid so panning reuses cached answers, prefers the paid feed, and
+       falls back per tile. Pointing this at the raw aggregator is what made
+       ALL mode rate-limit itself. */
+    let u, scopeText;
     if (feedMode === 'mil') {
-      upstream = 'https://api.adsb.lol/v2/mil';
+      u = PROXY + '/p?url=' + encodeURIComponent('https://api.adsb.lol/v2/mil');
+      scopeText = 'global';
     } else {
       const c = cameraCentre();
-      radiusNm = viewRadiusNm(c.altKm);
-      upstream = 'https://api.adsb.lol/v2/point/'
-        + c.lat.toFixed(3) + '/' + c.lon.toFixed(3) + '/' + radiusNm;
+      const half = viewHalfSpanDeg(c.altKm);
+      const halfLon = Math.min(10, half / Math.max(0.25, Math.cos(c.lat * Math.PI / 180)));
+      const bbox = [c.lat - half, c.lon - halfLon, c.lat + half, c.lon + halfLon]
+        .map((v) => v.toFixed(3)).join(',');
+      u = PROXY + '/adsb/area?bbox=' + encodeURIComponent(bbox);
+      scopeText = Math.round(half * 2 * 60) + ' nm box';
     }
-    const u = PROXY + '/p?url=' + encodeURIComponent(upstream);
     const r = await fetch(u);
     if (!r.ok) {
       // 429 in particular: the aggregator rate-limits, and it answers with an
@@ -719,8 +774,16 @@ async function loadAircraft() {
     const mil = air.entities.values.filter((x) => x._meta && x._meta.isMil).length;
     document.getElementById('nAir').textContent =
       feedMode === 'mil' ? total : total + '  (' + mil + ' mil)';
+    /* Say which feed answered and how much of it arrived. A partial sweep
+       still draws a plausible sky, so an unlabelled count invites you to read
+       a coverage gap as an empty one. */
+    // Whether a watched flight is doubled by the live layer changes with every
+    // sweep, so the pins are re-tested here rather than only when polled.
+    for (const w of (typeof watchList === 'undefined' ? [] : watchList)) paintWatchPin(w);
+    const src = j.source ? String(j.source).split(',')[0] : 'adsb.lol';
     document.getElementById('feedScope').textContent =
-      feedMode === 'mil' ? 'global' : radiusNm + ' nm radius';
+      feedMode === 'mil' ? 'global · adsb.lol'
+        : scopeText + ' · ' + src + (j.partial ? ' · ' + j.tilesOk + '/' + j.tiles : '');
   } catch (err) { console.warn('aircraft:', err.message); }
 }
 
@@ -1175,8 +1238,581 @@ setInterval(() => {
   document.getElementById('nView').textContent = n;
 }, 2000);
 
+
+/* ===================================================================== WATCH
+   A flight watchlist. Name the flights on a trip and the board follows them:
+   which phase each one is in, roughly when it lands, and a pin on the globe.
+
+   Two things shape the design.
+
+   First, cost. adsb.lol answers curl but sends no access-control-allow-origin,
+   so the browser cannot poll it directly and every lookup goes through the
+   Worker onto a metered plan. Polling one flight every minute would be 43,000
+   requests a month against a quota of 10,000. Ten minutes is the default
+   because live traffic is already on screen — the watchlist answers "where is
+   my flight up to", which does not change meaningfully inside ten minutes. A
+   twelve-hour trip costs about seventy requests. The interval is a control
+   rather than a heuristic, so tightening it near arrival is a deliberate act
+   with a visible cost.
+
+   Second, honesty about coverage. ADS-B is receiver-based and has real holes,
+   most of them oceanic. A flight that vanishes mid-Atlantic has not landed and
+   must never be shown as though it had. NO COVERAGE is a distinct state and it
+   keeps the last known fix visible with its age. */
+
+const WATCH_KEY = 'sentinel.watch.v2';
+const WATCH_INTERVALS = [10, 5, 1];              // minutes, offered in the UI
+let watchList = [];
+let watchDs = null;
+
+/* Airport coordinates for the arrival estimate. Major fields only: a partial
+   list that says so beats a long one that quietly invents positions, so an
+   unrecognised code tracks the flight and simply omits the ETA. */
+const AIRPORTS = (function () {
+  const raw = `LHR EGLL 51.4775 -0.4614 London Heathrow
+LGW EGKK 51.1481 -0.1903 London Gatwick
+STN EGSS 51.8850 0.2350 London Stansted
+LTN EGGW 51.8747 -0.3683 London Luton
+MAN EGCC 53.3537 -2.2750 Manchester
+EDI EGPH 55.9500 -3.3725 Edinburgh
+GLA EGPF 55.8719 -4.4331 Glasgow
+BHX EGBB 52.4539 -1.7480 Birmingham
+DUB EIDW 53.4213 -6.2701 Dublin
+CDG LFPG 49.0097 2.5479 Paris Charles de Gaulle
+ORY LFPO 48.7233 2.3794 Paris Orly
+NCE LFMN 43.6584 7.2159 Nice
+AMS EHAM 52.3086 4.7639 Amsterdam Schiphol
+FRA EDDF 50.0379 8.5622 Frankfurt
+MUC EDDM 48.3538 11.7861 Munich
+BER EDDB 52.3667 13.5033 Berlin Brandenburg
+DUS EDDL 51.2895 6.7668 Dusseldorf
+HAM EDDH 53.6304 9.9882 Hamburg
+ZRH LSZH 47.4647 8.5492 Zurich
+GVA LSGG 46.2381 6.1090 Geneva
+VIE LOWW 48.1103 16.5697 Vienna
+BRU EBBR 50.9014 4.4844 Brussels
+CPH EKCH 55.6181 12.6561 Copenhagen
+ARN ESSA 59.6519 17.9186 Stockholm Arlanda
+OSL ENGM 60.1939 11.1004 Oslo Gardermoen
+HEL EFHK 60.3172 24.9633 Helsinki
+KEF BIKF 63.9850 -22.6056 Keflavik
+MAD LEMD 40.4719 -3.5626 Madrid Barajas
+BCN LEBL 41.2971 2.0785 Barcelona
+AGP LEMG 36.6749 -4.4991 Malaga
+PMI LEPA 39.5517 2.7388 Palma de Mallorca
+LIS LPPT 38.7742 -9.1342 Lisbon
+OPO LPPR 41.2481 -8.6814 Porto
+FAO LPFR 37.0144 -7.9659 Faro
+FCO LIRF 41.8003 12.2389 Rome Fiumicino
+MXP LIMC 45.6306 8.7281 Milan Malpensa
+VCE LIPZ 45.5053 12.3519 Venice
+NAP LIRN 40.8860 14.2908 Naples
+ATH LGAV 37.9364 23.9445 Athens
+IST LTFM 41.2753 28.7519 Istanbul
+SAW LTFJ 40.8986 29.3092 Istanbul Sabiha Gokcen
+AYT LTAI 36.8987 30.8005 Antalya
+WAW EPWA 52.1657 20.9671 Warsaw Chopin
+PRG LKPR 50.1008 14.2600 Prague
+BUD LHBP 47.4369 19.2556 Budapest
+JFK KJFK 40.6413 -73.7781 New York JFK
+EWR KEWR 40.6895 -74.1745 Newark
+LGA KLGA 40.7769 -73.8740 New York LaGuardia
+BOS KBOS 42.3656 -71.0096 Boston Logan
+IAD KIAD 38.9531 -77.4565 Washington Dulles
+DCA KDCA 38.8512 -77.0402 Washington National
+PHL KPHL 39.8744 -75.2424 Philadelphia
+ATL KATL 33.6407 -84.4277 Atlanta
+MIA KMIA 25.7959 -80.2870 Miami
+MCO KMCO 28.4312 -81.3081 Orlando
+FLL KFLL 26.0742 -80.1506 Fort Lauderdale
+TPA KTPA 27.9755 -82.5332 Tampa
+CLT KCLT 35.2144 -80.9473 Charlotte
+ORD KORD 41.9742 -87.9073 Chicago O Hare
+MDW KMDW 41.7868 -87.7522 Chicago Midway
+DTW KDTW 42.2124 -83.3534 Detroit
+MSP KMSP 44.8848 -93.2223 Minneapolis
+DFW KDFW 32.8998 -97.0403 Dallas Fort Worth
+IAH KIAH 29.9902 -95.3368 Houston Intercontinental
+AUS KAUS 30.1975 -97.6664 Austin
+DEN KDEN 39.8561 -104.6737 Denver
+SLC KSLC 40.7899 -111.9791 Salt Lake City
+PHX KPHX 33.4342 -112.0116 Phoenix
+LAS KLAS 36.0840 -115.1537 Las Vegas
+LAX KLAX 33.9416 -118.4085 Los Angeles
+SFO KSFO 37.6213 -122.3790 San Francisco
+SJC KSJC 37.3639 -121.9289 San Jose
+SEA KSEA 47.4502 -122.3088 Seattle Tacoma
+PDX KPDX 45.5887 -122.5975 Portland
+SAN KSAN 32.7338 -117.1933 San Diego
+HNL PHNL 21.3187 -157.9224 Honolulu
+ANC PANC 61.1743 -149.9962 Anchorage
+YYZ CYYZ 43.6777 -79.6248 Toronto Pearson
+YVR CYVR 49.1967 -123.1815 Vancouver
+YUL CYUL 45.4706 -73.7408 Montreal Trudeau
+YYC CYYC 51.1315 -114.0106 Calgary
+MEX MMMX 19.4363 -99.0721 Mexico City
+CUN MMUN 21.0365 -86.8771 Cancun
+GRU SBGR -23.4356 -46.4731 Sao Paulo Guarulhos
+GIG SBGL -22.8090 -43.2506 Rio de Janeiro Galeao
+EZE SAEZ -34.8222 -58.5358 Buenos Aires Ezeiza
+SCL SCEL -33.3930 -70.7858 Santiago
+BOG SKBO 4.7016 -74.1469 Bogota
+LIM SPJC -12.0219 -77.1143 Lima
+PTY MPTO 9.0714 -79.3835 Panama City Tocumen
+DXB OMDB 25.2532 55.3657 Dubai
+DWC OMDW 24.8964 55.1614 Dubai World Central
+AUH OMAA 24.4330 54.6511 Abu Dhabi
+DOH OTHH 25.2731 51.6081 Doha Hamad
+RUH OERK 24.9576 46.6988 Riyadh
+JED OEJN 21.6796 39.1565 Jeddah
+KWI OKKK 29.2266 47.9689 Kuwait
+BAH OBBI 26.2708 50.6336 Bahrain
+MCT OOMS 23.5933 58.2844 Muscat
+TLV LLBG 32.0114 34.8867 Tel Aviv Ben Gurion
+CAI HECA 30.1219 31.4056 Cairo
+JNB FAOR -26.1392 28.2460 Johannesburg
+CPT FACT -33.9648 18.6017 Cape Town
+NBO HKJK -1.3192 36.9278 Nairobi
+ADD HAAB 8.9779 38.7993 Addis Ababa
+LOS DNMM 6.5774 3.3212 Lagos
+CMN GMMN 33.3675 -7.5900 Casablanca
+MRU FIMP -20.4302 57.6836 Mauritius
+DEL VIDP 28.5562 77.1000 Delhi
+BOM VABB 19.0887 72.8679 Mumbai
+BLR VOBL 13.1986 77.7066 Bengaluru
+MAA VOMM 12.9941 80.1709 Chennai
+HYD VOHS 17.2403 78.4294 Hyderabad
+CCU VECC 22.6547 88.4467 Kolkata
+CMB VCBI 7.1808 79.8841 Colombo
+MLE VRMM 4.1918 73.5291 Male
+KTM VNKT 27.6966 85.3591 Kathmandu
+BKK VTBS 13.6900 100.7501 Bangkok Suvarnabhumi
+DMK VTBD 13.9126 100.6067 Bangkok Don Mueang
+HKT VTSP 8.1132 98.3169 Phuket
+SIN WSSS 1.3644 103.9915 Singapore Changi
+KUL WMKK 2.7456 101.7099 Kuala Lumpur
+CGK WIII -6.1256 106.6559 Jakarta
+DPS WADD -8.7482 115.1672 Bali Denpasar
+MNL RPLL 14.5086 121.0198 Manila
+HKG VHHH 22.3080 113.9185 Hong Kong
+TPE RCTP 25.0777 121.2328 Taipei Taoyuan
+ICN RKSI 37.4602 126.4407 Seoul Incheon
+GMP RKSS 37.5583 126.7906 Seoul Gimpo
+NRT RJAA 35.7720 140.3929 Tokyo Narita
+HND RJTT 35.5494 139.7798 Tokyo Haneda
+KIX RJBB 34.4347 135.2440 Osaka Kansai
+CTS RJCC 42.7752 141.6923 Sapporo New Chitose
+PVG ZSPD 31.1443 121.8083 Shanghai Pudong
+SHA ZSSS 31.1979 121.3363 Shanghai Hongqiao
+PEK ZBAA 40.0801 116.5846 Beijing Capital
+PKX ZBAD 39.5098 116.4105 Beijing Daxing
+CAN ZGGG 23.3924 113.2988 Guangzhou
+SZX ZGSZ 22.6393 113.8107 Shenzhen
+CTU ZUUU 30.5785 103.9471 Chengdu Shuangliu
+CKG ZUCK 29.7192 106.6417 Chongqing
+XIY ZLXY 34.4471 108.7516 Xian
+KMG ZPPP 25.1019 102.9292 Kunming
+SYD YSSY -33.9399 151.1753 Sydney
+MEL YMML -37.6690 144.8410 Melbourne
+BNE YBBN -27.3842 153.1175 Brisbane
+PER YPPH -31.9403 115.9670 Perth
+ADL YPAD -34.9450 138.5306 Adelaide
+OOL YBCG -28.1644 153.5050 Gold Coast
+CNS YBCS -16.8858 145.7553 Cairns
+AKL NZAA -37.0082 174.7850 Auckland
+CHC NZCH -43.4894 172.5322 Christchurch
+WLG NZWN -41.3272 174.8053 Wellington
+NAN NFFN -17.7554 177.4434 Nadi`;
+  const by = {};
+  for (const line of raw.split('\n')) {
+    const [iata, icao, lat, lon, ...name] = line.trim().split(/\s+/);
+    const rec = { iata, icao, lat: +lat, lon: +lon, name: name.join(' ') };
+    by[iata] = rec; by[icao] = rec;
+  }
+  return by;
+})();
+
+/* Airline prefixes, IATA to the ICAO form that appears in a callsign. People
+   read "BA117" off a boarding pass; the transponder says "BAW117". Without
+   this the watchlist looks broken for exactly the input everyone tries first. */
+const AIRLINE_ICAO = {
+  BA:'BAW', AA:'AAL', UA:'UAL', DL:'DAL', LH:'DLH', AF:'AFR', KL:'KLM', EK:'UAE',
+  QR:'QTR', EY:'ETD', SQ:'SIA', CX:'CPA', QF:'QFA', NZ:'ANZ', JL:'JAL', NH:'ANA',
+  KE:'KAL', OZ:'AAR', TK:'THY', IB:'IBE', VY:'VLG', FR:'RYR', U2:'EZY', W6:'WZZ',
+  LX:'SWR', OS:'AUA', SN:'BEL', SK:'SAS', AY:'FIN', LO:'LOT', TP:'TAP', AZ:'ITY',
+  EI:'EIN', VS:'VIR', WN:'SWA', AS:'ASA', B6:'JBU', NK:'NKS', F9:'FFT', AC:'ACA',
+  WS:'WJA', AM:'AMX', LA:'LAN', AV:'AVA', CM:'CMP', ET:'ETH', MS:'MSR', SV:'SVA',
+  GF:'GFA', WY:'OMA', RJ:'RJA', AI:'AIC', '6E':'IGO', UK:'VTI', SG:'SEJ', TG:'THA',
+  MH:'MAS', GA:'GIA', PR:'PAL', VN:'HVN', CI:'CAL', BR:'EVA', CA:'CCA', MU:'CES',
+  CZ:'CSN', HU:'CHH', JQ:'JST', VA:'VOZ', HA:'HAL', PC:'PGT', DY:'NOZ', D8:'NSZ',
+  BT:'BTI', A3:'AEE', OA:'OAL', PS:'AUI', SU:'AFL', TR:'TGW', MF:'CXA', SC:'CDG',
+};
+
+/* "BA 117", "ba117" and "BAW117" all mean the same flight. Two-character
+   prefixes are IATA and get translated; three are already ICAO and are left
+   alone, because translating them would corrupt callsigns like RYR or DLH. */
+function normaliseCallsign(input) {
+  const raw = String(input || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+  if (!raw) return '';
+  const m = raw.match(/^([A-Z]{3})(\d.*)$/);
+  if (m) return raw;
+  const m2 = raw.match(/^([A-Z0-9]{2})(\d.*)$/);
+  if (m2 && AIRLINE_ICAO[m2[1]]) return AIRLINE_ICAO[m2[1]] + m2[2];
+  return raw;
+}
+
+function greatCircleNm(aLat, aLon, bLat, bLon) {
+  const R = 3440.065;                                   // earth radius, nm
+  const p1 = aLat * Math.PI / 180, p2 = bLat * Math.PI / 180;
+  const dp = (bLat - aLat) * Math.PI / 180, dl = (bLon - aLon) * Math.PI / 180;
+  const h = Math.sin(dp / 2) ** 2 + Math.cos(p1) * Math.cos(p2) * Math.sin(dl / 2) ** 2;
+  return 2 * R * Math.asin(Math.min(1, Math.sqrt(h)));
+}
+
+/* Phase from the fix, plus what the previous fix said. The distinction that
+   matters is LANDED versus NO COVERAGE: both look like an absent aircraft, and
+   only one of them means the trip is over. */
+function phaseOf(w, fix) {
+  if (!fix || !fix.found) {
+    if (!w.everAirborne) return 'SCHEDULED';
+    const gapMin = (Date.now() - (w.lastSeen || 0)) / 60000;
+    if (w.phase === 'APPROACH' && gapMin < 45) return 'LANDED';
+    return 'NO COVERAGE';
+  }
+  if (fix.onGround) return w.everAirborne ? 'LANDED' : 'ON STAND';
+  const rate = fix.rate || 0;
+  if (rate > 400) return 'CLIMB';
+  if (rate < -400) return 'DESCENT';
+  if ((fix.altFt || 0) < 10000) return 'APPROACH';
+  return 'CRUISE';
+}
+
+/* Distance and a rough time to touchdown. The allowance exists because ground
+   speed at cruise overstates the last stretch — descent, approach and taxi are
+   all slower — and a flat number is cruder than a performance model and says
+   so rather than implying precision it does not have. */
+function arrivalEstimate(w, fix) {
+  const ap = w.dest && AIRPORTS[w.dest];
+  if (!ap || !fix || !fix.found || !fix.gs || fix.gs < 60) return null;
+  const nm = greatCircleNm(fix.lat, fix.lon, ap.lat, ap.lon);
+  const mins = (nm / fix.gs) * 60 + ((fix.altFt || 0) > 20000 ? 10 : 4);
+  return { nm: Math.round(nm), mins: Math.round(mins), ap };
+}
+
+function saveWatch() {
+  try {
+    localStorage.setItem(WATCH_KEY, JSON.stringify(watchList.map((w) => ({
+      id: w.id, cs: w.cs, typed: w.typed, dest: w.dest, everyMin: w.everyMin,
+      phase: w.phase, everAirborne: w.everAirborne, lastSeen: w.lastSeen, last: w.last,
+    }))));
+  } catch (e) { /* private mode: the list is still good for this session */ }
+}
+
+function loadWatch() {
+  try {
+    const raw = localStorage.getItem(WATCH_KEY);
+    watchList = raw ? JSON.parse(raw) : [];
+  } catch (e) { watchList = []; }
+  for (const w of watchList) { w.nextDue = 0; w.busy = false; }
+}
+
+function addWatch(typed, destTyped) {
+  const cs = normaliseCallsign(typed);
+  if (!cs) return { error: 'Enter a flight number, e.g. BA117' };
+  if (watchList.some((w) => w.cs === cs)) return { error: cs + ' is already on the list' };
+  if (watchList.length >= 8) return { error: 'Eight flights is the limit' };
+  const dest = String(destTyped || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+  watchList.push({
+    id: cs + ':' + Date.now().toString(36), cs, typed: String(typed).toUpperCase().trim(),
+    dest: dest || null, everyMin: 10, phase: 'SCHEDULED', everAirborne: false,
+    lastSeen: 0, last: null, nextDue: 0, busy: false,
+  });
+  saveWatch(); renderWatch();
+  return { ok: true, cs, destKnown: !dest || Boolean(AIRPORTS[dest]) };
+}
+
+function removeWatch(id) {
+  const w = watchList.find((x) => x.id === id);
+  watchList = watchList.filter((x) => x.id !== id);
+  if (w && watchDs) { const e = watchDs.entities.getById('w:' + w.id); if (e) watchDs.entities.remove(e); }
+  saveWatch(); renderWatch();
+}
+
+function cycleInterval(id) {
+  const w = watchList.find((x) => x.id === id);
+  if (!w) return;
+  const i = WATCH_INTERVALS.indexOf(w.everyMin);
+  w.everyMin = WATCH_INTERVALS[(i + 1) % WATCH_INTERVALS.length];
+  w.nextDue = 0;                                   // take effect now, not next tick
+  saveWatch(); renderWatch();
+}
+
+/* A phase change is the only thing worth interrupting someone for, and only
+   once per change. Permission is asked on the first add rather than on load,
+   so the prompt arrives attached to an action that explains it. */
+function notifyPhase(w, from, to) {
+  const line = {
+    'ON STAND': w.cs + ' is at the gate',
+    CLIMB: w.cs + ' is airborne',
+    CRUISE: w.cs + ' has reached cruise',
+    DESCENT: w.cs + ' has started descent',
+    APPROACH: w.cs + ' is on approach',
+    LANDED: w.cs + ' has landed',
+    'NO COVERAGE': w.cs + ' has left ADS-B coverage',
+  }[to];
+  if (!line || !from || from === to) return;
+  try {
+    if (window.Notification && Notification.permission === 'granted') {
+      new Notification('SENTINEL', { body: line, tag: 'watch:' + w.id });
+    }
+  } catch (e) { /* notifications are a courtesy, never a dependency */ }
+}
+
+async function pollWatch(w) {
+  if (w.busy) return;
+  w.busy = true;
+  try {
+    const r = await fetch(PROXY + '/flight?callsign=' + encodeURIComponent(w.cs));
+    const j = r.ok ? await r.json() : null;
+    const fix = j && j.found ? j : { found: false };
+    if (fix.found) {
+      w.lastSeen = Date.now();
+      w.last = {
+        lat: fix.lat, lon: fix.lon, altFt: fix.altFt, gs: fix.gs, track: fix.track,
+        rate: fix.rate, reg: fix.reg, type: fix.type, hex: fix.hex,
+        onGround: fix.onGround, at: Date.now(),
+      };
+      if (!fix.onGround) w.everAirborne = true;
+    }
+    const was = w.phase;
+    w.phase = phaseOf(w, fix.found ? Object.assign({}, fix) : null);
+    if (w.phase !== was) notifyPhase(w, was, w.phase);
+    w.err = r.ok ? null : 'feed ' + r.status;
+    paintWatchPin(w);
+  } catch (e) {
+    w.err = 'offline';
+  } finally {
+    w.busy = false;
+    /* A landed flight stops costing anything. Everything else is on the
+       interval the row shows, so the request rate is always readable off the
+       panel rather than buried in a rule. */
+    w.nextDue = w.phase === 'LANDED' ? Infinity : Date.now() + w.everyMin * 60000;
+    saveWatch(); renderWatch();
+  }
+}
+
+/* A ring around the position, plus a silhouette only when the traffic layer is
+   not already drawing one there.
+
+   Both halves of that matter. A watched flight is usually also in the live
+   feed, and a second silhouette at the same point reads as two aircraft in
+   formation. But it is not always in the feed — military mode excludes civil
+   traffic entirely, and the area box only covers the view — and a bare ring
+   with nothing inside it reads as a tracking failure. So the ring is the
+   constant and the symbol fills in the gap. */
+function paintWatchPin(w) {
+  if (!watchDs || !w.last) return;
+  const stale = Date.now() - w.last.at > w.everyMin * 60000 * 2;
+  const col = Cesium.Color.fromCssColorString(stale ? '#7a8a9a' : '#ffcc00');
+  const pos = Cesium.Cartesian3.fromDegrees(w.last.lon, w.last.lat,
+    Math.max(30, (w.last.altFt || 0) * 0.3048));
+  let e = watchDs.entities.getById('w:' + w.id);
+  if (!e) {
+    const meta = { track: w.last.track };
+    e = watchDs.entities.add({
+      id: 'w:' + w.id,
+      position: pos,
+      point: { pixelSize: 26, color: Cesium.Color.TRANSPARENT, outlineColor: col, outlineWidth: 2 },
+      billboard: {
+        image: ICONS.airliner, width: 22, height: 22, color: col,
+        // Same screen-space correction as the live contacts: Cesium measures
+        // counter-clockwise from image-up, a track is clockwise from north,
+        // and the camera's heading moves where north is on screen.
+        rotation: new Cesium.CallbackProperty(function () {
+          return viewer.camera.heading - Cesium.Math.toRadians(meta.track || 0);
+        }, false),
+        alignedAxis: Cesium.Cartesian3.ZERO,
+      },
+      label: {
+        text: w.cs, font: '10px "Share Tech Mono", monospace', fillColor: col,
+        showBackground: true,
+        backgroundColor: Cesium.Color.fromCssColorString('#03060c').withAlpha(0.8),
+        pixelOffset: new Cesium.Cartesian2(0, 24),
+      },
+    });
+    e._meta = meta;
+  } else {
+    e.position = pos;
+    e.point.outlineColor = col;
+    e.billboard.color = col;
+    e.label.fillColor = col;
+    e._meta.track = w.last.track;
+  }
+  const alsoLive = Boolean(w.last.hex && air.entities.getById(w.last.hex));
+  e.billboard.show = !alsoLive;
+  e.label.text = w.cs + '  ' + w.phase;
+}
+
+function goToWatch(id) {
+  const w = watchList.find((x) => x.id === id);
+  if (!w || !w.last) return;
+  viewer.camera.flyTo({
+    destination: Cesium.Cartesian3.fromDegrees(w.last.lon, w.last.lat, 320000),
+    duration: 1.6,
+  });
+}
+
+function ageText(ms) {
+  const s = Math.round((Date.now() - ms) / 1000);
+  if (s < 90) return s + 's ago';
+  const m = Math.round(s / 60);
+  return m < 90 ? m + 'm ago' : Math.round(m / 60) + 'h ago';
+}
+
+const PHASE_COLOUR = {
+  SCHEDULED: 'var(--td)', 'ON STAND': 'var(--td)', CLIMB: 'var(--g)',
+  CRUISE: 'var(--c)', DESCENT: 'var(--o)', APPROACH: 'var(--y)',
+  LANDED: 'var(--g)', 'NO COVERAGE': 'var(--r)',
+};
+
+function renderWatch() {
+  const host = document.getElementById('wList');
+  if (!host) return;
+  if (!watchList.length) {
+    host.innerHTML = '<div class="wEmpty">No flights watched.</div>';
+    return;
+  }
+  host.innerHTML = watchList.map((w) => {
+    const eta = arrivalEstimate(w, w.last && !w.last.onGround ? Object.assign({ found: true }, w.last) : null);
+    const bits = [];
+    if (w.last) {
+      if (w.last.altFt != null) bits.push(w.last.altFt.toLocaleString() + ' ft');
+      if (w.last.gs != null) bits.push(Math.round(w.last.gs) + ' kt');
+      if (w.last.type) bits.push(w.last.type);
+    }
+    const destLine = w.dest
+      ? (AIRPORTS[w.dest]
+        ? (eta ? eta.nm.toLocaleString() + ' nm to ' + w.dest + ' · ~'
+            + (eta.mins >= 60 ? Math.floor(eta.mins / 60) + 'h ' + (eta.mins % 60) + 'm' : eta.mins + 'm')
+            + ' out'
+          : 'to ' + AIRPORTS[w.dest].name)
+        : w.dest + ' not in the airport list — no estimate')
+      : 'no destination set — no estimate';
+    return '<div class="wRow">'
+      + '<div class="wTop">'
+        + '<b>' + w.cs + '</b>'
+        + (w.typed && w.typed !== w.cs ? '<i>' + w.typed + '</i>' : '')
+        + '<span class="wPh" style="color:' + (PHASE_COLOUR[w.phase] || 'var(--td)') + '">' + w.phase + '</span>'
+      + '</div>'
+      + '<div class="wSub">' + (bits.join(' · ') || (w.err ? w.err : 'awaiting first fix')) + '</div>'
+      + '<div class="wSub">' + destLine + '</div>'
+      + '<div class="wSub">' + (w.lastSeen ? 'seen ' + ageText(w.lastSeen) : 'not seen yet') + '</div>'
+      + '<div class="wAct">'
+        + '<button data-go="' + w.id + '"' + (w.last ? '' : ' disabled') + '>GO</button>'
+        + '<button data-iv="' + w.id + '" title="How often this flight is polled. Every check is one request against the plan.">' + w.everyMin + ' MIN</button>'
+        + '<button data-now="' + w.id + '">NOW</button>'
+        + '<button data-rm="' + w.id + '" class="wRm">REMOVE</button>'
+      + '</div>'
+    + '</div>';
+  }).join('');
+}
+
+/* The plan is metered, so what it has spent belongs on screen next to the
+   thing spending it. Two numbers because they disagree: ours counts calls the
+   Worker made, RapidAPI's is what the bill will be based on. */
+async function refreshQuota() {
+  const el = document.getElementById('wCost');
+  if (!el) return;
+  try {
+    const r = await fetch(PROXY + '/adsb/usage');
+    const j = await r.json();
+    if (!j.configured) { el.textContent = 'free feed'; return; }
+    el.textContent = j.remaining != null
+      ? j.remaining.toLocaleString() + ' left'
+      : j.requests.toLocaleString() + ' used';
+    el.title = 'Worker counted ' + j.requests + ' calls this month'
+      + (j.remaining != null ? '; RapidAPI reports ' + j.remaining + ' of ' + j.limit + ' remaining' : '')
+      + (j.throttled ? '; ' + j.throttled + ' burst retries' : '');
+  } catch (e) { el.textContent = ''; }
+}
+
+function watchTick() {
+  /* Nothing polls while the tab is hidden. A watchlist left open overnight
+     would otherwise spend the month's quota on a picture nobody is looking
+     at, and the first check on returning catches it up anyway. */
+  if (document.visibilityState !== 'visible') return;
+  const now = Date.now();
+  for (const w of watchList) {
+    if (w.nextDue !== Infinity && now >= (w.nextDue || 0)) pollWatch(w);
+  }
+}
+
+function initWatch() {
+  watchDs = new Cesium.CustomDataSource('watch');
+  viewer.dataSources.add(watchDs);
+  loadWatch();
+  renderWatch();
+  for (const w of watchList) paintWatchPin(w);
+
+  const panel = document.getElementById('watchPanel');
+  const btn = document.getElementById('btnWatch');
+  btn.onclick = () => {
+    panel.hidden = !panel.hidden;
+    btn.classList.toggle('on', !panel.hidden);
+    if (!panel.hidden) refreshQuota();
+  };
+
+  const note = document.getElementById('wNote');
+  const say = (msg, bad) => {
+    note.textContent = msg || '';
+    note.style.color = bad ? 'var(--r)' : 'var(--g)';
+  };
+
+  document.getElementById('wAddBtn').onclick = () => {
+    const cs = document.getElementById('wCs');
+    const dest = document.getElementById('wDest');
+    const res = addWatch(cs.value, dest.value);
+    if (res.error) { say(res.error, true); return; }
+    say(res.destKnown ? 'Watching ' + res.cs : 'Watching ' + res.cs + ' — destination not recognised, no ETA');
+    cs.value = ''; dest.value = '';
+    // Asked here, attached to the action that explains it, rather than on load.
+    try {
+      if (window.Notification && Notification.permission === 'default') Notification.requestPermission();
+    } catch (e) { /* not available: the panel still shows every change */ }
+    watchTick();
+  };
+  document.getElementById('wCs').addEventListener('keydown', (ev) => {
+    if (ev.key === 'Enter') document.getElementById('wAddBtn').click();
+  });
+  document.getElementById('wDest').addEventListener('keydown', (ev) => {
+    if (ev.key === 'Enter') document.getElementById('wAddBtn').click();
+  });
+
+  document.getElementById('wList').addEventListener('click', (ev) => {
+    const b = ev.target.closest('button');
+    if (!b) return;
+    if (b.dataset.rm) removeWatch(b.dataset.rm);
+    else if (b.dataset.go) goToWatch(b.dataset.go);
+    else if (b.dataset.iv) cycleInterval(b.dataset.iv);
+    else if (b.dataset.now) {
+      const w = watchList.find((x) => x.id === b.dataset.now);
+      if (w) { w.nextDue = 0; pollWatch(w); }
+    }
+  });
+
+  setInterval(watchTick, 20000);
+  setInterval(renderWatch, 30000);          // keeps the "seen 4m ago" honest
+  setInterval(refreshQuota, 5 * 60000);
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') watchTick();
+  });
+  watchTick();
+  refreshQuota();
+}
+
 /* ------------------------------------------------------------------ go */
 (async () => {
+  initWatch();
   await Promise.allSettled([loadAircraft(), loadInstallations(), loadContext()]);
   document.getElementById('load').classList.add('gone');
   setInterval(loadAircraft, 30000);

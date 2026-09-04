@@ -26,13 +26,15 @@
  */
 
 import { tick as spineTick, state as spineState, since as spineSince, series as spineSeries } from './spine.js';
-import { osmMilitary, launches as llLaunches, tle as celesTle, cameras as openCams } from './sources.js';
+import { osmMilitary, launches as llLaunches, tle as celesTle, cameras as openCams,
+         adsbArea, flight as flightLookup, adsbxUsage } from './sources.js';
 
 const ALLOWED_HOSTS = new Set([
   // aircraft
   'api.adsb.lol',
   'opendata.adsb.fi',
   'api.airplanes.live',
+  'adsbexchange-com1.p.rapidapi.com',   // paid feed; key injected server-side
   'opensky-network.org',
   // maritime
   'meri.digitraffic.fi',
@@ -392,24 +394,40 @@ async function firms(request, env) {
 
 let oskyToken = { value: null, expires: 0 };
 let oskyBlockedUntil = 0;
+let oskyBlockedMode = null;   // 'auth' | 'anon' — which state was refused
+let oskyAuthNote = null;      // why authentication failed, when it did
 
 async function openskyToken(env) {
   if (!env.OPENSKY_CLIENT_ID || !env.OPENSKY_CLIENT_SECRET) return null;
   if (oskyToken.value && Date.now() < oskyToken.expires) return oskyToken.value;
 
-  const res = await fetch(
-    'https://auth.opensky-network.org/auth/realms/opensky-network/protocol/openid-connect/token',
-    {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: new URLSearchParams({
-        grant_type: 'client_credentials',
-        client_id: env.OPENSKY_CLIENT_ID,
-        client_secret: env.OPENSKY_CLIENT_SECRET,
-      }),
-    }
-  );
-  if (!res.ok) return null;
+  let res;
+  try {
+    res = await fetch(
+      'https://auth.opensky-network.org/auth/realms/opensky-network/protocol/openid-connect/token',
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: new URLSearchParams({
+          grant_type: 'client_credentials',
+          client_id: env.OPENSKY_CLIENT_ID,
+          client_secret: env.OPENSKY_CLIENT_SECRET,
+        }),
+        // Without a bound, a refused auth host stalls the whole request before
+        // the data call even starts, and the failure then gets blamed on the
+        // data endpoint.
+        signal: AbortSignal.timeout(10000),
+      }
+    );
+  } catch (e) {
+    oskyAuthNote = 'token endpoint unreachable: ' + (e.message || 'timeout');
+    return null;
+  }
+  if (!res.ok) {
+    oskyAuthNote = 'token rejected: HTTP ' + res.status;
+    return null;
+  }
+  oskyAuthNote = null;
 
   const data = await res.json();
   // Tokens last 30 minutes; refresh a minute early.
@@ -437,25 +455,40 @@ async function opensky(request, env, ctx) {
   // pass. Re-probe every 30 minutes in case the block lifts.
   // Module globals are per-isolate, so the verdict has to live somewhere shared
   // or every cold isolate pays the 8s probe again.
-  const verdictKey = new Request('https://sentinel.internal/osky-blocked');
-  if (Date.now() < oskyBlockedUntil) {
-    return json({ blocked: true, reason: 'upstream refuses this IP range (cached verdict)', cached: true });
+  /* The verdict is per credential state, not per worker. A refusal observed
+     while anonymous says nothing about an authenticated request: OpenSky judges
+     an unauthenticated caller on its IP range and an authenticated one on its
+     token. Sharing one key meant that adding credentials changed nothing for up
+     to thirty minutes, and looked exactly like the credentials not working. */
+  const verdictKey = new Request(
+    'https://sentinel.internal/osky-blocked/' + (token ? 'auth' : 'anon')
+  );
+  // The in-memory flag is likewise only meaningful for the mode that set it.
+  if (oskyBlockedMode === (token ? 'auth' : 'anon') && Date.now() < oskyBlockedUntil) {
+    return json({ blocked: true, authenticated: Boolean(token),
+      reason: 'upstream refuses this IP range (cached verdict)', cached: true });
   }
   const cachedVerdict = await caches.default.match(verdictKey);
   if (cachedVerdict) {
     oskyBlockedUntil = Date.now() + 300000;
+    oskyBlockedMode = token ? 'auth' : 'anon';
     return json({ blocked: true, reason: 'upstream refuses this IP range (cached verdict)', cached: true });
   }
 
   const markBlocked = (reason, extra = {}) => {
     oskyBlockedUntil = Date.now() + 1800000;
+    oskyBlockedMode = token ? 'auth' : 'anon';
     ctx.waitUntil(
       caches.default.put(
         verdictKey,
         new Response('blocked', { headers: { 'Cache-Control': 'public, max-age=1800' } })
       )
     );
-    return json({ blocked: true, reason, ...extra });
+    return json({
+      blocked: true, reason, authenticated: Boolean(token),
+      ...(oskyAuthNote ? { auth: oskyAuthNote } : {}),
+      ...extra,
+    });
   };
 
   let res;
@@ -698,8 +731,50 @@ export default {
       if (path === '/tle') {
         return json(await celesTle(request, env), 200, { 'Cache-Control': 'public, max-age=10800' });
       }
+      if (path === '/flight') {
+        return json(await flightLookup(request, env), 200, { 'Cache-Control': 'public, max-age=30' });
+      }
+      if (path === '/adsb/usage') {
+        return json(await adsbxUsage(env), 200, { 'Cache-Control': 'no-store' });
+      }
+      if (path === '/adsb/area') {
+        return json(await adsbArea(request, env), 200, { 'Cache-Control': 'public, max-age=30' });
+      }
       if (path === '/cams') {
         return json(await openCams(request, env), 200, { 'Cache-Control': 'public, max-age=1800' });
+      }
+
+      /* Diagnostic: is OpenSky slow from here, or unreachable? An 8-second
+         budget cannot tell those apart, and the difference decides whether the
+         integration is fixable at all. Times each hop with a generous bound. */
+      if (path === '/osky/probe') {
+        const out = {};
+        const time = async (label, fn) => {
+          const t0 = Date.now();
+          try { out[label] = { ...(await fn()), ms: Date.now() - t0 }; }
+          catch (e) { out[label] = { error: e.message, ms: Date.now() - t0 }; }
+        };
+        await time('auth', async () => {
+          const r = await fetch(
+            'https://auth.opensky-network.org/auth/realms/opensky-network/protocol/openid-connect/token',
+            { method: 'POST',
+              headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+              body: new URLSearchParams({
+                grant_type: 'client_credentials',
+                client_id: env.OPENSKY_CLIENT_ID || 'x',
+                client_secret: env.OPENSKY_CLIENT_SECRET || 'x',
+              }),
+              signal: AbortSignal.timeout(45000) });
+          const j = await r.json().catch(() => ({}));
+          return { status: r.status, gotToken: Boolean(j.access_token) };
+        });
+        await time('states', async () => {
+          const r = await fetch(
+            'https://opensky-network.org/api/states/all?lamin=51&lomin=-1&lamax=52&lomax=0',
+            { signal: AbortSignal.timeout(45000) });
+          return { status: r.status, bytes: (await r.text()).length };
+        });
+        return json(out);
       }
 
       if (path === '/health') {
@@ -709,9 +784,12 @@ export default {
           allowedHosts: ALLOWED_HOSTS.size,
           configured: {
             opensky: Boolean(env.OPENSKY_CLIENT_ID && env.OPENSKY_CLIENT_SECRET),
+            // Configured is not the same as working; say which.
+            openskyAuth: oskyAuthNote || (oskyToken.value ? 'token ok' : 'not yet attempted'),
             gfw: Boolean(env.GFW_TOKEN),
             acled: Boolean(env.ACLED_EMAIL && env.ACLED_PASSWORD),
             firms: Boolean(env.FIRMS_KEY),
+            adsbx: Boolean(env.ADSBX_KEY),
           },
         });
       }
