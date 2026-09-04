@@ -109,7 +109,8 @@ html,body{height:100%;overflow:hidden;background:#03060c;
 
   <div class="panel">
     <div class="ptitle">Live Contacts</div>
-    <div class="row"><span>MILITARY AIR</span><b class="v" id="nAir" style="color:var(--c)">--</b></div>
+    <div class="row"><span id="nAirLabel">MILITARY AIR</span><b class="v" id="nAir" style="color:var(--c)">--</b></div>
+    <div class="row" style="padding-top:0"><span style="font-size:9px;color:var(--td)">SCOPE</span><span id="feedScope" style="font-size:9px;color:var(--td)">global</span></div>
     <div class="row"><span>INSTALLATIONS</span><b class="v" id="nInst" style="color:var(--g)">--</b></div>
     <div class="row"><span>IN VIEW</span><b class="v" id="nView" style="color:var(--y)">--</b></div>
     <div class="hint">Drag to orbit · right-drag or two fingers to tilt · scroll to zoom.
@@ -123,6 +124,9 @@ html,body{height:100%;overflow:hidden;background:#03060c;
     <button data-s="noir">NOIR</button>
     <button id="btnTilt">TILT</button>
     <button id="btnFollow">UNLOCK</button>
+    <span class="ctlLbl">TRAFFIC</span>
+    <button id="btnMil" class="on" title="Military traffic, worldwide">MIL</button>
+    <button id="btnAll" title="All traffic within range of the view. adsb.lol serves this as a point-and-radius query capped at 250 nautical miles — there is no global all-traffic call, so this follows the camera.">ALL</button>
   </div>
 
   <div class="ctl cam">
@@ -465,11 +469,81 @@ function seedTrack(p, m, now) {
   p.addSample(now, Cesium.Cartesian3.fromDegrees(m.lon, m.lat, m.altM));
 }
 
+/* ---- feed mode ----
+   Military traffic has a global endpoint; everything else does not. adsb.lol
+   serves all traffic only as a point-and-radius query capped at 250 nautical
+   miles, which is a real constraint rather than a choice: there is no "all
+   aircraft on Earth" call to make.
+
+   So MIL stays global and ALL follows the camera, re-querying the circle you
+   are actually looking at. The radius is derived from the view and clamped, and
+   the panel reports it, because a contact count means nothing if you cannot see
+   what area it covers. */
+let feedMode = 'mil';
+
+/* Where the camera is actually pointed, not what rectangle it can see.
+   computeViewRectangle returns the whole globe whenever the horizon is in
+   frame, whose centre is 0N 0E — so a tilted view over London was querying the
+   Gulf of Guinea. Picking the ellipsoid at screen centre gives the point being
+   looked at, which is the thing worth querying around. */
+function cameraCentre() {
+  const canvas = scene.canvas;
+  const mid = new Cesium.Cartesian2(canvas.clientWidth / 2, canvas.clientHeight / 2);
+  let carto = null;
+  try {
+    const ray = viewer.camera.getPickRay(mid);
+    const hit = ray && scene.globe.pick(ray, scene);
+    if (hit) carto = Cesium.Cartographic.fromCartesian(hit);
+  } catch (e) { /* fall through */ }
+  // Looking at space: use the ground point directly beneath the camera.
+  if (!carto) carto = viewer.camera.positionCartographic;
+
+  // Radius from altitude rather than from a rectangle, which stays sane at any
+  // pitch. Roughly: the higher you are, the more you want to see.
+  const altKm = viewer.camera.positionCartographic.height / 1000;
+  return {
+    lat: Cesium.Math.toDegrees(carto.latitude),
+    lon: Cesium.Math.toDegrees(carto.longitude),
+    altKm,
+  };
+}
+
+// adsb.lol caps this at 250 nautical miles; below that, scale with altitude.
+function viewRadiusNm(altKm) {
+  return Math.round(Math.min(250, Math.max(25, altKm * 0.55)));
+}
+
+// Half the visible north-south span, in nautical miles, clamped to what the
+// endpoint will actually serve.
+function viewRadiusNm(spanDeg) {
+  const nm = (spanDeg * 60) / 2;
+  return Math.round(Math.min(250, Math.max(25, nm)));
+}
+
 async function loadAircraft() {
   try {
-    const u = PROXY + '/p?url=' + encodeURIComponent('https://api.adsb.lol/v2/mil');
+    let upstream, radiusNm = null;
+    if (feedMode === 'mil') {
+      upstream = 'https://api.adsb.lol/v2/mil';
+    } else {
+      const c = cameraCentre();
+      radiusNm = viewRadiusNm(c.altKm);
+      upstream = 'https://api.adsb.lol/v2/point/'
+        + c.lat.toFixed(3) + '/' + c.lon.toFixed(3) + '/' + radiusNm;
+    }
+    const u = PROXY + '/p?url=' + encodeURIComponent(upstream);
     const r = await fetch(u);
-    const j = await r.json();
+    if (!r.ok) {
+      // 429 in particular: the aggregator rate-limits, and it answers with an
+      // HTML page that JSON.parse then fails on with a message about "<" that
+      // tells you nothing. Say what actually happened and keep the last picture
+      // rather than clearing the sky.
+      document.getElementById('feedScope').textContent =
+        r.status === 429 ? 'rate limited — retrying' : 'feed error ' + r.status;
+      return;
+    }
+    const j = await r.json().catch(() => null);
+    if (!j) { document.getElementById('feedScope').textContent = 'bad response'; return; }
     const list = Array.isArray(j.ac) ? j.ac : [];
     const seen = new Set();
 
@@ -492,7 +566,17 @@ async function loadAircraft() {
           position: track,
           billboard: {
             image: ICONS.airliner, width: 24, height: 24, color: CYAN,
-            rotation: 0, alignedAxis: Cesium.Cartesian3.ZERO,
+            /* Screen-space rotation, so it must account for where north is on
+               screen. Cesium measures counter-clockwise from image-up; a
+               compass track is clockwise from north; and the camera's heading
+               rotates north on screen. Hence heading minus track, evaluated
+               every frame rather than written once per poll — otherwise the
+               symbol points correctly only while the camera faces north and
+               drifts off its own trail as soon as you spin the view. */
+            rotation: new Cesium.CallbackProperty(function () {
+              return viewer.camera.heading - Cesium.Math.toRadians(meta.track || 0);
+            }, false),
+            alignedAxis: Cesium.Cartesian3.ZERO,
             scaleByDistance: new Cesium.NearFarScalar(5.0e4, 1.5, 6.0e6, 0.5),
             translucencyByDistance: new Cesium.NearFarScalar(1.0e6, 1.0, 2.0e7, 0.35),
           },
@@ -523,6 +607,10 @@ async function loadAircraft() {
       // One record, refreshed. t0 is the moment of this fix, which is what the
       // per-frame reckoning measures from.
       Object.assign(e._meta, {
+        // dbFlags bit 0 marks military in this feed; /v2/mil returns 1 for
+        // everything, and the point query mixes them, so this is what keeps
+        // military legible once civil traffic is on screen.
+        isMil: Boolean((a.dbFlags || 0) & 1) || feedMode === 'mil',
         name, hex: a.hex, reg: a.r, type: a.t, desc: a.desc,
         lat, lon, altM, altFt: typeof a.alt_baro === 'number' ? a.alt_baro : null,
         gs: a.gs, track: a.track, rate: a.baro_rate, squawk: a.squawk,
@@ -536,17 +624,26 @@ async function loadAircraft() {
       const hot = ['7500', '7600', '7700'].includes(String(a.squawk));
       // Kept on the record as a Color. Reading it back off the entity returns a
       // Property, not a Color, so the fade below needs its own copy.
+      // Civil traffic is context, not the subject. It is drawn cooler and
+      // smaller so a military contact still reads at a glance in a busy sky.
+      const civil = !e._meta.isMil;
       e._meta.baseColor = hot ? Cesium.Color.fromCssColorString('#ff3355')
+        : civil ? Cesium.Color.fromCssColorString('#7a8a9a')
         : kind === 'fastjet' ? Cesium.Color.fromCssColorString('#ffcc00')
         : kind === 'heli' ? Cesium.Color.fromCssColorString('#00ff88')
         : CYAN;
       e.billboard.color = e._meta.baseColor;
-      e.billboard.width = kind === 'widebody' || kind === 'quadjet' ? 28 : 24;
+      e.label.fillColor = e._meta.baseColor;
+      // Only label what is worth naming; a hundred civil callsigns is noise.
+      e.label.distanceDisplayCondition =
+        new Cesium.DistanceDisplayCondition(0, civil ? 260000 : 1200000);
+      if (e.path) e.path.show = e._meta.isMil;
+      e.billboard.width = (kind === 'widebody' || kind === 'quadjet' ? 28 : 24)
+        * (e._meta.isMil ? 1 : 0.75);
       e.billboard.height = e.billboard.width;
       e._meta.fixAt = Date.now();
-      // Screen-space rotation, so the symbol points where the aircraft is going
-      // regardless of how the camera is oriented.
-      e.billboard.rotation = Cesium.Math.toRadians(-(a.track || 0));
+      // Rotation is a live callback reading _meta.track, so updating the record
+      // above is all that is needed here.
     }
 
     // Contacts that have dropped off the feed stop existing rather than
@@ -554,7 +651,12 @@ async function loadAircraft() {
     for (const e of air.entities.values.slice()) {
       if (!seen.has(e.id)) air.entities.remove(e);
     }
-    document.getElementById('nAir').textContent = air.entities.values.length;
+    const total = air.entities.values.length;
+    const mil = air.entities.values.filter((x) => x._meta && x._meta.isMil).length;
+    document.getElementById('nAir').textContent =
+      feedMode === 'mil' ? total : total + '  (' + mil + ' mil)';
+    document.getElementById('feedScope').textContent =
+      feedMode === 'mil' ? 'global' : radiusNm + ' nm radius';
   } catch (err) { console.warn('aircraft:', err.message); }
 }
 
@@ -745,15 +847,53 @@ async function loadContext() {
 }
 
 const handler = new Cesium.ScreenSpaceEventHandler(scene.canvas);
+function releaseTracking() {
+  viewer.trackedEntity = undefined;
+  const b = document.getElementById('btnFollow');
+  b.classList.remove('on'); b.textContent = 'UNLOCK';
+  document.getElementById('rdName').textContent = 'NO CONTACT SELECTED';
+  document.getElementById('rdSq').textContent = '';
+  document.getElementById('rdGrid').innerHTML = '';
+  document.getElementById('rdSub').textContent = 'Click a contact to inspect it.';
+  document.getElementById('nearPanel').style.display = 'none';
+}
+
 handler.setInputAction((click) => {
   const picked = scene.pick(click.position);
   const ent = picked && picked.id;
-  if (!ent || !ent._meta) return;
+  /* Clicking empty space lets go. While an entity is tracked Cesium locks the
+     camera into orbiting it, so without this the only way out is a button in
+     the corner — which is not where anyone looks when the camera has stopped
+     responding. */
+  if (!ent || !ent._meta) { if (viewer.trackedEntity) releaseTracking(); return; }
   showContact(ent._meta);
   document.getElementById('btnFollow').classList.add('on');
   document.getElementById('btnFollow').textContent = 'FOLLOWING';
   viewer.trackedEntity = ent;
 }, Cesium.ScreenSpaceEventType.LEFT_CLICK);
+
+document.getElementById('btnMil').onclick = () => setFeedMode('mil');
+document.getElementById('btnAll').onclick = () => setFeedMode('all');
+function setFeedMode(m) {
+  if (feedMode === m) return;
+  feedMode = m;
+  document.getElementById('btnMil').classList.toggle('on', m === 'mil');
+  document.getElementById('btnAll').classList.toggle('on', m === 'all');
+  document.getElementById('nAirLabel').textContent = m === 'mil' ? 'MILITARY AIR' : 'ALL TRAFFIC';
+  // The two feeds cover different sets, so carrying entities across would leave
+  // contacts on screen that the new feed never mentions.
+  releaseTracking();
+  air.entities.removeAll();
+  loadAircraft();
+}
+
+// In ALL mode the query follows the camera, so a new view needs a new query.
+let acTimer = null;
+viewer.camera.moveEnd.addEventListener(() => {
+  if (feedMode !== 'all') return;
+  clearTimeout(acTimer);
+  acTimer = setTimeout(loadAircraft, 900);
+});
 
 document.getElementById('btnBuildings').onclick = function () {
   buildingsOn = !buildingsOn;
@@ -761,15 +901,11 @@ document.getElementById('btnBuildings').onclick = function () {
   this.classList.toggle('on', buildingsOn);
 };
 
-document.getElementById('btnFollow').onclick = function () {
-  viewer.trackedEntity = undefined;
-  this.classList.remove('on'); this.textContent = 'UNLOCK';
-  document.getElementById('rdName').textContent = 'NO CONTACT SELECTED';
-  document.getElementById('rdSq').textContent = '';
-  document.getElementById('rdGrid').innerHTML = '';
-  document.getElementById('rdSub').textContent = 'Click a contact to inspect it.';
-  document.getElementById('nearPanel').style.display = 'none';
-};
+document.getElementById('btnFollow').onclick = releaseTracking;
+// Escape is the other thing people try when a view will not let go.
+window.addEventListener('keydown', (ev) => {
+  if (ev.key === 'Escape' && viewer.trackedEntity) releaseTracking();
+});
 
 /* A contact coasting on an old fix is still a guess, so it fades as the guess
    ages. Better than showing a stale position at full confidence. */
