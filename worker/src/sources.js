@@ -71,6 +71,90 @@ const OSM_MIL_TAGS = [
 // an intelligence picture cares about, then cut.
 const KIND_RANK = { airfield: 0, naval_base: 1, base: 2, barracks: 3, training_area: 4 };
 
+/* Road geometry, for the traffic layer.
+
+   There is no free live-traffic feed worth having, so what this serves is the
+   road network itself and the client animates plausible movement along it. The
+   distinction is the whole design: the dots are drawn white and labelled
+   simulated, because a board that invents congestion and presents it as
+   observed is worse than one with no traffic layer at all.
+
+   Roads do not change, so this caches for a week and snaps the bbox to a grid
+   — panning within a tile reuses the answer instead of asking Overpass again.
+   Same lesson as the aircraft tiles, and the reason Overpass tolerates us. */
+const ROAD_CLASSES = 'motorway|trunk|primary|secondary|motorway_link|trunk_link';
+const ROAD_GRID = 0.25;          // degrees; the snapping step
+const MAX_WAYS = 700;
+const MAX_PTS_PER_WAY = 40;
+
+export async function osmRoads(request, env) {
+  const p = new URL(request.url).searchParams;
+  const raw = (p.get('bbox') || '').split(',').map(Number);
+  if (raw.length !== 4 || raw.some((n) => !isFinite(n))) {
+    return { error: 'bbox required as south,west,north,east' };
+  }
+  let [s, w, n, e] = raw;
+  if (n < s) [s, n] = [n, s];
+  if (e < w) [w, e] = [e, w];
+  s = Math.max(-85, s); n = Math.min(85, n);
+  /* Roads are far denser than military sites, so the cap is far smaller. A
+     degree of city at this zoom is already thousands of ways. */
+  if ((n - s) > 1.2 || (e - w) > 1.2) return { error: 'area too large — zoom in', maxDegrees: 1.2 };
+
+  const lo = (v) => Math.floor(v / ROAD_GRID) * ROAD_GRID;
+  const hi = (v) => Math.ceil(v / ROAD_GRID) * ROAD_GRID;
+  const bs = lo(s), bw = lo(w), bn = hi(n), be = hi(e);
+  const key = `osm:roads:${V}:${bs.toFixed(2)},${bw.toFixed(2)},${bn.toFixed(2)},${be.toFixed(2)}`;
+
+  const { data, cache } = await cached(env, key, 7 * 86400, async () => {
+    const q = `[out:json][timeout:50];`
+      + `way["highway"~"^(${ROAD_CLASSES})$"](${bs},${bw},${bn},${be});`
+      + `out geom ${MAX_WAYS};`;
+    const res = await fetch('https://overpass-api.de/api/interpreter', {
+      method: 'POST',
+      headers: { 'User-Agent': UA, 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: 'data=' + encodeURIComponent(q),
+      signal: AbortSignal.timeout(55000),
+    });
+    if (!res.ok) throw new Error(`overpass ${res.status}`);
+    const j = await res.json();
+
+    const ways = [];
+    for (const el of j.elements || []) {
+      const g = el.geometry;
+      if (!Array.isArray(g) || g.length < 2) continue;
+      /* Decimated rather than truncated. Keeping the first forty points would
+         lop the end off a motorway; taking every nth keeps its whole shape,
+         which is what the dots follow. */
+      const step = Math.max(1, Math.ceil(g.length / MAX_PTS_PER_WAY));
+      const pts = [];
+      for (let i = 0; i < g.length; i += step) {
+        pts.push([Math.round(g[i].lat * 1e5) / 1e5, Math.round(g[i].lon * 1e5) / 1e5]);
+      }
+      const lastRaw = g[g.length - 1];
+      const lastKept = pts[pts.length - 1];
+      if (lastKept[0] !== lastRaw.lat || lastKept[1] !== lastRaw.lon) {
+        pts.push([Math.round(lastRaw.lat * 1e5) / 1e5, Math.round(lastRaw.lon * 1e5) / 1e5]);
+      }
+      const t = el.tags || {};
+      ways.push({
+        c: (t.highway || 'primary').replace('_link', ''),
+        n: t.name || t.ref || null,
+        o: t.oneway === 'yes' ? 1 : 0,
+        p: pts,
+      });
+    }
+    return {
+      source: 'OpenStreetMap contributors, via Overpass (ODbL)',
+      note: 'road geometry only — no traffic data exists in this response',
+      bbox: [bs, bw, bn, be],
+      count: ways.length,
+      ways,
+    };
+  });
+  return { ...data, cache };
+}
+
 export async function osmMilitary(request, env) {
   const p = new URL(request.url).searchParams;
   const raw = (p.get('bbox') || '').split(',').map(Number);

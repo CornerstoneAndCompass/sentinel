@@ -26,7 +26,7 @@
  */
 
 import { tick as spineTick, state as spineState, since as spineSince, series as spineSeries } from './spine.js';
-import { osmMilitary, launches as llLaunches, tle as celesTle, cameras as openCams,
+import { osmMilitary, osmRoads, launches as llLaunches, tle as celesTle, cameras as openCams,
          adsbArea, flight as flightLookup, adsbxUsage } from './sources.js';
 
 const ALLOWED_HOSTS = new Set([
@@ -729,6 +729,10 @@ export default {
 
       // Supplementary sources. Each is reduced and cached in the worker, so
       // these stay small however large the upstream is.
+      if (path === '/osm/roads') {
+        return json(await osmRoads(request, env), 200,
+          { 'Cache-Control': 'public, max-age=604800' });
+      }
       if (path === '/osm/military') {
         return json(await osmMilitary(request, env), 200, { 'Cache-Control': 'public, max-age=3600' });
       }

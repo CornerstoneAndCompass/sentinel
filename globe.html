@@ -528,17 +528,47 @@ function screenRotation(ent, meta) {
   return Math.atan2(-dy, dx) - Cesium.Math.PI_OVER_TWO;
 }
 
+/* Following a contact, without giving Cesium the camera.
+
+   viewer.trackedEntity is the obvious way to do this and it is the reason the
+   mouse kept changing behaviour without being asked. Tracking installs a
+   reference frame on the camera, and inside that frame the gestures mean
+   different things — right-drag zooms instead of tilting. Since clicking any
+   contact started tracking it, right-click simply stopped working, twice, for
+   a reason that had nothing to do with the gesture bindings.
+
+   So follow is done here instead: each frame the camera is translated by
+   exactly the distance the contact moved. The view keeps up, and orientation,
+   zoom and every gesture stay exactly where they were. Nothing about the
+   controls changes when you select something. */
+let followEntity = null;
+let followLast = null;
+
+function setFollow(ent) {
+  followEntity = ent || null;
+  followLast = null;
+  const b = document.getElementById('btnFollow');
+  b.classList.toggle('on', Boolean(ent));
+  b.textContent = ent ? 'FOLLOWING' : 'UNLOCK';
+}
+
+scene.preRender.addEventListener(() => {
+  if (!followEntity || cockpitEntity) return;
+  const p = followEntity.position && followEntity.position.getValue(viewer.clock.currentTime);
+  if (!p) return;
+  if (followLast) {
+    const d = Cesium.Cartesian3.subtract(p, followLast, new Cesium.Cartesian3());
+    viewer.camera.position = Cesium.Cartesian3.add(
+      viewer.camera.positionWC, d, new Cesium.Cartesian3());
+  }
+  followLast = Cesium.Cartesian3.clone(p, followLast || new Cesium.Cartesian3());
+});
+
 // Explicit pitch control, because a drag gesture is a poor way to ask for a
 // specific angle and there is no way to discover the modifier keys.
 function nudgePitch(deg) {
-  const t = viewer.trackedEntity;
-  if (t) {
-    // While tracking, Cesium keeps its own offset frame; adjust that instead
-    // or the camera fights the tracker every frame.
-    const off = viewer.camera.position.clone();
-    viewer.camera.lookUp(Cesium.Math.toRadians(deg));
-    return;
-  }
+  // No special case while following any more: the camera keeps its own frame,
+  // so pitching it works the same whether something is selected or not.
   viewer.camera.lookUp(Cesium.Math.toRadians(deg));
 }
 function setPitchPreset(p) {
@@ -1388,7 +1418,7 @@ function renderNearby(m) {
     + '<span style="color:var(--td)">' + (x.o.type || '') + '</span>'
     + '<span class="d">' + Math.round(x.d) + ' km</span></div>').join('');
   [...document.querySelectorAll('#nearList .nearRow')].forEach((row, i) => {
-    row.onclick = () => { const x = others[i]; viewer.trackedEntity = x.e; showContact(x.o); };
+    row.onclick = () => { const x = others[i]; setFollow(x.e); selectedEntity = x.e; showContact(x.o); };
   });
 }
 
@@ -1416,7 +1446,7 @@ const handler = new Cesium.ScreenSpaceEventHandler(scene.canvas);
 let selectedEntity = null;
 
 function releaseTracking() {
-  viewer.trackedEntity = undefined;
+  setFollow(null);
   selectedEntity = null;
   const cb = document.getElementById('btnCockpit');
   if (cb) cb.disabled = true;
@@ -1438,7 +1468,7 @@ handler.setInputAction((click) => {
      responding. */
   if (!ent || !ent._meta) {
     if (cockpitEntity) return;                 // flying: ignore stray clicks
-    if (viewer.trackedEntity) releaseTracking();
+    if (followEntity) releaseTracking();
     return;
   }
   showContact(ent._meta);
@@ -1447,9 +1477,9 @@ handler.setInputAction((click) => {
   // Only aircraft can be flown; a ground site has no track to ride.
   cb.disabled = ent._meta.kind !== 'AIR';
   if (ent._meta.kind !== 'AIR') { document.getElementById('nearPanel').style.display = 'none'; }
-  document.getElementById('btnFollow').classList.add('on');
-  document.getElementById('btnFollow').textContent = 'FOLLOWING';
-  viewer.trackedEntity = ent;
+  /* Selecting a contact follows it but does not take the controls. Clicking
+     something should never change what the mouse does. */
+  setFollow(ent);
 }, Cesium.ScreenSpaceEventType.LEFT_CLICK);
 
 /* ---- cockpit ----
@@ -1466,7 +1496,7 @@ let cockpitEntity = null;
 function enterCockpit(ent) {
   if (!ent || !ent._meta) return;
   cockpitEntity = ent;
-  viewer.trackedEntity = undefined;      // we drive the camera ourselves
+  followLast = null;                     // we drive the camera ourselves in here
   document.getElementById('cockpit').hidden = false;
   document.body.classList.add('flying');
   document.getElementById('btnCockpit').classList.add('on');
@@ -1491,14 +1521,25 @@ function exitCockpit() {
   if (!ent || !air.entities.getById(ent.id)) return;
   const m = ent._meta || {};
   const th = Cesium.Math.toRadians(m.track || 0);
-  ent.viewFrom = new Cesium.Cartesian3(
-    -Math.sin(th) * 2600, -Math.cos(th) * 2600, 1100);
   selectedEntity = ent;
-  viewer.trackedEntity = ent;
+  /* Put the camera behind and above where the ride ended, then follow from
+     there — rather than leaving the view wherever the flight happened to be
+     pointing, which stranded you looking at empty terrain. */
+  const p = ent.position && ent.position.getValue(viewer.clock.currentTime);
+  if (p) {
+    const c = Cesium.Cartographic.fromCartesian(p);
+    const back = 0.045;                                  // degrees, roughly 5 km
+    viewer.camera.setView({
+      destination: Cesium.Cartesian3.fromRadians(
+        c.longitude - Math.sin(th) * back / Math.max(0.05, Math.cos(c.latitude)),
+        c.latitude - Math.cos(th) * back,
+        c.height + 2200),
+      orientation: { heading: th, pitch: Cesium.Math.toRadians(-14), roll: 0 },
+    });
+  }
+  setFollow(ent);
   const cb = document.getElementById('btnCockpit');
   cb.disabled = m.kind !== 'AIR';
-  const b = document.getElementById('btnFollow');
-  b.classList.add('on'); b.textContent = 'FOLLOWING';
   showContact(m);
 }
 
@@ -1616,7 +1657,7 @@ window.addEventListener('keydown', (ev) => {
   if (k === 'Escape') {
     if (lightbox) closeLightbox();
     else if (cockpitEntity) exitCockpit();
-    else if (viewer.trackedEntity) releaseTracking();
+    else if (followEntity) releaseTracking();
     return;
   }
   if (k === 'c' || k === 'C') {
