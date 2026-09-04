@@ -75,7 +75,11 @@ html,body{height:100%;overflow:hidden;background:#03060c;
   border:1px solid var(--brd);border-radius:4px;padding:4px;backdrop-filter:blur(12px);align-items:center}
 .grp{display:flex;align-items:center;gap:3px;padding:0 8px;border-right:1px solid var(--brd)}
 .grp:last-child{border-right:none}
-.ctlLbl{font-size:8px;letter-spacing:2px;color:var(--td);padding-right:4px;white-space:nowrap}
+/* A group header has to look like a header. Set in the same weight and colour
+   as the buttons beside it, VIEW and TRAFFIC read as two more options that
+   happen not to respond to clicks. */
+.ctlLbl{font-family:'Orbitron',sans-serif;font-size:8px;font-weight:700;letter-spacing:2px;
+  color:var(--tm);padding-right:7px;white-space:nowrap;text-transform:uppercase}
 .ctl button{background:transparent;border:1px solid transparent;color:var(--td);
   font-family:inherit;font-size:9px;letter-spacing:1px;padding:5px 9px;border-radius:3px;cursor:pointer}
 .ctl button:hover{color:var(--tm)}
@@ -106,6 +110,13 @@ html,body{height:100%;overflow:hidden;background:#03060c;
 .rdGrid .k{color:var(--td);letter-spacing:1px}
 .rdGrid .v{font-family:'Orbitron',sans-serif;font-size:11px;color:var(--tm)}
 .rdSub{font-size:9px;color:var(--td);margin-top:6px;letter-spacing:1px;line-height:1.5}
+.catRow{display:flex;align-items:center;gap:7px;padding:3px 0;font-size:10px;cursor:pointer;
+  letter-spacing:1px;color:var(--tm)}
+.catRow i{width:8px;height:8px;border-radius:50%;flex:0 0 auto}
+.catRow span{flex:1}
+.catRow b{font-family:'Orbitron',sans-serif;font-weight:400;font-size:11px;color:var(--tm)}
+.catRow:hover{color:#fff}
+.catRow.off{opacity:.35;text-decoration:line-through}
 .panel.near{max-height:260px;overflow-y:auto}
 
 /* Flight watch. Right-hand column so it never competes with the contact
@@ -222,6 +233,11 @@ body.flying .panel:hover,body.flying .read:hover,body.flying .ctl:hover{opacity:
       Click a contact to lock on, then <b>C</b> to ride it. <b>Esc</b> lets go.</div>
   </div>
 
+  <div class="panel" id="catPanel">
+    <div class="ptitle">Contacts by role</div>
+    <div id="catList"></div>
+  </div>
+
   <div class="panel near" id="nearPanel" style="display:none">
     <div class="ptitle">Nearby <span id="nearRange" style="float:right;color:var(--td)">250 km</span></div>
     <div id="nearList"></div>
@@ -261,6 +277,7 @@ body.flying .panel:hover,body.flying .read:hover,body.flying .ctl:hover{opacity:
     <div class="grp"><span class="ctlLbl">LAYERS</span>
       <button id="btnBuildings" disabled title="Global 3D buildings from OpenStreetMap, extruded to their mapped heights">BUILDINGS</button>
       <button id="btnCams" title="Public roadside cameras published by their operators — London and California only. Click one for the current frame.">CAMERAS</button>
+      <button id="btnChokes" title="Nine straits and canals where a large share of world trade has no alternative route">CHOKEPOINTS</button>
       <button id="btnWatch" title="Follow named flights — your own trip, or anything you want updates on">WATCH</button>
     </div>
   </div>
@@ -910,24 +927,24 @@ async function loadAircraft() {
       // Property, not a Color, so the fade below needs its own copy.
       // Civil traffic is context, not the subject. It is drawn cooler and
       // smaller so a military contact still reads at a glance in a busy sky.
-      /* Colour separates category, not importance. Civil traffic used to be
-         drawn grey on the argument that it was context rather than subject —
-         but grey reads as disabled, and in ALL mode civil traffic IS the
-         subject. Yellow for civil, cyan for military, with fast jets and
-         helicopters split out because those are the two military types worth
-         picking out of a crowd. Nothing shares a hue. */
-      const civil = !e._meta.isMil;
-      e._meta.baseColor = hot ? Cesium.Color.fromCssColorString('#ff3355')
-        : civil ? Cesium.Color.fromCssColorString('#ffcc00')
-        : kind === 'fastjet' ? Cesium.Color.fromCssColorString('#ff8800')
-        : kind === 'heli' ? Cesium.Color.fromCssColorString('#00ff88')
-        : CYAN;
+      /* Colour carries the role, because that is the question a board like
+         this is asked. Airframe type is already in the silhouette; what the
+         silhouette cannot say is whether a helicopter is a police unit, an air
+         ambulance or a coast guard crew, and those are the distinctions worth
+         seeing from across the room. An emergency squawk outranks all of it. */
+      const cat = categorise(name, e._meta.isMil);
+      e._meta.cat = cat;
+      const civil = cat === 'civil';
+      e._meta.baseColor = hot
+        ? Cesium.Color.fromCssColorString('#ff3355')
+        : (CAT_COLOUR[cat] || CYAN);
       e.billboard.color = e._meta.baseColor;
       e.label.fillColor = e._meta.baseColor;
       // Only label what is worth naming; a hundred civil callsigns is noise.
       e.label.distanceDisplayCondition =
         new Cesium.DistanceDisplayCondition(0, civil ? 260000 : 1200000);
-      if (e.path) e.path.show = e._meta.isMil;
+      e.show = catOn[cat] !== false;
+      if (e.path) e.path.show = !civil;
       e.billboard.width = (kind === 'widebody' || kind === 'quadjet' ? 28 : 24)
         * (e._meta.isMil ? 1 : 0.75);
       e.billboard.height = e.billboard.width;
@@ -945,6 +962,7 @@ async function loadAircraft() {
     const mil = air.entities.values.filter((x) => x._meta && x._meta.isMil).length;
     document.getElementById('nAir').textContent =
       feedMode === 'mil' ? total : total + '  (' + mil + ' mil)';
+    renderCategories();
     /* Say which feed answered and how much of it arrived. A partial sweep
        still draws a plausible sky, so an unlabelled count invites you to read
        a coverage gap as an empty one. */
@@ -1290,6 +1308,15 @@ function showContact(m) {
   sq.textContent = alert ? alert : (m.squawk ? 'SQ ' + m.squawk : '');
   sq.className = alert ? 'hot' : '';
 
+  if (m.kind === 'CHOKE') {
+    document.getElementById('rdGrid').innerHTML =
+      '<span class="k">STATUS</span><span class="v" style="color:'
+      + (CHOKE_COLOUR[m.status] || 'var(--td)') + '">' + m.status + '</span>'
+      + '<span class="k">CARRIES</span><span class="v">' + m.traffic + '</span>';
+    document.getElementById('rdSub').textContent = m.desc;
+    document.getElementById('nearPanel').style.display = 'none';
+    return;
+  }
   if (m.kind === 'CAMERA') {
     document.getElementById('rdGrid').innerHTML = '';
     /* The frame is a still that the operator replaces every so often, so the
@@ -1419,6 +1446,7 @@ handler.setInputAction((click) => {
   const cb = document.getElementById('btnCockpit');
   // Only aircraft can be flown; a ground site has no track to ride.
   cb.disabled = ent._meta.kind !== 'AIR';
+  if (ent._meta.kind !== 'AIR') { document.getElementById('nearPanel').style.display = 'none'; }
   document.getElementById('btnFollow').classList.add('on');
   document.getElementById('btnFollow').textContent = 'FOLLOWING';
   viewer.trackedEntity = ent;
@@ -1642,6 +1670,165 @@ setInterval(() => {
   empty.style.display = show ? 'block' : 'none';
 }, 2000);
 
+
+
+/* ============================================================== CATEGORIES
+   Who is flying, not just what. The transponder says nothing about a role, so
+   this reads it off the callsign — coast guards, police units, government
+   transports and rescue crews all use recognisable prefixes, and separating
+   them is most of what turns a list of contacts into something worth watching.
+
+   The pattern tables are lifted verbatim from the 2D board, which has been
+   accumulating them for months. Copying them rather than re-deriving them is
+   the point: they encode a lot of specific knowledge and nothing about the
+   renderer changes what a callsign means. */
+const MIL_P=[/^RCH/i,/^REACH/i,/^DUKE/i,/^FORTE/i,/^EVAC/i,/^SWORD/i,/^VIPER/i,/^COBRA/i,/^EAGLE/i,/^NAVY/i,/^ARMY/i,/^USAF/i,/^RAF\d/i,/^GAF/i,/^FAF/i,/^IAF\d/i,/^ASCOT/i,/^BOXER/i,/^GHOST/i,/^BLADE/i,/^HAVOC/i,/^MMF/i,/^CNV/i,/^HERKY/i,/^MOOSE/i,/^SHADOW/i,/^REAPER/i,/^SABER/i,/^TALON/i,/^DUSTOFF/i,/^PEDRO/i,/^SPECTRE/i,/^PHANTOM/i,/^VIKING/i,/^WOLF/i,/^PACK/i,/^TOPCAT/i,/^IRON/i,/^WARHAWK/i,/^LANCE/i,/^RAGE/i,/^DEMON/i,/^SKULL/i,/^FURY/i,/^STORM/i,/^BONES/i,/^BAT\d/i,/^PANTHER/i,/^TIGER/i,/^HAWK/i,/^RAPTOR/i,/^TEAL/i,/^AERO/i,/^DOOM/i,/^NOMAD/i];
+const CG_P=[/^USCG/i,/^CGNR/i,/^COAST\s?GUARD/i,/^CG\d/i,/^CGFLT/i,/^HMCG/i,/^SAREX/i,/^SARGRD/i,/^RNLI/i,/^SALV/i,/^JCG/i,/^KCG/i,/^ICG\d/i,/^IRCG/i,/^CCG/i,/^ACG/i,/^AMSEA/i];
+const POL_P=[/POLICE/i,/^N\d{3}HP/i,/^SHERIFF/i,/^TROOPER/i,/PATROL/i,/^NPAS/i,/^POLAIR/i,/^CBP\d/i,/^OMAHA/i,/^BORDER/i,/^MARSHAL/i,/^DEA/i,/^FBI/i,/^ATF/i,/^SWAT/i,/^K9/i,/^EAGLE\d.*HP/i,/^METRO/i,/^LASD/i,/^NYPD/i,/^LAPD/i,/^COPTER/i,/^AIRWOLF/i,/^HELO\d/i,/^SLED/i,/^GARDA/i,/^POLICIA/i,/^INTERPOL/i];
+const GOV_P=[/^EXEC/i,/^SAM\d/i,/^VENUS/i,/^SNTRY/i,/^GLEX/i,/^ORDER/i,/^STATE/i,/^DEPTST/i,/^DOE/i,/^DOJ/i,/^NASA/i,/^NOAA/i,/^NCAR/i,/^FEMA/i,/^DHS/i,/^TSA/i,/^USSS/i,/^PRSDN/i,/^AF[12]/i,/^NIGHT/i,/^RFF/i,/^CNS/i,/^BORT/i,/^PAT\d/i,/^VV\d/i,/^CAL\s?FIRE/i,/^TANKER/i,/^USFOR/i,/^FLTAG/i,/^ENVIR/i];
+const SAR_P=[/^RESCUE/i,/^SAMU/i,/^SAR\d/i,/^GUARDIAN/i,/^LIFEGUARD/i,/MEDEVAC/i,/^MERCY/i,/^ANGEL/i,/^DOVER/i,/^LNDN/i,/^BRISTOW/i,/^CHC/i,/^HELIMED/i,/^AMBU/i,/^HEMS/i,/^STAR\d/i,/^LIFE\d/i,/^TRAUMA/i,/^CAREFLIGHT/i,/^AIRLIFT/i,/^RESCUE/i,/^WINCH/i];
+
+
+const CATEGORIES = [
+  { id: 'sar',    label: 'RESCUE',      colour: '#00ff88', pats: SAR_P },
+  { id: 'cg',     label: 'COAST GUARD', colour: '#ff8800', pats: CG_P },
+  { id: 'police', label: 'POLICE',      colour: '#4d8cff', pats: POL_P },
+  { id: 'gov',    label: 'GOVERNMENT',  colour: '#cc88ff', pats: GOV_P },
+  { id: 'mil',    label: 'MILITARY',    colour: '#00e8ff', pats: MIL_P },
+  { id: 'civil',  label: 'CIVIL',       colour: '#ffcc00', pats: null },
+];
+const CAT_COLOUR = Object.fromEntries(
+  CATEGORIES.map((c) => [c.id, Cesium.Color.fromCssColorString(c.colour)]));
+const catOn = {};
+for (const c of CATEGORIES) catOn[c.id] = true;
+
+/* Scheduled airlines, by ICAO code. A three-letter airline code followed by a
+   flight number is a scheduled service, whatever else the callsign resembles,
+   and checking that first is what stops the role patterns firing on ordinary
+   traffic.
+
+   This is not hypothetical tidying. The pattern tables came from the 2D board,
+   where they are only ever applied to traffic that has already been filtered
+   down to military and regional subsets. Run against six hundred civil
+   aircraft they misfire: measured over London, three Icelandair flights were
+   being reported as police units because ICE is both Icelandair's code and the
+   prefix used by US Immigration and Customs Enforcement. ICE is now out of the
+   police table altogether — the airline collision is certain and the
+   enforcement match was speculative. */
+const AIRLINE_CODES = new Set([
+  'BAW','AAL','UAL','DAL','DLH','AFR','KLM','UAE','QTR','ETD','SIA','CPA','QFA','ANZ',
+  'JAL','ANA','KAL','AAR','THY','IBE','VLG','RYR','EZY','WZZ','SWR','AUA','BEL','SAS',
+  'FIN','LOT','TAP','ITY','EIN','VIR','SWA','ASA','JBU','NKS','FFT','ACA','WJA','AMX',
+  'LAN','AVA','CMP','ETH','MSR','SVA','GFA','OMA','RJA','AIC','IGO','VTI','SEJ','THA',
+  'MAS','GIA','PAL','HVN','CAL','EVA','CCA','CES','CSN','CHH','JST','VOZ','HAL','PGT',
+  'NOZ','NSZ','BTI','AEE','OAL','AUI','AFL','TGW','CXA','ICE','TSC','ROU','SBI','UZB',
+  'ELY','MEA','KAC','ABY','FDB','JZR','NAX','SDR','EWG','CFG','TUI','BCS','CLX','GTI',
+]);
+
+/* Order matters. Rescue is tested before military because a military tail
+   flying a MEDEVAC is doing search and rescue that day, and that is the more
+   useful thing to know. The feed's own military flag is the fallback, not the
+   first answer, since it marks the airframe rather than the sortie. */
+function categorise(callsign, isMilFlag) {
+  const cs = (callsign || '').trim().toUpperCase();
+  if (cs && !(AIRLINE_CODES.has(cs.slice(0, 3)) && /^\d/.test(cs.slice(3)))) {
+    for (const c of CATEGORIES) {
+      if (c.pats && c.pats.some((re) => re.test(cs))) return c.id;
+    }
+  }
+  return isMilFlag ? 'mil' : 'civil';
+}
+
+/* The legend and the filter are the same control. A colour key that cannot be
+   clicked makes you hunt for the contacts it describes; a filter with no
+   colours makes you guess what you are switching off. */
+function renderCategories() {
+  const host = document.getElementById('catList');
+  if (!host) return;
+  const counts = {};
+  for (const e of air.entities.values) {
+    const c = (e._meta && e._meta.cat) || 'civil';
+    counts[c] = (counts[c] || 0) + 1;
+  }
+  host.innerHTML = CATEGORIES.map((c) => {
+    const n = counts[c.id] || 0;
+    const off = catOn[c.id] === false;
+    return '<div class="catRow' + (off ? ' off' : '') + '" data-cat="' + c.id + '"'
+      + ' title="' + (off ? 'Hidden — click to show' : 'Click to hide') + '">'
+      + '<i style="background:' + c.colour + '"></i>'
+      + '<span>' + c.label + '</span><b>' + (n || '—') + '</b></div>';
+  }).join('');
+}
+
+function toggleCategory(id) {
+  catOn[id] = catOn[id] === false;
+  for (const e of air.entities.values) {
+    if (e._meta && e._meta.cat === id) e.show = catOn[id];
+  }
+  renderCategories();
+}
+
+/* ============================================================= CHOKEPOINTS
+   Nine places where a very large share of world trade has no alternative
+   route. Static because they are geography, and the assessments are written
+   down rather than derived — which is why each one carries its own note
+   instead of a colour alone. */
+const CHOKEPOINTS=[
+  {name:'Strait of Hormuz',lat:26.56,lon:56.25,zoom:8,status:'ELEVATED',traffic:'30% of global oil',desc:'Iran controls northern shore. Regular IRGC naval provocations. US 5th Fleet patrols.'},
+  {name:'Bab al-Mandeb',lat:12.58,lon:43.33,zoom:8,status:'CRITICAL',traffic:'12% of global trade',desc:'Houthi anti-ship missile/drone attacks disrupting Red Sea shipping. US/UK strikes ongoing.'},
+  {name:'Suez Canal',lat:30.45,lon:32.35,zoom:8,status:'ELEVATED',traffic:'12-15% of global trade',desc:'Reduced traffic due to Red Sea/Houthi threats. Ships rerouting via Cape of Good Hope.'},
+  {name:'Strait of Malacca',lat:2.5,lon:101.0,zoom:7,status:'NORMAL',traffic:'25% of global trade',desc:'Worlds busiest shipping lane. Piracy risk. China-Singapore strategic competition.'},
+  {name:'Taiwan Strait',lat:24.0,lon:118.5,zoom:7,status:'ELEVATED',traffic:'Critical semiconductor route',desc:'PLA Navy increased patrols. Regular air incursions into Taiwan ADIZ. US Navy transits.'},
+  {name:'GIUK Gap',lat:63.0,lon:-15.0,zoom:5,status:'ELEVATED',traffic:'NATO Atlantic gateway',desc:'Russian submarine activity increased. NATO ASW patrols. Critical for Atlantic reinforcement.'},
+  {name:'Turkish Straits',lat:41.1,lon:29.05,zoom:9,status:'NORMAL',traffic:'3M barrels/day oil',desc:'Montreux Convention governs access. Turkey controls Bosphorus/Dardanelles. Russian Black Sea Fleet restricted.'},
+  {name:'Panama Canal',lat:9.08,lon:-79.68,zoom:9,status:'NORMAL',traffic:'5% of global trade',desc:'Drought reduced capacity. Extended wait times. China-linked port operations at both ends.'},
+  {name:'Cape of Good Hope',lat:-34.35,lon:18.47,zoom:7,status:'NORMAL',traffic:'Surge reroute corridor',desc:'Alternative to Suez/Red Sea. Adds 10-14 days to Europe-Asia transit. Increasing traffic.'},
+];
+
+const CHOKE_COLOUR = { CRITICAL: '#ff3355', ELEVATED: '#ff8800', NORMAL: '#00ff88' };
+let chokesOn = false;
+const chokes = new Cesium.CustomDataSource('chokes');
+
+function renderChokepoints() {
+  chokes.entities.removeAll();
+  if (!chokesOn) return;
+  for (const c of CHOKEPOINTS) {
+    const col = Cesium.Color.fromCssColorString(CHOKE_COLOUR[c.status] || '#7a8a9a');
+    const e = chokes.entities.add({
+      position: Cesium.Cartesian3.fromDegrees(c.lon, c.lat, 0),
+      point: {
+        pixelSize: 13, color: col.withAlpha(0.25), outlineColor: col, outlineWidth: 2,
+        disableDepthTestDistance: Number.POSITIVE_INFINITY,
+      },
+      label: {
+        text: c.name.toUpperCase(), font: '10px "Share Tech Mono", monospace',
+        fillColor: col, showBackground: true,
+        backgroundColor: Cesium.Color.fromCssColorString('#03060c').withAlpha(0.85),
+        pixelOffset: new Cesium.Cartesian2(0, -22),
+        disableDepthTestDistance: Number.POSITIVE_INFINITY,
+      },
+    });
+    e._meta = { kind: 'CHOKE', name: c.name, status: c.status,
+                traffic: c.traffic, desc: c.desc, lat: c.lat, lon: c.lon };
+  }
+}
+
+/* Wired here rather than up with the other button handlers: `chokes` and
+   `catOn` are const declarations further down the file, so anything touching
+   them earlier sits in the temporal dead zone and throws — silently, because
+   loadAircraft catches its own errors and the only symptom was contacts with
+   no category. Declarations and the code that uses them stay together. */
+viewer.dataSources.add(chokes);
+document.getElementById('btnChokes').onclick = function () {
+  chokesOn = !chokesOn;
+  this.classList.toggle('on', chokesOn);
+  renderChokepoints();
+};
+document.getElementById('catList').addEventListener('click', (ev) => {
+  const row = ev.target.closest('.catRow');
+  if (row) toggleCategory(row.dataset.cat);
+});
+renderCategories();
 
 /* ===================================================================== WATCH
    A flight watchlist. Name the flights on a trip and the board follows them:
