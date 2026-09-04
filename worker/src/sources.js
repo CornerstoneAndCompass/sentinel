@@ -564,33 +564,69 @@ export async function adsbxFetch(env, path, attempt = 0) {
 /* Live position for one named flight. This is the cheapest useful call on the
    board — one request whatever the sky is doing — which is what makes a flight
    watchlist practical on a metered plan. */
+/* Tail numbers do not all carry a hyphen. G-EUPT, VH-OQA and 9V-SMA do; the
+   United States, Japan and South Korea do not, and N123AB, JA8088 and HL7700
+   all parse as perfectly plausible callsigns. So shape is only used to decide
+   which lookup to try first, never to decide on the caller's behalf. */
+function looksLikeRegistration(s) {
+  return /-/.test(s)
+    || /^N\d{1,5}[A-Z]{0,2}$/.test(s)
+    || /^JA\d{3,4}[A-Z]?$/.test(s)
+    || /^HL\d{4}$/.test(s);
+}
+
+async function lookupAircraft(env, kind, q) {
+  const path = kind === 'reg'
+    ? '/v2/registration/' + q + '/'
+    : '/v2/callsign/' + q.replace(/-/g, '') + '/';
+  let j = await adsbxFetch(env, path);
+  let via = 'adsbexchange';
+  if (!j || j.error) {
+    // Free feed uses the same shape and the same path grammar.
+    via = 'adsb.lol';
+    const r = await get('https://api.adsb.lol' + path.replace(/\/$/, ''));
+    j = r.ok ? await r.json() : null;
+  }
+  const ac = (j && j.ac) || [];
+  if (!ac.length) return { via, found: false, query: q, matchedAs: null };
+  const a = ac[0];
+  return {
+    via, found: true, query: q, matchedAs: kind,
+    callsign: (a.flight || '').trim(), hex: a.hex, reg: a.r, type: a.t,
+    lat: a.lat, lon: a.lon, altFt: a.alt_baro, gs: a.gs, track: a.track,
+    rate: a.baro_rate, squawk: a.squawk,
+    onGround: a.alt_baro === 'ground',
+  };
+}
+
+/* Live position for one aircraft, named however the caller happens to know it.
+   This is the cheapest useful call on the board — one request whatever the sky
+   is doing — which is what makes following a trip practical on a metered plan.
+
+   `q` is free-form and guessed at; `callsign` and `reg` are instructions and
+   are obeyed exactly. A guess that finds nothing tries the other form before
+   reporting the aircraft absent, and because the second attempt happens only
+   on an empty result, an aircraft that is simply not flying still costs one
+   request rather than two. */
 export async function flight(request, env) {
   const p = new URL(request.url).searchParams;
-  const cs = (p.get('callsign') || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
-  const reg = (p.get('reg') || '').toUpperCase().replace(/[^A-Z0-9-]/g, '');
-  if (!cs && !reg) return { error: 'callsign or reg required' };
+  const forced = p.get('callsign') ? 'callsign' : p.get('reg') ? 'reg' : null;
+  const raw = (p.get('q') || p.get('callsign') || p.get('reg') || '')
+    .toUpperCase().replace(/[^A-Z0-9-]/g, '');
+  if (!raw) return { error: 'q, callsign or reg required' };
 
-  const key = 'flight:' + V + ':' + (cs || 'r' + reg);
+  const order = forced ? [forced === 'reg' ? 'reg' : 'callsign']
+    : looksLikeRegistration(raw) ? ['reg', 'callsign'] : ['callsign', 'reg'];
+
+  const key = 'flight:' + V + ':' + raw + ':' + order.join('');
   const { data, cache } = await cached(env, key, 45, async () => {
-    const path = cs ? '/v2/callsign/' + cs + '/' : '/v2/registration/' + reg + '/';
-    let j = await adsbxFetch(env, path);
-    let via = 'adsbexchange';
-    if (!j || j.error) {
-      // Free feed uses the same shape and the same path grammar.
-      via = 'adsb.lol';
-      const r = await get('https://api.adsb.lol' + path.replace(/\/$/, ''));
-      j = r.ok ? await r.json() : null;
+    let last = null;
+    for (const kind of order) {
+      const r = await lookupAircraft(env, kind, raw);
+      if (r.found) return r;
+      last = r;
     }
-    const ac = (j && j.ac) || [];
-    if (!ac.length) return { via, found: false, query: cs || reg };
-    const a = ac[0];
-    return {
-      via, found: true, query: cs || reg,
-      callsign: (a.flight || '').trim(), hex: a.hex, reg: a.r, type: a.t,
-      lat: a.lat, lon: a.lon, altFt: a.alt_baro, gs: a.gs, track: a.track,
-      rate: a.baro_rate, squawk: a.squawk,
-      onGround: a.alt_baro === 'ground',
-    };
+    return last;
   });
   return { ...data, cache };
 }

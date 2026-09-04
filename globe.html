@@ -195,8 +195,9 @@ body.flying .panel:hover,body.flying .read:hover,body.flying .ctl:hover{opacity:
     <div class="row"><span>IN VIEW</span><b class="v" id="nView" style="color:var(--y)">--</b></div>
     <div class="hint" id="emptyHint" style="display:none;color:var(--y)">
       No military traffic in this view. Press <b>ALL</b> for civil aircraft.</div>
-    <div class="hint">Drag to orbit · right-drag or two fingers to tilt · scroll to zoom.
-      Click a contact to lock the camera to it.</div>
+    <div class="hint">Drag to move · right-drag or ctrl-drag to tilt · scroll or pinch to zoom.
+      Arrow keys tilt and turn in steps (hold shift for bigger ones).
+      Click a contact to lock on, then <b>C</b> to ride it. <b>Esc</b> lets go.</div>
   </div>
 
   <div class="panel near" id="nearPanel" style="display:none">
@@ -217,7 +218,7 @@ body.flying .panel:hover,body.flying .read:hover,body.flying .ctl:hover{opacity:
     <button data-s="noir">NOIR</button>
     <button id="btnTilt">TILT</button>
     <button id="btnFollow">UNLOCK</button>
-    <button id="btnCockpit" disabled title="Ride the selected contact — chase camera locked to its track">COCKPIT</button>
+    <button id="btnCockpit" disabled title="Click an aircraft first. This then rides it — chase camera locked to its track. Shortcut: C">COCKPIT</button>
     <span class="ctlLbl">TRAFFIC</span>
     <button id="btnMil" class="on" title="Military traffic, worldwide">MIL</button>
     <button id="btnAll" title="Civil and military traffic in the view. There is no global all-traffic call, so this follows the camera as a box of 250 nm tiles — and it is the one feed that is billed, so it sweeps once a minute and pauses when the tab is hidden.">ALL</button>
@@ -244,15 +245,16 @@ body.flying .panel:hover,body.flying .read:hover,body.flying .ctl:hover{opacity:
   <div class="panel watch" id="watchPanel" hidden>
     <div class="ptitle">Flight Watch <span id="wCost" style="float:right;color:var(--td);font-size:8px;letter-spacing:1px"></span></div>
     <div class="wAdd">
-      <input id="wCs" placeholder="BA117" maxlength="8" autocomplete="off" spellcheck="false">
+      <input id="wCs" placeholder="VH-OQA or BA117" maxlength="10" autocomplete="off" spellcheck="false">
       <input id="wDest" placeholder="JFK" maxlength="4" autocomplete="off" spellcheck="false">
       <button id="wAddBtn">ADD</button>
     </div>
     <div class="wNote" id="wNote"></div>
     <div id="wList"></div>
-    <div class="hint">Flight number as printed on the ticket (BA117), or a tail number
-      (VH-OQA) to follow the airframe rather than the service. Destination is optional and
-      only used for the arrival estimate.
+    <div class="hint">A tail number (VH-OQA, N7378A) follows the <b>airframe</b> — the
+      aircraft that becomes your flight, wherever it is now and whatever callsign it is
+      using. A flight number (BA117) follows the service, and only once it is airborne.
+      Destination is optional and only used for the arrival estimate.
       <br><br>Nothing is polled. A watched flight updates by itself whenever it appears in
       the live sweep — so leave <b>ALL</b> on over the airport you care about and it tags
       itself. <b>FIND</b> is one request, for a flight the view does not cover.</div>
@@ -384,9 +386,15 @@ const ssc = scene.screenSpaceCameraController;
 ssc.enableCollisionDetection = false;
 ssc.minimumZoomDistance = 25;
 ssc.maximumZoomDistance = 45000000;
+/* PINCH was bound to tilt AND zoom at once. Cesium hands the same gesture to
+   both handlers, so a trackpad pinch tilted and zoomed together and neither
+   did what was asked — which is most of why this felt uncontrollable. Pinch is
+   a zoom and nothing else now.
+
+   The rest is the Google Earth mapping, because that is the one everybody has
+   already learned: left-drag moves the globe, right-drag tilts, wheel zooms. */
 ssc.tiltEventTypes = [
   Cesium.CameraEventType.RIGHT_DRAG,
-  Cesium.CameraEventType.PINCH,
   Cesium.CameraEventType.MIDDLE_DRAG,
   { eventType: Cesium.CameraEventType.LEFT_DRAG, modifier: Cesium.KeyboardEventModifier.CTRL },
 ];
@@ -395,6 +403,22 @@ ssc.zoomEventTypes = [
   Cesium.CameraEventType.PINCH,
   { eventType: Cesium.CameraEventType.LEFT_DRAG, modifier: Cesium.KeyboardEventModifier.SHIFT },
 ];
+
+/* Free-look is Cesium's default on shift+left-drag, and it was silently sharing
+   that gesture with zoom — so one drag did both. Worse, look detaches the
+   camera's orientation from the globe, which is how a view ends up aimed at
+   nothing with no gesture that recovers it. That is the "I can tilt until I
+   only see globe and then I'm stuck" failure. There is no reason to look away
+   from the earth on this board, so the gesture is removed rather than rebound. */
+ssc.lookEventTypes = [];
+
+/* Cesium coasts after every drag. On a map that reads as polish; on a board
+   where you are trying to put a specific aircraft under the cursor it reads as
+   the camera ignoring you. Damped hard, not removed — zero inertia feels
+   brittle at globe scale. */
+ssc.inertiaSpin = 0.5;
+ssc.inertiaTranslate = 0.5;
+ssc.inertiaZoom = 0.5;
 
 // Explicit pitch control, because a drag gesture is a poor way to ask for a
 // specific angle and there is no way to discover the modifier keys.
@@ -765,10 +789,16 @@ async function loadAircraft() {
       // Property, not a Color, so the fade below needs its own copy.
       // Civil traffic is context, not the subject. It is drawn cooler and
       // smaller so a military contact still reads at a glance in a busy sky.
+      /* Colour separates category, not importance. Civil traffic used to be
+         drawn grey on the argument that it was context rather than subject —
+         but grey reads as disabled, and in ALL mode civil traffic IS the
+         subject. Yellow for civil, cyan for military, with fast jets and
+         helicopters split out because those are the two military types worth
+         picking out of a crowd. Nothing shares a hue. */
       const civil = !e._meta.isMil;
       e._meta.baseColor = hot ? Cesium.Color.fromCssColorString('#ff3355')
-        : civil ? Cesium.Color.fromCssColorString('#7a8a9a')
-        : kind === 'fastjet' ? Cesium.Color.fromCssColorString('#ffcc00')
+        : civil ? Cesium.Color.fromCssColorString('#ffcc00')
+        : kind === 'fastjet' ? Cesium.Color.fromCssColorString('#ff8800')
         : kind === 'heli' ? Cesium.Color.fromCssColorString('#00ff88')
         : CYAN;
       e.billboard.color = e._meta.baseColor;
@@ -1025,8 +1055,16 @@ function showContact(m) {
   ];
   document.getElementById('rdGrid').innerHTML = rows
     .map(([k, v]) => '<span class="k">' + k + '</span><span class="v">' + v + '</span>').join('');
-  document.getElementById('rdSub').textContent =
-    m.desc || (m.kind === 'AIR' ? 'Type not in the aircraft register' : 'Ground site');
+  /* The cockpit button spends most of its life greyed out, and a disabled
+     button with no explanation reads as a broken feature rather than one
+     waiting on a selection. Now that a contact is selected, say so here —
+     where you are already looking — rather than only in a tooltip on a button
+     in the far corner. */
+  const sub = document.getElementById('rdSub');
+  const desc = m.desc || (m.kind === 'AIR' ? 'Type not in the aircraft register' : 'Ground site');
+  sub.innerHTML = m.kind === 'AIR'
+    ? desc + '<br><b style="color:var(--c)">Press C, or COCKPIT, to ride it.</b>'
+    : desc;
   renderNearby(m);
 }
 
@@ -1234,11 +1272,32 @@ document.getElementById('btnBuildings').onclick = function () {
 };
 
 document.getElementById('btnFollow').onclick = releaseTracking;
-// Escape is the other thing people try when a view will not let go.
+
+/* Keys, because a drag is a poor way to ask for a specific angle and the
+   modifier combinations are undiscoverable. Arrows tilt and rotate in fixed
+   steps you can repeat exactly; a drag cannot be repeated exactly. */
 window.addEventListener('keydown', (ev) => {
-  if (ev.key !== 'Escape') return;
-  if (cockpitEntity) exitCockpit();
-  else if (viewer.trackedEntity) releaseTracking();
+  if (/^(INPUT|TEXTAREA)$/.test((ev.target.tagName || '')) ) return;
+  const k = ev.key;
+  if (k === 'Escape') {
+    if (cockpitEntity) exitCockpit();
+    else if (viewer.trackedEntity) releaseTracking();
+    return;
+  }
+  if (k === 'c' || k === 'C') {
+    if (cockpitEntity) exitCockpit();
+    else if (selectedEntity && selectedEntity._meta.kind === 'AIR') enterCockpit(selectedEntity);
+    return;
+  }
+  if (cockpitEntity) return;                  // the cockpit flies itself
+  const step = ev.shiftKey ? 15 : 5;
+  if (k === 'ArrowUp') { nudgePitch(step); ev.preventDefault(); }
+  else if (k === 'ArrowDown') { nudgePitch(-step); ev.preventDefault(); }
+  else if (k === 'ArrowLeft' || k === 'ArrowRight') {
+    viewer.camera.rotate(Cesium.Cartesian3.UNIT_Z,
+      Cesium.Math.toRadians(k === 'ArrowLeft' ? step : -step));
+    ev.preventDefault();
+  }
 });
 
 /* A contact coasting on an old fix is still a guess, so it fades as the guess
@@ -1540,7 +1599,7 @@ function saveWatch() {
     localStorage.setItem(WATCH_KEY, JSON.stringify(watchList.map((w) => ({
       id: w.id, cs: w.cs, reg: w.reg, typed: w.typed, dest: w.dest,
       phase: w.phase, everAirborne: w.everAirborne, lastSeen: w.lastSeen,
-      last: w.last, via: w.via,
+      last: w.last, via: w.via, flying: w.flying,
     }))));
   } catch (e) { /* private mode: the list is still good for this session */ }
 }
@@ -1553,18 +1612,28 @@ function loadWatch() {
   for (const w of watchList) w.busy = false;
 }
 
-/* A hyphen means a tail number: G-EUPT, 9V-SMA, VH-OQA. Registration is worth
-   accepting because it tracks the airframe rather than the service, which is
-   the thing you actually want when the question is "where is the aircraft that
-   becomes my flight" — that aircraft is flying under a different callsign
-   right now. */
-function isRegistration(raw) { return /-/.test(String(raw || '')); }
+/* Registration tracks the airframe rather than the service, which is what you
+   actually want when the question is "where is the aircraft that becomes my
+   flight" — right now it is flying somewhere else under a different callsign.
+
+   Tail numbers do not all carry a hyphen. G-EUPT, VH-OQA and 9V-SMA do; the
+   United States, Japan and South Korea do not, and N123AB, JA8088 and HL7700
+   would otherwise be mangled by callsign normalisation into something that
+   matches nothing. The Worker applies the same test and falls back to the
+   other form, so a misjudgement here costs a lookup rather than an answer. */
+function isRegistration(raw) {
+  const s = String(raw || '').toUpperCase().replace(/[^A-Z0-9-]/g, '');
+  return /-/.test(s)
+    || /^N\d{1,5}[A-Z]{0,2}$/.test(s)
+    || /^JA\d{3,4}[A-Z]?$/.test(s)
+    || /^HL\d{4}$/.test(s);
+}
 
 function addWatch(typed, destTyped) {
   const reg = isRegistration(typed)
     ? String(typed).toUpperCase().replace(/[^A-Z0-9-]/g, '') : null;
   const cs = reg || normaliseCallsign(typed);
-  if (!cs) return { error: 'Enter a flight number (BA117) or tail number (G-EUPT)' };
+  if (!cs) return { error: 'Enter a flight number (BA117) or tail number (VH-OQA)' };
   if (watchList.some((w) => w.cs === cs)) return { error: cs + ' is already on the list' };
   if (watchList.length >= 8) return { error: 'Eight flights is the limit' };
   const dest = String(destTyped || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
@@ -1626,6 +1695,7 @@ function tagWatched(list) {
       || (w.last && w.last.hex && x.hex === w.last.hex));
     if (!a || typeof a.lat !== 'number') continue;
     touched = true;
+    if (w.reg && a.flight && a.flight.trim() && a.flight.trim() !== w.cs) w.flying = a.flight.trim();
     w.lastSeen = Date.now();
     w.via = 'in view';
     w.last = {
@@ -1643,7 +1713,8 @@ function tagWatched(list) {
     // in a sky of three hundred.
     const e = air.entities.getById(a.hex);
     if (e && e._meta) {
-      e._meta.baseColor = Cesium.Color.fromCssColorString('#ffcc00');
+      // White, because amber is now every civil aircraft on the board.
+      e._meta.baseColor = Cesium.Color.WHITE;
       e.billboard.color = e._meta.baseColor;
       e.label.fillColor = e._meta.baseColor;
       e.label.text = w.cs + '  \u25c9';
@@ -1660,8 +1731,7 @@ async function locateWatch(w) {
   w.busy = true;
   renderWatch();
   try {
-    const q = w.reg ? 'reg=' + encodeURIComponent(w.reg) : 'callsign=' + encodeURIComponent(w.cs);
-    const r = await fetch(PROXY + '/flight?' + q);
+    const r = await fetch(PROXY + '/flight?q=' + encodeURIComponent(w.reg || w.cs));
     const j = r.ok ? await r.json() : null;
     const fix = j && j.found ? j : { found: false };
     if (fix.found) {
@@ -1673,6 +1743,9 @@ async function locateWatch(w) {
       };
       if (!fix.onGround) w.everAirborne = true;
       w.via = 'located';
+      // A tail number resolves to whatever service that airframe is flying now,
+      // which is the answer to "where is my aircraft" and is worth naming.
+      if (w.reg && fix.callsign && fix.callsign !== w.cs) w.flying = fix.callsign;
     }
     const was = w.phase;
     w.phase = phaseOf(w, fix.found ? Object.assign({}, fix) : null);
@@ -1699,7 +1772,7 @@ async function locateWatch(w) {
 function paintWatchPin(w) {
   if (!watchDs || !w.last) return;
   const stale = Date.now() - w.last.at > 15 * 60000;
-  const col = Cesium.Color.fromCssColorString(stale ? '#7a8a9a' : '#ffcc00');
+  const col = stale ? Cesium.Color.fromCssColorString('#7a8a9a') : Cesium.Color.WHITE;
   const pos = Cesium.Cartesian3.fromDegrees(w.last.lon, w.last.lat,
     Math.max(30, (w.last.altFt || 0) * 0.3048));
   let e = watchDs.entities.getById('w:' + w.id);
@@ -1791,7 +1864,8 @@ function renderWatch() {
     return '<div class="wRow">'
       + '<div class="wTop">'
         + '<b>' + w.cs + '</b>'
-        + (w.typed && w.typed !== w.cs ? '<i>' + w.typed + '</i>' : '')
+        + (w.flying ? '<i>as ' + w.flying + '</i>'
+           : w.typed && w.typed !== w.cs ? '<i>' + w.typed + '</i>' : '')
         + '<span class="wPh" style="color:' + (PHASE_COLOUR[w.phase] || 'var(--td)') + '">' + w.phase + '</span>'
       + '</div>'
       + '<div class="wSub">' + (bits.join(' · ') || '—') + '</div>'
