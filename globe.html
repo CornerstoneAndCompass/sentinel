@@ -48,6 +48,16 @@ html,body{height:100%;overflow:hidden;background:#03060c;
 .clock{margin-left:auto;font-size:11px;letter-spacing:2px;color:var(--tm)}
 .panel{position:fixed;top:52px;left:12px;width:212px;background:var(--pnl);border:1px solid var(--brd);
   border-radius:4px;backdrop-filter:blur(12px);padding:9px 11px}
+
+/* The left-hand panels were each pinned to their own corner and grew into one
+   another: Global Context sat at bottom-left-plus-238px, directly on top of
+   two control bars that are far wider than that, hiding whichever buttons
+   happened to be underneath. A column that stacks them and stops above the
+   bars cannot overlap by construction, whatever any panel's height does. */
+.lcol{position:fixed;top:52px;left:12px;bottom:98px;width:212px;
+  display:flex;flex-direction:column;gap:9px;overflow-y:auto;overflow-x:hidden}
+.lcol::-webkit-scrollbar{width:0}
+.lcol .panel{position:static;top:auto;left:auto;bottom:auto;width:100%;flex:0 0 auto}
 .ptitle{font-family:'Orbitron',sans-serif;font-size:9px;letter-spacing:3px;color:var(--tm);
   padding-bottom:7px;border-bottom:1px solid var(--brd);margin-bottom:7px}
 .row{display:flex;justify-content:space-between;align-items:center;padding:3px 0;font-size:11px}
@@ -75,11 +85,11 @@ html,body{height:100%;overflow:hidden;background:#03060c;
 .rdGrid .k{color:var(--td);letter-spacing:1px}
 .rdGrid .v{font-family:'Orbitron',sans-serif;font-size:11px;color:var(--tm)}
 .rdSub{font-size:9px;color:var(--td);margin-top:6px;letter-spacing:1px;line-height:1.5}
-.panel.near{top:auto;bottom:96px;left:12px;max-height:260px;overflow-y:auto}
+.panel.near{max-height:260px;overflow-y:auto}
 
 /* Flight watch. Right-hand column so it never competes with the contact
    readout for the same corner. */
-.panel.watch{left:auto;right:12px;top:52px;width:258px;max-height:calc(100vh - 200px);
+.panel.watch{left:auto;right:12px;top:52px;width:258px;max-height:calc(100vh - 270px);
   overflow-y:auto;padding-bottom:4px}
 .wAdd{display:flex;gap:4px;margin-bottom:7px}
 .wAdd input{flex:1;min-width:0;background:rgba(0,232,255,.05);border:1px solid var(--brd);
@@ -105,7 +115,7 @@ html,body{height:100%;overflow:hidden;background:#03060c;
 .wAct button:hover:not(:disabled){color:var(--tm);border-color:var(--cg)}
 .wAct button:disabled{opacity:.3;cursor:default}
 .wAct button.wRm:hover{color:var(--r);border-color:var(--r)}
-.panel.ctx{top:auto;bottom:14px;left:238px;width:230px}
+.panel.ctx{margin-top:auto}          /* settles to the foot of the column */
 .nearRow{display:flex;gap:8px;align-items:baseline;font-size:10px;padding:3px 0;cursor:pointer;
   border-bottom:1px solid rgba(255,255,255,.04)}
 .nearRow:hover{color:var(--c)}
@@ -175,6 +185,7 @@ body.flying .panel:hover,body.flying .read:hover,body.flying .ctl:hover{opacity:
     <span class="clock" id="clock">--:--:-- UTC</span>
   </div>
 
+  <div class="lcol">
   <div class="panel">
     <div class="ptitle">Live Contacts</div>
     <div class="row"><span id="nAirLabel">MILITARY AIR</span><b class="v" id="nAir" style="color:var(--c)">--</b></div>
@@ -182,8 +193,21 @@ body.flying .panel:hover,body.flying .read:hover,body.flying .ctl:hover{opacity:
     <div class="row"><span>INSTALLATIONS</span><b class="v" id="nInst" style="color:var(--g)">--</b></div>
     <div class="row"><span>CAMERAS</span><b class="v" id="nCam" style="color:var(--p)">--</b></div>
     <div class="row"><span>IN VIEW</span><b class="v" id="nView" style="color:var(--y)">--</b></div>
+    <div class="hint" id="emptyHint" style="display:none;color:var(--y)">
+      No military traffic in this view. Press <b>ALL</b> for civil aircraft.</div>
     <div class="hint">Drag to orbit · right-drag or two fingers to tilt · scroll to zoom.
       Click a contact to lock the camera to it.</div>
+  </div>
+
+  <div class="panel near" id="nearPanel" style="display:none">
+    <div class="ptitle">Nearby <span id="nearRange" style="float:right;color:var(--td)">250 km</span></div>
+    <div id="nearList"></div>
+  </div>
+
+  <div class="panel ctx" id="ctxPanel">
+    <div class="ptitle">Global Context</div>
+    <div id="ctxBody" style="font-size:10px;color:var(--td)">loading…</div>
+  </div>
   </div>
 
   <div class="ctl">
@@ -196,7 +220,7 @@ body.flying .panel:hover,body.flying .read:hover,body.flying .ctl:hover{opacity:
     <button id="btnCockpit" disabled title="Ride the selected contact — chase camera locked to its track">COCKPIT</button>
     <span class="ctlLbl">TRAFFIC</span>
     <button id="btnMil" class="on" title="Military traffic, worldwide">MIL</button>
-    <button id="btnAll" title="All traffic within range of the view. adsb.lol serves this as a point-and-radius query capped at 250 nautical miles — there is no global all-traffic call, so this follows the camera.">ALL</button>
+    <button id="btnAll" title="Civil and military traffic in the view. There is no global all-traffic call, so this follows the camera as a box of 250 nm tiles — and it is the one feed that is billed, so it sweeps once a minute and pauses when the tab is hidden.">ALL</button>
   </div>
 
   <div class="ctl cam">
@@ -217,11 +241,6 @@ body.flying .panel:hover,body.flying .read:hover,body.flying .ctl:hover{opacity:
     <div class="rdSub" id="rdSub">Click a contact to inspect it.</div>
   </div>
 
-  <div class="panel near" id="nearPanel" style="display:none">
-    <div class="ptitle">Nearby <span id="nearRange" style="float:right;color:var(--td)">250 km</span></div>
-    <div id="nearList"></div>
-  </div>
-
   <div class="panel watch" id="watchPanel" hidden>
     <div class="ptitle">Flight Watch <span id="wCost" style="float:right;color:var(--td);font-size:8px;letter-spacing:1px"></span></div>
     <div class="wAdd">
@@ -231,15 +250,14 @@ body.flying .panel:hover,body.flying .read:hover,body.flying .ctl:hover{opacity:
     </div>
     <div class="wNote" id="wNote"></div>
     <div id="wList"></div>
-    <div class="hint">Flight number as printed on the ticket, plus the destination if
-      you want an arrival estimate. Each flight is checked every 10 minutes by default —
-      every check is one request against the plan, so tighten it only when it matters.</div>
+    <div class="hint">Flight number as printed on the ticket (BA117), or a tail number
+      (VH-OQA) to follow the airframe rather than the service. Destination is optional and
+      only used for the arrival estimate.
+      <br><br>Nothing is polled. A watched flight updates by itself whenever it appears in
+      the live sweep — so leave <b>ALL</b> on over the airport you care about and it tags
+      itself. <b>FIND</b> is one request, for a flight the view does not cover.</div>
   </div>
 
-  <div class="panel ctx" id="ctxPanel">
-    <div class="ptitle">Global Context</div>
-    <div id="ctxBody" style="font-size:10px;color:var(--td)">loading…</div>
-  </div>
 </div>
 <!-- COCKPIT OVERLAY -->
 <div id="cockpit" hidden>
@@ -588,6 +606,7 @@ function seedTrack(p, m, now) {
    the panel reports it, because a contact count means nothing if you cannot see
    what area it covers. */
 let feedMode = 'mil';
+let lastSweepTiles = 0;
 
 /* Where the camera is actually pointed, not what rectangle it can see.
    computeViewRectangle returns the whole globe whenever the horizon is in
@@ -650,6 +669,7 @@ async function loadAircraft() {
         .map((v) => v.toFixed(3)).join(',');
       u = PROXY + '/adsb/area?bbox=' + encodeURIComponent(bbox);
       scopeText = Math.round(half * 2 * 60) + ' nm box';
+      lastSweepTiles = 0;
     }
     const r = await fetch(u);
     if (!r.ok) {
@@ -777,13 +797,23 @@ async function loadAircraft() {
     /* Say which feed answered and how much of it arrived. A partial sweep
        still draws a plausible sky, so an unlabelled count invites you to read
        a coverage gap as an empty one. */
-    // Whether a watched flight is doubled by the live layer changes with every
-    // sweep, so the pins are re-tested here rather than only when polled.
-    for (const w of (typeof watchList === 'undefined' ? [] : watchList)) paintWatchPin(w);
+    /* The sweep is what drives the watchlist: anything watched that appears in
+       it is updated for free. Whether a watched flight is doubled by the live
+       layer also changes every sweep, so the pins are re-tested here. */
+    tagWatched(list);
+    for (const w of watchList) paintWatchPin(w);
     const src = j.source ? String(j.source).split(',')[0] : 'adsb.lol';
-    document.getElementById('feedScope').textContent =
-      feedMode === 'mil' ? 'global · adsb.lol'
-        : scopeText + ' · ' + src + (j.partial ? ' · ' + j.tilesOk + '/' + j.tiles : '');
+    if (feedMode === 'all') lastSweepTiles = j.tiles || 0;
+    const scope = document.getElementById('feedScope');
+    scope.textContent = feedMode === 'mil' ? 'global · adsb.lol'
+      : scopeText + ' · ' + src + (j.partial ? ' · ' + j.tilesOk + '/' + j.tiles : '');
+    /* What this view costs, where the cost is incurred. A sweep is billed per
+       tile, so a wide box is not merely slower — it is several times the
+       price, and that is worth knowing before leaving it open. */
+    scope.title = feedMode === 'mil'
+      ? 'Military traffic worldwide, from the free feed. Costs nothing.'
+      : (j.tiles || 0) + ' tiles per sweep, one sweep a minute — about '
+        + (j.tiles || 0) * 60 + ' requests an hour against the plan. Zoom in to spend less.';
   } catch (err) { console.warn('aircraft:', err.message); }
 }
 
@@ -1236,6 +1266,13 @@ setInterval(() => {
     }
   }
   document.getElementById('nView').textContent = n;
+  /* Nothing on screen and no explanation is indistinguishable from a broken
+     feed. Military traffic is genuinely absent over most of the world most of
+     the time — over Melbourne there were three hundred civil contacts and no
+     military at all — so an empty military view says which button fixes it. */
+  const empty = document.getElementById('emptyHint');
+  const show = n === 0 && feedMode === 'mil' && air.entities.values.length > 0;
+  empty.style.display = show ? 'block' : 'none';
 }, 2000);
 
 
@@ -1261,7 +1298,6 @@ setInterval(() => {
    keeps the last known fix visible with its age. */
 
 const WATCH_KEY = 'sentinel.watch.v2';
-const WATCH_INTERVALS = [10, 5, 1];              // minutes, offered in the UI
 let watchList = [];
 let watchDs = null;
 
@@ -1502,8 +1538,9 @@ function arrivalEstimate(w, fix) {
 function saveWatch() {
   try {
     localStorage.setItem(WATCH_KEY, JSON.stringify(watchList.map((w) => ({
-      id: w.id, cs: w.cs, typed: w.typed, dest: w.dest, everyMin: w.everyMin,
-      phase: w.phase, everAirborne: w.everAirborne, lastSeen: w.lastSeen, last: w.last,
+      id: w.id, cs: w.cs, reg: w.reg, typed: w.typed, dest: w.dest,
+      phase: w.phase, everAirborne: w.everAirborne, lastSeen: w.lastSeen,
+      last: w.last, via: w.via,
     }))));
   } catch (e) { /* private mode: the list is still good for this session */ }
 }
@@ -1513,19 +1550,28 @@ function loadWatch() {
     const raw = localStorage.getItem(WATCH_KEY);
     watchList = raw ? JSON.parse(raw) : [];
   } catch (e) { watchList = []; }
-  for (const w of watchList) { w.nextDue = 0; w.busy = false; }
+  for (const w of watchList) w.busy = false;
 }
 
+/* A hyphen means a tail number: G-EUPT, 9V-SMA, VH-OQA. Registration is worth
+   accepting because it tracks the airframe rather than the service, which is
+   the thing you actually want when the question is "where is the aircraft that
+   becomes my flight" — that aircraft is flying under a different callsign
+   right now. */
+function isRegistration(raw) { return /-/.test(String(raw || '')); }
+
 function addWatch(typed, destTyped) {
-  const cs = normaliseCallsign(typed);
-  if (!cs) return { error: 'Enter a flight number, e.g. BA117' };
+  const reg = isRegistration(typed)
+    ? String(typed).toUpperCase().replace(/[^A-Z0-9-]/g, '') : null;
+  const cs = reg || normaliseCallsign(typed);
+  if (!cs) return { error: 'Enter a flight number (BA117) or tail number (G-EUPT)' };
   if (watchList.some((w) => w.cs === cs)) return { error: cs + ' is already on the list' };
   if (watchList.length >= 8) return { error: 'Eight flights is the limit' };
   const dest = String(destTyped || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
   watchList.push({
-    id: cs + ':' + Date.now().toString(36), cs, typed: String(typed).toUpperCase().trim(),
-    dest: dest || null, everyMin: 10, phase: 'SCHEDULED', everAirborne: false,
-    lastSeen: 0, last: null, nextDue: 0, busy: false,
+    id: cs + ':' + Date.now().toString(36), cs, reg, typed: String(typed).toUpperCase().trim(),
+    dest: dest || null, phase: 'SCHEDULED', everAirborne: false,
+    lastSeen: 0, last: null, via: null, busy: false,
   });
   saveWatch(); renderWatch();
   return { ok: true, cs, destKnown: !dest || Boolean(AIRPORTS[dest]) };
@@ -1535,15 +1581,6 @@ function removeWatch(id) {
   const w = watchList.find((x) => x.id === id);
   watchList = watchList.filter((x) => x.id !== id);
   if (w && watchDs) { const e = watchDs.entities.getById('w:' + w.id); if (e) watchDs.entities.remove(e); }
-  saveWatch(); renderWatch();
-}
-
-function cycleInterval(id) {
-  const w = watchList.find((x) => x.id === id);
-  if (!w) return;
-  const i = WATCH_INTERVALS.indexOf(w.everyMin);
-  w.everyMin = WATCH_INTERVALS[(i + 1) % WATCH_INTERVALS.length];
-  w.nextDue = 0;                                   // take effect now, not next tick
   saveWatch(); renderWatch();
 }
 
@@ -1568,11 +1605,63 @@ function notifyPhase(w, from, to) {
   } catch (e) { /* notifications are a courtesy, never a dependency */ }
 }
 
-async function pollWatch(w) {
+/* Tagging, not polling.
+
+   The live sweep already fetches every aircraft in view, so a watched flight
+   that is on screen costs nothing extra to follow — it is a tag on a contact
+   the board already holds. That is the case this exists for: sitting over
+   Melbourne watching the aircraft that becomes your flight come in, and seeing
+   for yourself whether it is where it should be. Only a flight outside the
+   view needs a request of its own, and that is a button you press.
+
+   Matched on callsign, registration or Mode-S address, because a watched
+   airframe may be flying a different service from the one you named. */
+function tagWatched(list) {
+  if (!watchList.length || !list.length) return;
+  let touched = false;
+  for (const w of watchList) {
+    const a = list.find((x) =>
+      (x.flight || '').trim().toUpperCase() === w.cs
+      || (w.reg && (x.r || '').toUpperCase() === w.reg)
+      || (w.last && w.last.hex && x.hex === w.last.hex));
+    if (!a || typeof a.lat !== 'number') continue;
+    touched = true;
+    w.lastSeen = Date.now();
+    w.via = 'in view';
+    w.last = {
+      lat: a.lat, lon: a.lon,
+      altFt: typeof a.alt_baro === 'number' ? a.alt_baro : null,
+      gs: a.gs, track: a.track, rate: a.baro_rate, reg: a.r, type: a.t, hex: a.hex,
+      onGround: a.alt_baro === 'ground', at: Date.now(),
+    };
+    if (!w.last.onGround) w.everAirborne = true;
+    const was = w.phase;
+    w.phase = phaseOf(w, Object.assign({ found: true }, w.last));
+    if (w.phase !== was) notifyPhase(w, was, w.phase);
+
+    // Amber, and labelled whatever the zoom, so a watched contact is findable
+    // in a sky of three hundred.
+    const e = air.entities.getById(a.hex);
+    if (e && e._meta) {
+      e._meta.baseColor = Cesium.Color.fromCssColorString('#ffcc00');
+      e.billboard.color = e._meta.baseColor;
+      e.label.fillColor = e._meta.baseColor;
+      e.label.text = w.cs + '  \u25c9';
+      e.label.distanceDisplayCondition = undefined;
+    }
+    paintWatchPin(w);
+  }
+  if (touched) { saveWatch(); renderWatch(); }
+}
+
+/* One deliberate request, for a flight the current view does not cover. */
+async function locateWatch(w) {
   if (w.busy) return;
   w.busy = true;
+  renderWatch();
   try {
-    const r = await fetch(PROXY + '/flight?callsign=' + encodeURIComponent(w.cs));
+    const q = w.reg ? 'reg=' + encodeURIComponent(w.reg) : 'callsign=' + encodeURIComponent(w.cs);
+    const r = await fetch(PROXY + '/flight?' + q);
     const j = r.ok ? await r.json() : null;
     const fix = j && j.found ? j : { found: false };
     if (fix.found) {
@@ -1583,6 +1672,7 @@ async function pollWatch(w) {
         onGround: fix.onGround, at: Date.now(),
       };
       if (!fix.onGround) w.everAirborne = true;
+      w.via = 'located';
     }
     const was = w.phase;
     w.phase = phaseOf(w, fix.found ? Object.assign({}, fix) : null);
@@ -1593,10 +1683,6 @@ async function pollWatch(w) {
     w.err = 'offline';
   } finally {
     w.busy = false;
-    /* A landed flight stops costing anything. Everything else is on the
-       interval the row shows, so the request rate is always readable off the
-       panel rather than buried in a rule. */
-    w.nextDue = w.phase === 'LANDED' ? Infinity : Date.now() + w.everyMin * 60000;
     saveWatch(); renderWatch();
   }
 }
@@ -1612,7 +1698,7 @@ async function pollWatch(w) {
    constant and the symbol fills in the gap. */
 function paintWatchPin(w) {
   if (!watchDs || !w.last) return;
-  const stale = Date.now() - w.last.at > w.everyMin * 60000 * 2;
+  const stale = Date.now() - w.last.at > 15 * 60000;
   const col = Cesium.Color.fromCssColorString(stale ? '#7a8a9a' : '#ffcc00');
   const pos = Cesium.Cartesian3.fromDegrees(w.last.lon, w.last.lat,
     Math.max(30, (w.last.altFt || 0) * 0.3048));
@@ -1649,6 +1735,7 @@ function paintWatchPin(w) {
     e._meta.track = w.last.track;
   }
   const alsoLive = Boolean(w.last.hex && air.entities.getById(w.last.hex));
+  e.point.outlineColor = col;
   e.billboard.show = !alsoLive;
   e.label.text = w.cs + '  ' + w.phase;
 }
@@ -1698,19 +1785,22 @@ function renderWatch() {
           : 'to ' + AIRPORTS[w.dest].name)
         : w.dest + ' not in the airport list — no estimate')
       : 'no destination set — no estimate';
+    const seen = w.busy ? 'checking…'
+      : w.lastSeen ? 'seen ' + ageText(w.lastSeen) + (w.via ? ' · ' + w.via : '')
+      : (w.err || 'not seen yet — press FIND, or wait for it to enter the view');
     return '<div class="wRow">'
       + '<div class="wTop">'
         + '<b>' + w.cs + '</b>'
         + (w.typed && w.typed !== w.cs ? '<i>' + w.typed + '</i>' : '')
         + '<span class="wPh" style="color:' + (PHASE_COLOUR[w.phase] || 'var(--td)') + '">' + w.phase + '</span>'
       + '</div>'
-      + '<div class="wSub">' + (bits.join(' · ') || (w.err ? w.err : 'awaiting first fix')) + '</div>'
+      + '<div class="wSub">' + (bits.join(' · ') || '—') + '</div>'
       + '<div class="wSub">' + destLine + '</div>'
-      + '<div class="wSub">' + (w.lastSeen ? 'seen ' + ageText(w.lastSeen) : 'not seen yet') + '</div>'
+      + '<div class="wSub">' + seen + '</div>'
       + '<div class="wAct">'
-        + '<button data-go="' + w.id + '"' + (w.last ? '' : ' disabled') + '>GO</button>'
-        + '<button data-iv="' + w.id + '" title="How often this flight is polled. Every check is one request against the plan.">' + w.everyMin + ' MIN</button>'
-        + '<button data-now="' + w.id + '">NOW</button>'
+        + '<button data-go="' + w.id + '"' + (w.last ? '' : ' disabled') + '>SHOW</button>'
+        + '<button data-find="' + w.id + '"' + (w.busy ? ' disabled' : '')
+          + ' title="One request against the plan. Only needed for a flight the current view does not cover.">FIND</button>'
         + '<button data-rm="' + w.id + '" class="wRm">REMOVE</button>'
       + '</div>'
     + '</div>';
@@ -1734,17 +1824,6 @@ async function refreshQuota() {
       + (j.remaining != null ? '; RapidAPI reports ' + j.remaining + ' of ' + j.limit + ' remaining' : '')
       + (j.throttled ? '; ' + j.throttled + ' burst retries' : '');
   } catch (e) { el.textContent = ''; }
-}
-
-function watchTick() {
-  /* Nothing polls while the tab is hidden. A watchlist left open overnight
-     would otherwise spend the month's quota on a picture nobody is looking
-     at, and the first check on returning catches it up anyway. */
-  if (document.visibilityState !== 'visible') return;
-  const now = Date.now();
-  for (const w of watchList) {
-    if (w.nextDue !== Infinity && now >= (w.nextDue || 0)) pollWatch(w);
-  }
 }
 
 function initWatch() {
@@ -1779,7 +1858,12 @@ function initWatch() {
     try {
       if (window.Notification && Notification.permission === 'default') Notification.requestPermission();
     } catch (e) { /* not available: the panel still shows every change */ }
-    watchTick();
+    // Free: match against the sweep already on screen before spending anything.
+    tagWatched(air.entities.values.map((e) => ({
+      flight: e._meta.name, r: e._meta.reg, hex: e._meta.hex, lat: e._meta.lat,
+      lon: e._meta.lon, alt_baro: e._meta.altFt, gs: e._meta.gs, track: e._meta.track,
+      baro_rate: e._meta.rate, t: e._meta.type,
+    })));
   };
   document.getElementById('wCs').addEventListener('keydown', (ev) => {
     if (ev.key === 'Enter') document.getElementById('wAddBtn').click();
@@ -1793,20 +1877,15 @@ function initWatch() {
     if (!b) return;
     if (b.dataset.rm) removeWatch(b.dataset.rm);
     else if (b.dataset.go) goToWatch(b.dataset.go);
-    else if (b.dataset.iv) cycleInterval(b.dataset.iv);
-    else if (b.dataset.now) {
-      const w = watchList.find((x) => x.id === b.dataset.now);
-      if (w) { w.nextDue = 0; pollWatch(w); }
+    else if (b.dataset.find) {
+      const w = watchList.find((x) => x.id === b.dataset.find);
+      if (w) locateWatch(w).then(() => { if (w.last) goToWatch(w.id); });
     }
   });
 
-  setInterval(watchTick, 20000);
+  /* No polling timer. The only clocks here redraw text that ages. */
   setInterval(renderWatch, 30000);          // keeps the "seen 4m ago" honest
   setInterval(refreshQuota, 5 * 60000);
-  document.addEventListener('visibilitychange', () => {
-    if (document.visibilityState === 'visible') watchTick();
-  });
-  watchTick();
   refreshQuota();
 }
 
@@ -1815,7 +1894,21 @@ function initWatch() {
   initWatch();
   await Promise.allSettled([loadAircraft(), loadInstallations(), loadContext()]);
   document.getElementById('load').classList.add('gone');
-  setInterval(loadAircraft, 30000);
+  /* Self-scheduling rather than setInterval, because the two feeds do not
+     deserve the same cadence. Military is one cached URL on the free feed.
+     Civil traffic is six billed tiles a sweep, and at thirty seconds that is
+     twelve requests a minute — measured, not guessed: an open tab spent
+     twenty-odd requests during testing before anyone noticed. So the billed
+     sweep runs half as often, and neither runs while the tab is hidden. */
+  (function sweep() {
+    setTimeout(async () => {
+      if (document.visibilityState === 'visible') await loadAircraft();
+      sweep();
+    }, feedMode === 'all' ? 60000 : 30000);
+  })();
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') loadAircraft();
+  });
   setInterval(loadContext, 15 * 60000);
 })();
 </script>
